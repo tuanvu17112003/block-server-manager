@@ -1,0 +1,580 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-zinc-950 text-zinc-100 antialiased;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ---------- MC-look shared tokens (mc-style-001, pure CSS, no assets) ---------- */
+.mc-pixel {
+  font-family: 'Press Start 2P', monospace;
+}
+
+/* ----- Chunky bevel buttons (press = color/shadow only, never size/border) ----- */
+.mc-btn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 2px solid #000;
+  border-radius: 2px;
+  padding: 8px 12px;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.35),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.mc-btn-sm {
+  font-size: 9px;
+  padding: 6px 9px;
+}
+.mc-btn:hover {
+  filter: brightness(1.12);
+  color: #ffffa0;
+}
+.mc-btn:active {
+  filter: brightness(0.95);
+  box-shadow:
+    inset -2px -2px 0 rgba(255, 255, 255, 0.25),
+    inset 2px 2px 0 rgba(0, 0, 0, 0.55);
+}
+.mc-btn:focus-visible {
+  outline: 2px solid #ffff55;
+  outline-offset: 2px;
+}
+.mc-btn:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.7) brightness(0.75);
+  opacity: 0.85;
+}
+.mc-btn-default { background: linear-gradient(#5fae3f, #3e8e2f); }
+.mc-btn-default:hover { background: linear-gradient(#6cc04a, #48a237); }
+.mc-btn-default:active { background: linear-gradient(#3e8e2f, #357a28); }
+.mc-btn-secondary { background: linear-gradient(#9e9e9e, #6f6f6f); }
+.mc-btn-secondary:hover { background: linear-gradient(#ababab, #7d7d7d); }
+.mc-btn-secondary:active { background: linear-gradient(#6f6f6f, #5f5f5f); }
+.mc-btn-outline { background: #373737; }
+.mc-btn-outline:hover { background: #454545; }
+.mc-btn-outline:active { background: #2b2b2b; }
+.mc-btn-destructive { background: linear-gradient(#c0392b, #aa0000); }
+.mc-btn-destructive:hover { background: linear-gradient(#d44a35, #bb1111); }
+.mc-btn-destructive:active { background: linear-gradient(#aa0000, #880000); }
+.mc-btn-ghost { background: transparent; box-shadow: none; border-color: transparent; color: #c6c6c6; text-shadow: 1px 1px 0 #000; }
+.mc-btn-ghost:hover { background: #373737; border-color: #000; color: #ffffa0; box-shadow: inset 2px 2px 0 rgba(255,255,255,0.15), inset -2px -2px 0 rgba(0,0,0,0.4); }
+.mc-btn-ghost:active { background: #212121; }
+
+/* ----- Stone panels + slots ----- */
+.mc-panel {
+  background: #2a2a2a;
+  border: 2px solid #000;
+  border-radius: 2px;
+  box-shadow:
+    inset 2px 2px 0 #555555,
+    inset -2px -2px 0 #111111;
+  padding: 16px;
+}
+.mc-cardtitle {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #c6c6c6;
+  text-shadow: 2px 2px 0 #000;
+  margin-bottom: 8px;
+}
+.mc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: 2px dashed #555555;
+  background: #1d1d21;
+  border-radius: 2px;
+  padding: 48px 16px;
+}
+
+/* ----- Square status squares (8px + 1px black border) ----- */
+.mc-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 1px solid #000;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+
+/* ----- Badges (MC tones, square) ----- */
+.mc-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0;
+  border: 2px solid #000;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.mc-badge-zinc { background: #212121; border-color: #555555; color: #e0e0e0; }
+.mc-badge-green { background: #0f800f; color: #fff; text-shadow: 1px 1px 0 #000; }
+.mc-badge-amber { background: #ffaa00; color: #1a1a1a; }
+.mc-badge-red { background: #aa0000; color: #fff; text-shadow: 1px 1px 0 #000; }
+.mc-badge-blue { background: #4fc3f7; color: #06222e; }
+
+/* ----- Inputs / wells ----- */
+.mc-input {
+  background: #121212;
+  border: 2px solid #000;
+  border-radius: 0;
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.6);
+  color: #e0e0e0;
+}
+.mc-input:focus {
+  border-color: #ffff55;
+  outline: none;
+}
+.mc-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+select.mc-input option {
+  background: #212121;
+  color: #e0e0e0;
+}
+
+/* ----- XP-style bars (6px, black border, dark well, lime fill) ----- */
+.mc-bar {
+  height: 6px;
+  width: 100%;
+  border: 2px solid #000;
+  background: #212121;
+  box-sizing: content-box;
+  padding: 0;
+}
+.mc-bar-fill {
+  height: 100%;
+  background: #80c71f;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35);
+  transition: width 0.2s;
+}
+.mc-bar-fill-blue { background: #4fc3f7; box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35); }
+.mc-bar-fill-amber { background: #ffaa00; box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35); }
+
+/* ----- Dirt sidebar + stone server slots ----- */
+.mc-sidebar {
+  background-color: #2a1d12;
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.02) 0 2px,
+    transparent 2px 4px
+  ),
+  repeating-linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.12) 0 2px,
+    transparent 2px 4px
+  );
+  border-right: 2px solid #000;
+}
+.mc-server-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  background: #8b8b8b;
+  border: 2px solid #000;
+  border-radius: 2px;
+  box-shadow:
+    inset 2px 2px 0 #c6c6c6,
+    inset -2px -2px 0 #373737;
+  color: #121212;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+}
+.mc-server-row:hover {
+  filter: brightness(1.08);
+}
+.mc-server-row .mc-server-sub {
+  color: #212121;
+}
+.mc-server-row-active {
+  box-shadow:
+    inset 2px 2px 0 #c6c6c6,
+    inset -2px -2px 0 #373737,
+    inset 0 0 0 2px #48b518;
+}
+.mc-server-row:focus-visible {
+  outline: 2px solid #ffff55;
+  outline-offset: 2px;
+}
+
+/* ----- Header / EULA banner ----- */
+.mc-header {
+  background: #212121;
+  border-bottom: 2px solid #000;
+  box-shadow: inset 0 2px 0 #555555;
+}
+.mc-header-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+}
+.mc-eula {
+  background: #aa0000;
+  color: #fff;
+  border: 2px solid #000;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-shadow: 1px 1px 0 #000;
+}
+.mc-copy {
+  border: 2px solid #000;
+  background: #373737;
+  box-shadow: inset 2px 2px 0 #555555, inset -2px -2px 0 #212121;
+  border-radius: 2px;
+  padding: 4px 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: #e0e0e0;
+}
+.mc-copy:hover {
+  background: #454545;
+  color: #ffffa0;
+}
+
+/* ----- Java-tab look TabBar ----- */
+.mc-tabbar {
+  background: #121212;
+  border-bottom: 2px solid #000;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 8px 12px 0;
+}
+.mc-tab {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+  padding: 8px 12px;
+  background: #373737;
+  color: #c6c6c6;
+  border: 2px solid #000;
+  border-bottom: none;
+  border-radius: 2px 2px 0 0;
+  box-shadow: inset 0 2px 0 #555555;
+  text-shadow: 1px 1px 0 #000;
+}
+.mc-tab:hover {
+  background: #454545;
+  color: #ffffa0;
+}
+.mc-tab-active {
+  background: #c6c6c6;
+  color: #212121;
+  text-shadow: none;
+  box-shadow:
+    inset 0 2px 0 #ffffff,
+    inset 0 -3px 0 #48b518;
+}
+.mc-tab:focus-visible {
+  outline: 2px solid #ffff55;
+  outline-offset: 2px;
+}
+
+/* ----- Tables: dark header pixel 10px, zebra rows, gray grid ----- */
+.mc-table {
+  border: 2px solid #000;
+  background: #1d1d21;
+  border-radius: 2px;
+}
+.mc-table table {
+  width: 100%;
+  text-align: left;
+  font-size: 14px;
+  border-collapse: collapse;
+}
+.mc-table thead {
+  background: #212121;
+}
+.mc-table th {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  color: #c6c6c6;
+  text-shadow: 1px 1px 0 #000;
+  padding: 8px 12px;
+  border: 1px solid #555555;
+}
+.mc-table td {
+  padding: 8px 12px;
+  border: 1px solid #555555;
+  color: #e0e0e0;
+}
+.mc-table tbody tr:nth-child(odd) {
+  background: #1d1d21;
+}
+.mc-table tbody tr:nth-child(even) {
+  background: #2a2a2a;
+}
+.mc-table tbody tr:hover {
+  background: #333333;
+}
+.mc-table tr.mc-row-selected td:first-child {
+  box-shadow: inset 4px 0 0 #48b518;
+}
+
+/* ----- Console: mono only, never pixel font ----- */
+.mc-console {
+  background: #121212;
+  border: 2px solid #000;
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.6);
+  color: #e0e0e0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* slim square scrollbars for log panes */
+.log-scroll::-webkit-scrollbar,
+.thin-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.log-scroll::-webkit-scrollbar-thumb,
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: #555555;
+  border-radius: 0;
+}
+.log-scroll::-webkit-scrollbar-track,
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ----- Stone modal + scrim ----- */
+.mc-modal-scrim {
+  background: rgba(0, 0, 0, 0.7);
+}
+.mc-modal {
+  background: #2a2a2a;
+  border: 2px solid #000;
+  border-radius: 2px;
+  box-shadow:
+    4px 4px 0 #000,
+    inset 2px 2px 0 #555555,
+    inset -2px -2px 0 #111111;
+}
+.mc-modal-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+}
+
+/* ----- MC-tone toasts (2px borders) ----- */
+.mc-toast {
+  border: 2px solid #000;
+  border-radius: 2px;
+  box-shadow: 2px 2px 0 #000;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.mc-toast-ok {
+  background: #0f800f;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+}
+.mc-toast-err {
+  background: #aa0000;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+}
+.mc-toast-info {
+  background: #2a2a2a;
+  border-color: #555555;
+  color: #e0e0e0;
+}
+
+/* ----- Create: edition slot cards + splash-style tag ----- */
+.mc-edition {
+  position: relative;
+  background: #8b8b8b;
+  border: 2px solid #000;
+  border-radius: 2px;
+  box-shadow:
+    inset 2px 2px 0 #c6c6c6,
+    inset -2px -2px 0 #373737;
+  color: #121212;
+  padding: 20px;
+  text-align: left;
+}
+.mc-edition:hover {
+  filter: brightness(1.06);
+}
+.mc-edition .mc-edition-sub {
+  color: #212121;
+}
+.mc-edition-active {
+  background: #c6c6c6;
+  box-shadow:
+    inset 2px 2px 0 #ffffff,
+    inset -2px -2px 0 #555555,
+    inset 0 0 0 2px #48b518;
+}
+.mc-edition:focus-visible {
+  outline: 2px solid #ffff55;
+  outline-offset: 2px;
+}
+.mc-splash {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  color: #ffff55;
+  text-shadow: 2px 2px 0 #000;
+  transform: rotate(-12deg);
+  animation: mc-splash-pulse 1.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes mc-splash-pulse {
+  0%, 100% { scale: 1; }
+  50% { scale: 1.08; }
+}
+
+/* ----- Grass-green header strips (Overview / Metrics) ----- */
+.mc-header-strip {
+  height: 6px;
+  background: linear-gradient(#7cbd6b, #48b518);
+  border: 2px solid #000;
+  border-radius: 2px;
+}
+
+/* ----- Inventory slots (Worlds library: light face, dark wells) ----- */
+.mc-inv {
+  background: #c6c6c6;
+  border: 2px solid #000;
+  border-radius: 2px;
+  box-shadow:
+    inset 2px 2px 0 #ffffff,
+    inset -2px -2px 0 #555555;
+  color: #212121;
+}
+.mc-inv .text-zinc-500,
+.mc-inv .text-zinc-400 {
+  color: #555555;
+}
+.mc-inv-active {
+  box-shadow:
+    inset 2px 2px 0 #ffffff,
+    inset -2px -2px 0 #555555,
+    inset 0 0 0 2px #48b518;
+}
+
+/* ----- Range slider (RAM): square stone thumb ----- */
+input[type='range'].ram-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: #212121;
+  border: 2px solid #000;
+  border-radius: 0;
+  outline-offset: 2px;
+}
+input[type='range'].ram-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 20px;
+  background: #c6c6c6;
+  border: 2px solid #000;
+  border-radius: 0;
+  box-shadow:
+    inset 2px 2px 0 #ffffff,
+    inset -2px -2px 0 #555555;
+  cursor: pointer;
+}
+input[type='range'].ram-slider::-moz-range-thumb {
+  width: 14px;
+  height: 20px;
+  background: #c6c6c6;
+  border: 2px solid #000;
+  border-radius: 0;
+  box-shadow:
+    inset 2px 2px 0 #ffffff,
+    inset -2px -2px 0 #555555;
+  cursor: pointer;
+}
+input[type='range'].ram-slider::-moz-range-track {
+  height: 6px;
+  background: #212121;
+}
+
+/* simple pulse for "Start" attention after install */
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(72, 181, 24, 0.55); }
+  70% { box-shadow: 0 0 0 10px rgba(72, 181, 24, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(72, 181, 24, 0); }
+}
+.pulse-start {
+  animation: pulse-ring 1.6s ease-out infinite;
+}
+
+/* ----- Non-affiliation footer ----- */
+.mc-footer {
+  background: #121212;
+  border-top: 2px solid #000;
+  padding: 6px 16px;
+  font-size: 11px;
+  color: #8b8b8b;
+  text-align: center;
+}
+
+/* Keep the shell and Create grids sized to the space left by the sidebar. */
+.mc-app-shell,
+.mc-app-main,
+.mc-create-container {
+  min-width: 0;
+  min-height: 0;
+}
+.mc-sidebar {
+  flex: 0 0 clamp(8rem, 20vw, 15rem);
+  min-width: 0;
+}
+.mc-create-type-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+}
+.mc-create-form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+.mc-create-pack-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+}
+.mc-overview-summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+.mc-overview-detail-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+}
+.mc-create-type-grid > *,
+.mc-create-form-grid > *,
+.mc-create-pack-grid > *,
+.mc-overview-summary-grid > *,
+.mc-overview-detail-grid > * {
+  min-width: 0;
+}
