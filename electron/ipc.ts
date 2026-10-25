@@ -12,7 +12,7 @@ export interface IpcContext {
   getWindow: () => BrowserWindow | null;
 }
 
-type Handler = (args: Record<string, unknown>, ctx: IpcContext) => Promise<unknown> | unknown;
+export type Handler = (args: Record<string, unknown>, ctx: IpcContext) => Promise<unknown> | unknown;
 
 const store = (ctx: IpcContext): Store => new Store(ctx.dataRoot);
 
@@ -26,19 +26,20 @@ const handlers: Record<string, Handler> = {
   servers_set_java_path: (a, ctx) => store(ctx).setJavaPath(String(a.id), (a.path as string | null) ?? null),
 };
 
-// Commands arriving in P1/P2 — registered now so the UI gets a clean
+// ---- P1: runtime (java, versions/loaders, install, lifecycle) ----
+// Late-bound because they need the window-broadcast context wired in registerIpc.
+export function registerRuntimeHandlers(extra: Record<string, Handler>): void {
+  for (const [name, handler] of Object.entries(extra)) handlers[name] = handler;
+}
+
+// Commands arriving in P2 — registered now so the UI gets a clean
 // {code:'not-implemented'} rejection instead of "No handler registered" noise.
 const UPCOMING = [
-  'java_detect', 'java_validate', 'java_ensure',
-  'versions_vanilla', 'versions_paper', 'loaders_resolve',
-  'server_install', 'server_install_cancel',
   'modpack_pipeline_pick_local_mrpack', 'modpack_pipeline_preview', 'modpack_pipeline_install',
   'modpack_pipeline_cancel', 'modpack_pipeline_discard_preview', 'modpack_pipeline_release_local_mrpack',
   'modrinth_search_modpacks', 'modrinth_project_versions',
   'curseforge_open_browser', 'curseforge_open_external_browser', 'curseforge_list_zips',
   'curseforge_pick_zip', 'curseforge_inspect_zip', 'curseforge_cancel_download',
-  'server_start', 'server_stop', 'server_kill', 'server_restart', 'server_send_command',
-  'logs_tail', 'server_command_history',
 ] as const;
 for (const name of UPCOMING) {
   handlers[name] = () => { throw appError('not-implemented', `Command "${name}" arrives in the next port phase.`); };

@@ -1,7 +1,8 @@
 // Electron main — window + lifecycle + IPC wiring (port of src-tauri shell, see docs/electron-port-plan.md).
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
-import { registerIpc, runSelfTest, type IpcContext } from './ipc';
+import { registerIpc, registerRuntimeHandlers, runSelfTest, type IpcContext } from './ipc';
+import { buildRuntime } from './services/runtime';
 import { dataRoot } from './services/paths';
 
 if (!app.requestSingleInstanceLock()) {
@@ -53,6 +54,11 @@ app.whenReady().then(async () => {
     app.exit(ok ? 0 : 1);
     return;
   }
+
+  const runtime = buildRuntime().register(ctx);
+  registerRuntimeHandlers(runtime.handlers);
+  app.on('before-quit', () => { void runtime.processes.stopAll(); });
+
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
