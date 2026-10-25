@@ -251,7 +251,9 @@ export async function installLoader(kind: LoaderKind, dir: string, mc: string, v
     return;
   }
   if (kind === 'neoforge') {
-    const v = `${mc}-${ver}`;
+    // loaders_resolve yields "1.20.1-47.1.106" (version already carries the MC prefix); strip it.
+    const bare = ver.startsWith(mc + '-') ? ver.slice(mc.length + 1) : ver;
+    const v = `${mc}-${bare}`;
     const urls: [string, string][] = [
       [`https://maven.neoforged.net/releases/net/neoforged/neoforge/${v}/neoforge-${v}-installer.jar`, `neoforge-${v}-installer.jar`],
       [`https://maven.neoforged.net/releases/net/neoforged/forge/${v}/forge-${v}-installer.jar`, `neoforge-legacy-${v}-installer.jar`],
