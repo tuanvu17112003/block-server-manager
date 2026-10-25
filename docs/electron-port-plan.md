@@ -47,3 +47,26 @@ Cut-line if needed: embedded CF browser (external-browser fallback already works
 
 Source-of-truth for install behavior: `H:\TestAI\modrinth-curseforge\modpack-install-results.md`
 and `client-mod-method-research.md` (4-layer architecture).
+
+---
+
+## Completion (2026-10-26)
+
+**Status: PORT COMPLETE — E2E PASS (exit 0), 12/12 steps.**
+
+| Phase | Commit | Gate |
+|---|---|---|
+| P0 shell (electron main/preload/ipc, JSON store, adapter branch) | a391ff1 | SELFTEST PASS |
+| P1 runtime (engine TS port, java/versions/loaders/install, lifecycle events) | e7c6581 + ccb71d2 | versions/loaders smoke green (5 loaders, neoforge legacy coordinate) |
+| P2 module integration (modrinth/curseforge engines, pipeline+rollback+sidecar, CF staging browser, boot L2/L3) | da3ab4a | tsc clean + modrinth search smoke |
+| P3 E2E | (this commit) | **E2E PASS**: ping · vanilla install→`Done`→stop · Modrinth cobbleverse search→preview→install→`Done`→stop (wizard's exact path) · **CF key-mode one-click SF5** (serverPackFileId → 281MB pack → `Done (6.256s)!`) · staged-zip inspect |
+
+Real bugs the E2E caught and fixed (all generic, none per-pack):
+1. **Store instances held stale in-memory state** across handler construction → read-through store (reload on every access).
+2. **`server_start` awaited process lifetime** (never resolved while the server ran) → spawnWatch split into `started` / `exited` promises; start returns on `Done(`.
+3. **No startup timeout** → 10-min boot watchdog → kill + `crashed` (spec §5).
+4. **Loader installer transient network failure** (SSL EOF) killed installs → one retry (§19.2).
+5. e2e harness itself: leftover records/processes (idempotent purge), buffered stdout on `app.exit` (file-based results), verdict regex.
+
+Run it: `npm run dev` (vite:1420 + electron), `npm start` (build + app), `npm run selftest`, `electron . --e2e`.
+Key data: `.app-data/` (dev data root, gitignored) · `.app-data/curseforge-key.txt` (key-mode, gitignored).

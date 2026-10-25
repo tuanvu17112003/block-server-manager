@@ -42,10 +42,16 @@ const EMPTY: AppData = { schemaVersion: 1, servers: [], settings: {}, consoleCom
 
 export class Store {
   private file: string;
-  private data: AppData;
+  private data!: AppData;
 
   constructor(dataRoot: string) {
     this.file = path.join(dataRoot, 'app-data.json');
+    this.reload();
+  }
+
+  /** Read-through: handlers construct their own Store instances, so every access
+   *  must reflect the latest on-disk state (fixes cross-instance "not found"). */
+  private reload(): void {
     try {
       this.data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
       if (!Array.isArray(this.data.servers)) throw new Error('bad shape');
@@ -61,10 +67,12 @@ export class Store {
   }
 
   listServers(): ServerDto[] {
+    this.reload();
     return this.data.servers;
   }
 
   getServer(id: string): ServerDto | null {
+    this.reload();
     return this.data.servers.find(s => s.id === id) ?? null;
   }
 
@@ -117,6 +125,7 @@ export class Store {
   }
 
   commandHistory(serverId: string): string[] {
+    this.reload();
     return this.data.consoleCommandHistory.filter(h => h.serverId === serverId).map(h => h.command);
   }
 

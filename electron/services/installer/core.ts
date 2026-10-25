@@ -210,14 +210,19 @@ export async function ensureJava(major: number, runtimeRoot: string, cacheDir: s
 
 // ---------- loaders ----------
 export type LoaderKind = 'vanilla' | 'paper' | 'fabric' | 'quilt' | 'forge' | 'neoforge';
-export async function runInstaller(javaExe: string, installerJar: string, args: string[], cwd: string, what: string): Promise<void> {
-  log(`installing ${what}: java -jar ${path.basename(installerJar)} ${args.join(' ')}`);
-  const proc = spawn(javaExe, ['-jar', installerJar, ...args], { cwd });
-  let tail = '';
-  const collect = (d: Buffer) => { tail += d.toString(); if (tail.length > 8000) tail = tail.slice(-4000); };
-  proc.stdout.on('data', collect); proc.stderr.on('data', collect);
-  const code = (await once(proc, 'exit'))[0] as number;
-  if (code !== 0) throw new Error(`${what} installer failed (exit ${code}):\n` + tail.split('\n').slice(-15).join('\n'));
+export async function runInstaller(javaExe: string, installerJar: string, args: string[], cwd: string, what: string, attempts = 2): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    log(`installing ${what}: java -jar ${path.basename(installerJar)} ${args.join(' ')}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
+    const proc = spawn(javaExe, ['-jar', installerJar, ...args], { cwd });
+    let tail = '';
+    const collect = (d: Buffer) => { tail += d.toString(); if (tail.length > 8000) tail = tail.slice(-4000); };
+    proc.stdout.on('data', collect); proc.stderr.on('data', collect);
+    const code = (await once(proc, 'exit'))[0] as number;
+    if (code === 0) return;
+    // installers are re-runnable; transient network failures (SSL/EOF mid-download) get one retry (§19.2)
+    if (attempt >= attempts) throw new Error(`${what} installer failed (exit ${code}):\n` + tail.split('\n').slice(-15).join('\n'));
+    await sleep(5000);
+  }
 }
 export async function installLoader(kind: LoaderKind, dir: string, mc: string, ver: string, javaExe: string, cacheDir: string): Promise<void> {
   mkdirSync(dir, { recursive: true });

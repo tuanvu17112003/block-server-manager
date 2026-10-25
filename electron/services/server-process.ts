@@ -61,8 +61,10 @@ export class ServerProcesses {
 
     this.setStatus(id, 'starting');
     for (let round = 1; round <= 6; round++) {
-      const outcome = await this.spawnWatch(id, dto, dir, cmd);
+      const watch = this.spawnWatch(id, dto, dir, cmd);
+      const outcome = await watch.started; // resolves on Done( (running) or early exit (crashed/stopped)
       if (outcome === 'running') return;
+      await watch.exited; // wait for the dead process before retry rounds read crash data
       if (outcome === 'stopped') return; // user stop during startup
       // crashed before Done( → L3: attribute + disable + learn + retry
       const r = this.running.get(id);
@@ -92,41 +94,55 @@ export class ServerProcesses {
     this.setStatus(id, 'crashed');
   }
 
-  /** Spawn and watch until Done( (→ running, keep alive), user stop (→ stopped) or early exit (→ crashed). */
-  private spawnWatch(id: string, dto: ServerDto, dir: string, cmd: { exe: string; args: string[] }): Promise<'running' | 'stopped' | 'crashed'> {
+  /** Spawn and watch. `started` resolves at Done( (running), user stop (stopped) or early exit (crashed);
+   *  `exited` resolves when the process is gone. start() must NOT await process lifetime. */
+  private spawnWatch(id: string, dto: ServerDto, dir: string, cmd: { exe: string; args: string[] }): { started: Promise<'running' | 'stopped' | 'crashed'>; exited: Promise<void> } {
     const proc = spawn(cmd.exe, cmd.args, { cwd: dir, stdio: ['pipe', 'pipe', 'pipe'] });
     const r: Running = { proc, ring: [], status: 'starting' };
     this.running.set(id, r);
-    return new Promise(resolve => {
-      let sawDone = false;
-      let userStop = false;
-      const onLine = (line: string): void => {
-        r.ring.push(line);
-        if (r.ring.length > 5000) r.ring.shift();
-        this.send(`server://log/${id}`, line);
-        if (!sawDone && /Done \(\d/.test(line)) { sawDone = true; this.setStatus(id, 'running'); }
-      };
-      let buf = '';
-      const onData = (d: Buffer): void => {
-        buf += d.toString();
-        let i: number;
-        while ((i = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, i).replace(/\r$/, ''); buf = buf.slice(i + 1); if (l.trim()) onLine(l); }
-      };
-      proc.stdout?.on('data', onData);
-      proc.stderr?.on('data', onData);
-      proc.once('exit', code => {
-        this.running.delete(id);
-        this.setStatus(id, userStop || (sawDone && code === 0) ? 'stopped' : sawDone ? 'crashed' : userStop ? 'stopped' : 'crashed');
-        resolve(sawDone ? 'running-then-exit' as 'running' : userStop ? 'stopped' : 'crashed');
-      });
-      // watch for user stop requests while starting
-      const stopProbe = setInterval(() => {
-        if (r.status === 'stopping') { userStop = true; clearInterval(stopProbe); }
-        if (!this.running.has(id)) clearInterval(stopProbe);
-      }, 500);
-      proc.once('exit', () => clearInterval(stopProbe));
-      void dto;
+    let resolveStarted!: (v: 'running' | 'stopped' | 'crashed') => void;
+    const started = new Promise<'running' | 'stopped' | 'crashed'>(res => { resolveStarted = res; });
+    let resolveExited!: () => void;
+    const exited = new Promise<void>(res => { resolveExited = res; });
+    this.wireWatch(id, r, dto, proc, resolveStarted, resolveExited);
+    return { started, exited };
+  }
+
+  private wireWatch(id: string, r: Running, dto: ServerDto, proc: import('node:child_process').ChildProcess, resolveStarted: (v: 'running' | 'stopped' | 'crashed') => void, resolveExited: () => void): void {
+    let sawDone = false;
+    let userStop = false;
+    // startup watchdog (spec §5): Done( within 10 min or the start is treated as a crash
+    const bootWatch = setTimeout(() => {
+      if (!sawDone && !userStop) { try { proc.kill('SIGKILL'); } catch { /* gone */ } }
+    }, 10 * 60_000);
+    proc.once('exit', () => clearTimeout(bootWatch));
+    const onLine = (line: string): void => {
+      r.ring.push(line);
+      if (r.ring.length > 5000) r.ring.shift();
+      this.send(`server://log/${id}`, line);
+      if (!sawDone && /Done \(\d/.test(line)) { sawDone = true; this.setStatus(id, 'running'); resolveStarted('running'); }
+    };
+    let buf = '';
+    const onData = (d: Buffer): void => {
+      buf += d.toString();
+      let i: number;
+      while ((i = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, i).replace(/\r$/, ''); buf = buf.slice(i + 1); if (l.trim()) onLine(l); }
+    };
+    proc.stdout?.on('data', onData);
+    proc.stderr?.on('data', onData);
+    proc.once('exit', code => {
+      this.running.delete(id);
+      this.setStatus(id, userStop || (sawDone && code === 0) ? 'stopped' : 'crashed');
+      resolveStarted(userStop ? 'stopped' : 'crashed');
+      resolveExited();
     });
+    // watch for user stop requests while starting
+    const stopProbe = setInterval(() => {
+      if (r.status === 'stopping') { userStop = true; clearInterval(stopProbe); }
+      if (!this.running.has(id)) clearInterval(stopProbe);
+    }, 500);
+    proc.once('exit', () => clearInterval(stopProbe));
+    void dto;
   }
 
   stop(id: string): Promise<void> {

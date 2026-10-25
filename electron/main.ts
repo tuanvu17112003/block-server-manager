@@ -55,6 +55,13 @@ app.whenReady().then(async () => {
     return;
   }
 
+  if (process.argv.includes('--e2e')) {
+    const { runE2E } = await import('./e2e');
+    const ok = await runE2E(ctx);
+    app.exit(ok ? 0 : 1);
+    return;
+  }
+
   const runtime = buildRuntime().register(ctx);
   registerRuntimeHandlers(runtime.handlers);
   app.on('before-quit', () => { void runtime.processes.stopAll(); });

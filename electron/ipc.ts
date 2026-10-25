@@ -80,6 +80,8 @@ export function registerIpc(ipcMain: IpcMain, ctx: IpcContext): void {
   }
 }
 
+export function handlersMap(): Record<string, Handler> { return handlers; }
+
 /** Direct handler invocation for the automated gate (no window needed). */
 export async function runSelfTest(ctx: IpcContext): Promise<boolean> {
   const t = (name: string, v: unknown) => ({ name, v });
