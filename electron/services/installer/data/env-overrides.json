@@ -1,0 +1,105 @@
+{
+  "comment": "Global server-side metadata corrections applied on top of manifest env/gameVersions, for every pack. Same role as itzg's modrinth-exclude-include.json. Every entry carries the loader-error evidence that justified it. Entries are data, never code branches. `unlessPresent`: exclusion applies only when no file in the pack matches that token — use it when a mod breaks only because its dependency is absent.",
+  "serverOverrides": [
+    {
+      "match": "asyncparticles",
+      "server": "unsupported",
+      "why": "client-only mod crashes dedicated server: 'Attempted to load class AsyncParticlesClient for invalid dist DEDICATED_SERVER' — observed on BattleArmory TACZ 26.0.5 (mrpack marks it server:required, wrongly)"
+    },
+    {
+      "match": "ruok",
+      "server": "unsupported",
+      "why": "ModLoadingException 'RuOK Mod has class loading errors' — references client classes on DEDICATED_SERVER — BattleArmory TACZ 26.0.5"
+    },
+    {
+      "match": "mekalus",
+      "server": "unsupported",
+      "why": "shader core (Oculus) loads client Screen class on DEDICATED_SERVER — ships in overrides/mods — BattleArmory TACZ 26.0.5 loader error"
+    },
+    {
+      "match": "chatanimation",
+      "server": "unsupported",
+      "why": "loads client Screen class on DEDICATED_SERVER — BattleArmory TACZ 26.0.5 loader error"
+    },
+    {
+      "match": "combatsense",
+      "server": "unsupported",
+      "why": "loads client Screen class on DEDICATED_SERVER — ships in overrides/mods — BattleArmory TACZ 26.0.5 loader error"
+    },
+    {
+      "match": "itemphysiclite",
+      "server": "unsupported",
+      "why": "ExceptionInInitializerError referencing client classes on DEDICATED_SERVER — BattleArmory TACZ 26.0.5 loader error"
+    },
+    {
+      "match": "jecharacters",
+      "server": "unsupported",
+      "why": "NoClassDefFoundError net/minecraft/client/searchtree/SuffixArray on DEDICATED_SERVER — BattleArmory TACZ 26.0.5 loader error"
+    },
+    {
+      "match": "smoothswapping",
+      "server": "unsupported",
+      "why": "loads client Screen class on DEDICATED_SERVER — ships in overrides/mods — BattleArmory TACZ 26.0.5 loader error"
+    },
+    {
+      "match": "chipped",
+      "server": "unsupported",
+      "unlessPresent": "athena",
+      "why": "requires athena >=3.1.1; breaks only when the pack omits it — Prominence II v4.1.5hf loader error (Prominence marks athena server:unsupported; packs shipping athena keep chipped)"
+    },
+    {
+      "match": "forgeconfigscreens",
+      "server": "unsupported",
+      "unlessPresent": "modmenu",
+      "why": "requires modmenu; breaks only when absent — Prominence II v4.1.5hf loader error"
+    },
+    {
+      "match": "mutant_skeleton_armor_tweaks",
+      "server": "unsupported",
+      "unlessPresent": "s_lib",
+      "why": "requires s_lib >=3.0.1; breaks only when absent — Prominence II v4.1.5hf loader error"
+    },
+    {
+      "match": "quests_teams_fixes",
+      "server": "unsupported",
+      "unlessPresent": "s_lib",
+      "why": "requires s_lib >=2.1.0; breaks only when absent — Prominence II v4.1.5hf loader error"
+    },
+    {
+      "match": "simply_swords_tweaks",
+      "server": "unsupported",
+      "unlessPresent": "s_lib",
+      "why": "requires s_lib >=3.0.1; breaks only when absent — Prominence II v4.1.5hf loader error"
+    },
+    {
+      "match": "simplyswords",
+      "server": "unsupported",
+      "unlessPresent": "simplytooltips",
+      "why": "requires simplytooltips; breaks only when the pack omits it — Prominence II v4.1.5hf loader error (packs shipping SimplyTooltips keep simplyswords)"
+    },
+    {
+      "match": "simplybows-opac-bridge",
+      "server": "unsupported",
+      "unlessPresent": "simplybows",
+      "why": "bridges simplybows; breaks when simplybows is excluded — Prominence II v4.1.5hf loader error"
+    },
+    {
+      "match": "simplybows",
+      "server": "unsupported",
+      "unlessPresent": "simplytooltips",
+      "why": "requires simplytooltips; breaks only when the pack omits it — Prominence II v4.1.5hf loader error"
+    },
+    {
+      "match": "unrestricted_enchanting",
+      "server": "unsupported",
+      "unlessPresent": "s_lib",
+      "why": "requires s_lib >=3.0.1 which is absent from the pack entirely — Prominence II v4.1.5hf loader error"
+    },
+    {
+      "match": "simplycompat",
+      "server": "unsupported",
+      "unlessPresent": "simplyswords",
+      "why": "requires simplyswords — Prominence II v4.1.5hf loader error"
+    }
+  ]
+}

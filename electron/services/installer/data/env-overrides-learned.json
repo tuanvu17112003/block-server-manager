@@ -1,0 +1,55 @@
+{
+  "comment": "AUTO-APPENDED by the auto-fix loop (SPC -clientsideapply pattern). Evidence in `why`.",
+  "serverOverrides": [
+    {
+      "match": "imblocker",
+      "server": "unsupported",
+      "why": "auto: Zombie Invade 100 Days crashed with this mod loaded (IMBlocker-5.4.6-forge+1.17-1.20.4.jar)"
+    },
+    {
+      "match": "itemphysic",
+      "server": "unsupported",
+      "why": "auto: DawnCraft crashed with this mod loaded (ItemPhysic_v1.4.23_mc1.18.2.jar)"
+    },
+    {
+      "match": "highlighter",
+      "server": "unsupported",
+      "why": "auto: DawnCraft crashed with this mod loaded (Highlighter-1.18.1-1.1.2.jar)"
+    },
+    {
+      "match": "legendarytooltips",
+      "server": "unsupported",
+      "why": "auto: DawnCraft crashed with this mod loaded (LegendaryTooltips-1.18.2-1.3.1.jar)"
+    },
+    {
+      "match": "drippyloadingscreen",
+      "server": "unsupported",
+      "why": "auto: DawnCraft crashed with this mod loaded (drippyloadingscreen_forge_3.0.1_MC_1.18.2.jar)"
+    },
+    {
+      "match": "advancementplaques",
+      "server": "unsupported",
+      "why": "auto: DawnCraft crashed with this mod loaded (AdvancementPlaques-1.18.2-1.4.5.1.jar)"
+    },
+    {
+      "match": "notenoughanimations",
+      "server": "unsupported",
+      "why": "auto: DawnCraft crashed with this mod loaded (notenoughanimations-forge-1.6.0-mc1.18.2.jar)"
+    },
+    {
+      "match": "nebs",
+      "server": "unsupported",
+      "why": "auto: DawnCraft crashed with this mod loaded (NekosEnchantedBooks-1.18.2-1.8.0.jar)"
+    },
+    {
+      "match": "immersivedamageindicators",
+      "server": "unsupported",
+      "why": "auto: Otherworld crashed with this mod loaded (immersivedamageindicators-forge-1.0.0-1.20.1.jar)"
+    },
+    {
+      "match": "welcomescreen",
+      "server": "unsupported",
+      "why": "auto: Prominence™ II: Hasturian Erav crashed with this mod loaded (welcomescreen-fabric-1.0.0-1.20.1.jar)"
+    }
+  ]
+}

@@ -7,6 +7,9 @@ import { Jobs } from './jobs';
 import { ServerProcesses } from './server-process';
 import { vanillaVersions, paperVersions, loadersResolve } from './versions';
 import { ensureJava, detectJava, requiredJavaMajor, installLoader, type LoaderKind } from './installer/core';
+import { searchModpacks, projectVersions } from './installer/modrinth';
+import { Pipeline } from './pipeline';
+import { CurseForgeStaging } from './curseforge-staging';
 
 export interface Runtime {
   jobs: Jobs;
@@ -97,7 +100,13 @@ export function buildRuntime(): { register: (ctx: IpcContext) => Runtime; stopAl
       server_send_command: a => processes!.sendCommand(String(a.id), String(a.cmd)),
       logs_tail: a => processes!.tail(String(a.id), Number(a.lines ?? 200)),
       server_command_history: a => new Store(ctx.dataRoot).commandHistory(String(a.id)),
+
+      modrinth_search_modpacks: a => searchModpacks(String(a.query ?? ''), a.gameVersion as string | null, a.loader as string | null, String(a.index ?? 'relevance'), Number(a.offset ?? 0), Number(a.limit ?? 20)),
+      modrinth_project_versions: a => projectVersions(String(a.projectId)),
     };
+    const pipeline = new Pipeline(ctx, jobs);
+    const staging = new CurseForgeStaging(ctx);
+    Object.assign(handlers, pipeline.handlers(), staging.handlers());
     return { jobs, processes, handlers };
   };
 

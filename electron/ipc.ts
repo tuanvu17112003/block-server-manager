@@ -34,7 +34,7 @@ export function registerRuntimeHandlers(extra: Record<string, Handler>): void {
 
 // Commands arriving in P2 — registered now so the UI gets a clean
 // {code:'not-implemented'} rejection instead of "No handler registered" noise.
-const UPCOMING = [
+const UPCOMING: string[] = [
   'modpack_pipeline_pick_local_mrpack', 'modpack_pipeline_preview', 'modpack_pipeline_install',
   'modpack_pipeline_cancel', 'modpack_pipeline_discard_preview', 'modpack_pipeline_release_local_mrpack',
   'modrinth_search_modpacks', 'modrinth_project_versions',
