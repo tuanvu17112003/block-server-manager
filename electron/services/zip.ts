@@ -1,18 +1,19 @@
-// Classic ZIP writer for backups/world exports (deflated, temp+rename, 4 GiB ceiling).
+// Classic ZIP writer for backups/world exports (deflated, temp+rename, fsynced, 4 GiB ceiling).
 // Reading stays with yauzl (`extractZip` in installer/core); this only adds the missing writer.
-import fs from 'node:fs';
+// Hardening: metadata preflight (count/name-length/total size) runs before any file is read;
+// entries carry DOS timestamps from the source mtime; the temp file is fsynced before rename.
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { crc32, deflateRaw } from 'node:zlib';
 import { appError } from './store';
+import { checkZipBudget, dosDateTime, ZIP_LIMIT_BYTES } from './backups-core';
 
 export interface ZipInput {
   name: string;
   path: string;
 }
 
-const ZIP_LIMIT_BYTES = 4 * 1024 ** 3;
 const deflate = promisify(deflateRaw);
 
 async function walk(root: string, dir: string, out: Map<string, ZipInput>): Promise<void> {
@@ -35,7 +36,7 @@ export async function collectInputs(root: string, names: string[]): Promise<ZipI
   const out = new Map<string, ZipInput>();
   for (const name of names) {
     const full = path.join(root, name);
-    let stats: fs.Stats;
+    let stats: Awaited<ReturnType<typeof fsp.stat>>;
     try {
       stats = await fsp.stat(full);
     } catch (error) {
@@ -53,10 +54,29 @@ export async function collectInputs(root: string, names: string[]): Promise<ZipI
   return [...out.values()];
 }
 
+interface PreparedEntry {
+  input: ZipInput;
+  size: number;
+  mtimeMs: number;
+  nameBytes: Buffer;
+}
+
+/** Stat every input and enforce the classic-ZIP budget before reading any file body. */
+async function prepareInputs(inputs: readonly ZipInput[], limit: number): Promise<PreparedEntry[]> {
+  const prepared: PreparedEntry[] = [];
+  for (const input of inputs) {
+    const stats = await fsp.stat(input.path);
+    if (!stats.isFile()) throw appError('backup-failed', `not a regular file while archiving: ${input.name}`);
+    prepared.push({ input, size: stats.size, mtimeMs: stats.mtimeMs, nameBytes: Buffer.from(input.name, 'utf8') });
+  }
+  checkZipBudget(prepared.map((entry) => ({ name: entry.input.name, size: entry.size })), { limit });
+  return prepared;
+}
+
 /** Writes a deflated ZIP and answers its byte size. Peak memory is one file, not the archive. */
 export async function writeZip(dest: string, inputs: ZipInput[], opts: { limit?: number } = {}): Promise<number> {
   const limit = opts.limit ?? ZIP_LIMIT_BYTES;
-  if (inputs.length > 0xffff) throw appError('backup-failed', `too many entries for a classic ZIP: ${inputs.length}`);
+  const prepared = await prepareInputs(inputs, limit);
 
   await fsp.mkdir(path.dirname(dest), { recursive: true });
   const temp = `${dest}.tmp`;
@@ -64,21 +84,24 @@ export async function writeZip(dest: string, inputs: ZipInput[], opts: { limit?:
   try {
     const central: Buffer[] = [];
     let offset = 0;
-    let total = 0;
 
-    for (const input of inputs) {
-      const body = await fsp.readFile(input.path);
-      total += body.length;
-      if (body.length > limit || total > limit) throw appError('backup-failed', `archive exceeds ${limit} bytes`);
+    for (const entry of prepared) {
+      const body = await fsp.readFile(entry.input.path);
+      if (body.length !== entry.size) {
+        throw appError('backup-failed', `file changed while archiving: ${entry.input.name}`);
+      }
       const checksum = crc32(body) >>> 0;
       const compressed = await deflate(body);
-      const name = Buffer.from(input.name, 'utf8');
+      const name = entry.nameBytes;
+      const stamp = dosDateTime(entry.mtimeMs);
 
       const local = Buffer.alloc(30);
       local.writeUInt32LE(0x04034b50, 0);
       local.writeUInt16LE(20, 4);
       local.writeUInt16LE(0x0800, 6);
       local.writeUInt16LE(8, 8);
+      local.writeUInt16LE(stamp.time, 10);
+      local.writeUInt16LE(stamp.date, 12);
       local.writeUInt32LE(checksum, 14);
       local.writeUInt32LE(compressed.length, 18);
       local.writeUInt32LE(body.length, 22);
@@ -93,6 +116,8 @@ export async function writeZip(dest: string, inputs: ZipInput[], opts: { limit?:
       record.writeUInt16LE(20, 6);
       record.writeUInt16LE(0x0800, 8);
       record.writeUInt16LE(8, 10);
+      record.writeUInt16LE(stamp.time, 12);
+      record.writeUInt16LE(stamp.date, 14);
       record.writeUInt32LE(checksum, 16);
       record.writeUInt32LE(compressed.length, 20);
       record.writeUInt32LE(body.length, 24);
@@ -102,18 +127,22 @@ export async function writeZip(dest: string, inputs: ZipInput[], opts: { limit?:
       central.push(record, name);
 
       offset += local.length + name.length + compressed.length;
-      if (offset > 0xffffffff) throw appError('backup-failed', 'archive exceeds the classic ZIP offset range');
+      if (offset > 0xffffffff) {
+        throw appError('backup-failed', 'archive exceeds the classic ZIP offset range (4 GiB); use a smaller backup set');
+      }
     }
 
     const directory = Buffer.concat(central);
     const end = Buffer.alloc(22);
     end.writeUInt32LE(0x06054b50, 0);
-    end.writeUInt16LE(inputs.length, 8);
-    end.writeUInt16LE(inputs.length, 10);
+    end.writeUInt16LE(prepared.length, 8);
+    end.writeUInt16LE(prepared.length, 10);
     end.writeUInt32LE(directory.length, 12);
     end.writeUInt32LE(offset, 16);
     await handle.write(directory);
     await handle.write(end);
+    // Durability: the rename below only becomes crash-safe once the bytes are on disk.
+    await handle.sync();
     await handle.close();
     await fsp.rename(temp, dest);
     return offset + directory.length + end.length;

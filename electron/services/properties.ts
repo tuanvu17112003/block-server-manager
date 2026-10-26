@@ -50,20 +50,112 @@ export const PROPERTY_RULES: Record<string, PropertyRule> = {
   'level-seed': { kind: 'string', max: 256 },
 };
 
+/** Java `.properties` unescape (java.util.Properties semantics used by server.properties). */
+export function unescapeProperty(value: string): string {
+  let out = '';
+  for (let index = 0; index < value.length; index += 1) {
+    const ch = value[index]!;
+    if (ch !== '\\') { out += ch; continue; }
+    const next = value[index + 1];
+    if (next === undefined) { out += '\\'; break; }
+    index += 1;
+    if (next === 'u') {
+      const hex = value.slice(index + 1, index + 5);
+      if (/^[0-9a-fA-F]{4}$/.test(hex)) { out += String.fromCharCode(parseInt(hex, 16)); index += 4; }
+      else out += 'u';
+      continue;
+    }
+    if (next === 't') out += '\t';
+    else if (next === 'n') out += '\n';
+    else if (next === 'r') out += '\r';
+    else if (next === 'f') out += '\f';
+    else out += next; // \\ \: \= \  \# \! and unknown escapes drop the backslash
+  }
+  return out;
+}
+
+/** Escape a property value for writing (leading spaces are trimmed by Java unless escaped). */
+export function escapeProperty(value: string): string {
+  let out = '';
+  for (const ch of value) {
+    const code = ch.codePointAt(0)!;
+    if (ch === '\\') out += '\\\\';
+    else if (ch === '\t') out += '\\t';
+    else if (ch === '\n') out += '\\n';
+    else if (ch === '\r') out += '\\r';
+    else if (ch === '\f') out += '\\f';
+    else if (code > 0x7e) {
+      // java.util.Properties loads ISO-8859-1, so non-ASCII must be \\uXXXX (surrogate pairs twice).
+      if (code > 0xffff) {
+        const adjusted = code - 0x10000;
+        const high = 0xd800 + (adjusted >> 10);
+        const low = 0xdc00 + (adjusted & 0x3ff);
+        out += `\\u${high.toString(16).padStart(4, '0')}\\u${low.toString(16).padStart(4, '0')}`;
+      } else {
+        out += `\\u${code.toString(16).padStart(4, '0')}`;
+      }
+    } else out += ch;
+  }
+  return out.replace(/^ +/, (spaces) => '\\ '.repeat(spaces.length));
+}
+
+function escapeKey(key: string): string {
+  return key.replace(/\\/g, '\\\\').replace(/ /g, '\\ ').replace(/=/g, '\\=').replace(/:/g, '\\:').replace(/#/g, '\\#').replace(/!/g, '\\!');
+}
+
+/** Join physical lines that end with an odd number of backslashes (Java line continuation). */
+function logicalPropertyLines(text: string): string[] {
+  const physical = text.split('\n');
+  const out: string[] = [];
+  let acc = '';
+  for (const raw of physical) {
+    const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+    const piece = acc === '' ? line : line.replace(/^[ \t\f]+/, '');
+    acc += piece;
+    const trailing = acc.match(/\\+$/);
+    const odd = trailing !== null && trailing[0].length % 2 === 1;
+    if (odd) { acc = acc.slice(0, -1); continue; }
+    out.push(acc);
+    acc = '';
+  }
+  if (acc !== '') out.push(acc);
+  return out;
+}
+
+function splitPropertyLine(line: string): { key: string; value: string } | null {
+  let index = 0;
+  let keyRaw = '';
+  while (index < line.length) {
+    const ch = line[index]!;
+    if (ch === '\\') {
+      keyRaw += ch;
+      if (index + 1 < line.length) keyRaw += line[index + 1];
+      index += 2;
+      continue;
+    }
+    if (ch === '=' || ch === ':' || ch === ' ' || ch === '\t' || ch === '\f') break;
+    keyRaw += ch;
+    index += 1;
+  }
+  if (keyRaw === '') return null;
+  while (index < line.length && /[ \t\f]/.test(line[index]!)) index += 1;
+  if (line[index] === '=' || line[index] === ':') index += 1;
+  while (index < line.length && /[ \t\f]/.test(line[index]!)) index += 1;
+  return { key: unescapeProperty(keyRaw), value: unescapeProperty(line.slice(index)) };
+}
+
 export function parseProperties(text: string): {
   entries: ServerPropertyEntry[];
   values: Record<string, string>;
 } {
   const entries: ServerPropertyEntry[] = [];
   const values: Record<string, string> = {};
-  for (const raw of text.split('\n')) {
-    const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
-    if (line.trim() === '' || line.startsWith('#')) continue;
-    const equals = line.indexOf('=');
-    if (equals <= 0) continue;
-    const key = line.slice(0, equals).trim();
-    if (key === '') continue;
-    const value = line.slice(equals + 1);
+  for (const line of logicalPropertyLines(text)) {
+    const trimmed = line.trim();
+    if (trimmed === '' || trimmed.startsWith('#') || trimmed.startsWith('!')) continue;
+    const pair = splitPropertyLine(line);
+    if (pair === null) continue;
+    const { key, value } = pair;
     const rule = PROPERTY_RULES[key];
     values[key] = value;
     entries.push({
@@ -79,30 +171,40 @@ export function parseProperties(text: string): {
   return { entries, values };
 }
 
-/** Replace only the given keys; comments, blanks and unknown keys keep their bytes. */
+function detectEol(text: string): string {
+  const newline = text.indexOf('\n');
+  return newline > 0 && text[newline - 1] === '\r' ? '\r\n' : '\n';
+}
+
+/** Replace only the given keys; comments, blanks, unknown keys and line endings keep their bytes. */
 export function mergeProperties(text: string, values: Record<string, string>): string {
+  const eol = detectEol(text);
   if (text === '') {
-    return `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')}\n`;
+    return Object.entries(values).map(([key, value]) => `${escapeKey(key)}=${escapeProperty(value)}`).join(eol) + eol;
   }
   const replaced = new Set<string>();
   const out = text.split('\n').map((raw) => {
-    const eol = raw.endsWith('\r') ? '\r' : '';
-    const line = eol === '' ? raw : raw.slice(0, -1);
-    if (line.trim() === '' || line.startsWith('#')) return raw;
-    const equals = line.indexOf('=');
-    if (equals <= 0) return raw;
-    const key = line.slice(0, equals).trim();
-    if (!Object.prototype.hasOwnProperty.call(values, key)) return raw;
-    replaced.add(key);
-    return `${key}=${values[key]}${eol}`;
+    const hasCr = raw.endsWith('\r');
+    const line = hasCr ? raw.slice(0, -1) : raw;
+    const trimmed = line.trim();
+    if (trimmed === '' || trimmed.startsWith('#') || trimmed.startsWith('!')) return raw;
+    // Continuation lines are left untouched (replacing them safely needs full logical parsing).
+    if (/\\+$/.test(line) && (line.match(/\\+$/)![0].length % 2) === 1) return raw;
+    const pair = splitPropertyLine(line);
+    if (pair === null || !Object.prototype.hasOwnProperty.call(values, pair.key)) return raw;
+    replaced.add(pair.key);
+    return `${escapeKey(pair.key)}=${escapeProperty(values[pair.key]!)}${hasCr ? '\r' : ''}`;
   });
   const missing = Object.keys(values).filter((key) => !replaced.has(key));
   if (missing.length === 0) return out.join('\n');
   const endsWithNewline = text.endsWith('\n');
   const body = endsWithNewline ? out.slice(0, -1) : out;
-  for (const key of missing) body.push(`${key}=${values[key]}`);
-  return `${body.join('\n')}${endsWithNewline ? '\n' : ''}`;
+  for (const key of missing) {
+    body.push(`${escapeKey(key)}=${escapeProperty(values[key]!)}`);
+  }
+  return `${body.join('\n')}${endsWithNewline ? eol : ''}`;
 }
+
 
 /** `level-name` is one safe path segment; anything that could escape falls back to `world`. */
 export function safeLevelName(value: string | undefined): string {

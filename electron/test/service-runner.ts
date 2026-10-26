@@ -4,6 +4,10 @@ import { runManagementSuite, runStoreSuite } from './services/management.suite';
 import { runPipelineSuite } from './services/pipeline.suite';
 import { runInstallSuite } from './services/install.suite';
 import { runValidationSuite } from './services/validation.suite';
+import { runPlayersMetricsSuite } from './services/players-metrics.suite';
+import { runBackupsSuite } from './services/backups.suite';
+import { runContentSuite } from './services/content.suite';
+import { runWorldsSuite } from './services/worlds.suite';
 
 export interface SuiteResult {
   ok: boolean;
@@ -18,6 +22,10 @@ export async function runServiceTests(filter?: string): Promise<SuiteResult> {
     { name: 'pipeline', run: runPipelineSuite },
     { name: 'install', run: runInstallSuite },
     { name: 'validation', run: runValidationSuite },
+    { name: 'players-metrics', run: runPlayersMetricsSuite },
+    { name: 'backups', run: runBackupsSuite },
+    { name: 'content', run: runContentSuite },
+    { name: 'worlds', run: runWorldsSuite },
   ];
   for (const suite of suites) {
     if (filter && !suite.name.includes(filter)) continue;

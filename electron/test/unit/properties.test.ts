@@ -32,9 +32,9 @@ test('parseProperties: comments, blanks, CRLF and unknown keys are preserved as 
   assert.equal(maxPlayers?.max, 1000);
 });
 
-test('parseProperties: ignores malformed lines without equals and keeps keys with empty values', () => {
+test('parseProperties: a separator-less line is a key with an empty value (java.util.Properties)', () => {
   const { values } = parseProperties('no-equals-line\nempty=\n=novalue\n# x\n');
-  assert.deepEqual(values, { empty: '' });
+  assert.deepEqual(values, { 'no-equals-line': '', empty: '' });
 });
 
 test('mergeProperties: replaces only requested keys and preserves comments, order and unknown keys', () => {
@@ -96,3 +96,42 @@ test('appError: carries the code consumed by the IPC error envelope', () => {
   assert.equal((error as { code?: string }).code, 'conflict');
   assert.equal(error.message, 'nope');
 });
+
+test('Java properties escapes: unicode, tabs, separators and line continuation (M-22)', () => {
+  const { values } = parseProperties([
+    'motd=\\u00a7aHello \\u00a7rWorld',
+    'level-name=my\\ world',
+    'tabbed=a\\tb',
+    'continued=first\\',
+    '   second',
+    'colons=a\\:b',
+  ].join('\n'));
+  assert.equal(values.motd, '\u00a7aHello \u00a7rWorld');
+  assert.equal(values['level-name'], 'my world');
+  assert.equal(values.tabbed, 'a\tb');
+  assert.equal(values.continued, 'firstsecond');
+  assert.equal(values.colons, 'a:b');
+});
+
+test('mergeProperties escapes written values and preserves comments/unknown keys (M-22)', () => {
+  const merged = mergeProperties('# head\nmotd=old\nunknown=keep\n', {
+    motd: '§aHello\n"quoted" \\ backslash',
+    'level-name': 'my world',
+  });
+  assert.match(merged, /^# head/m);
+  assert.match(merged, /unknown=keep/);
+  assert.match(merged, /motd=\\u00a7aHello\\n"quoted" \\\\ backslash/);
+  assert.match(merged, /level-name=my world/);
+  // Round-trip: parsing what we wrote returns the original values.
+  const roundTrip = parseProperties(merged).values;
+  assert.equal(roundTrip.motd, '§aHello\n"quoted" \\ backslash');
+  assert.equal(roundTrip['level-name'], 'my world');
+});
+
+test('mergeProperties keeps CRLF line endings when appending missing keys (M-22)', () => {
+  const merged = mergeProperties('motd=a\r\n', { difficulty: 'hard' });
+  assert.equal(merged, 'motd=a\r\ndifficulty=hard\r\n');
+  const noTrailing = mergeProperties('motd=a\r\nmax-players=20', { difficulty: 'hard' });
+  assert.equal(noTrailing, 'motd=a\r\nmax-players=20\ndifficulty=hard');
+});
+

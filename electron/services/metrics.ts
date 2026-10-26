@@ -1,14 +1,36 @@
-// Metrics — per-server process CPU/RAM sampled every 2 s, live events, 1-minute history kept 7 days.
-// CPU is derived from the cumulative process CPU counter; the first sample of a run has no baseline.
+// Metrics — CPU/RAM sampled in ONE batched `Get-Process -Id a,b,c` per tick for every running server,
+// live player/TPS values probed through the ring-safe console sequence API, 1-minute history kept 7 days.
+//
+// WP-5.4 / M-13 fixes:
+//  * one PowerShell invocation per tick (5 s cadence), not one per server per 2 s;
+//  * CPU is normalized by the logical core count so the number matches Task Manager semantics
+//    (`cpuPercent` in player-metrics-core) and is not clamped to 100;
+//  * Paper servers get a `tps` command at most once per 30 s and the reply is parsed through
+//    `entriesSince` (ring-cap safe); MSPT stays null unless a real `Average tick time` line appears;
+//  * `maxPlayers` comes from `server.properties` (M-06), also for player counts;
+//  * `metrics_get` validates `hours` as an integer 1..168;
+//  * history writes are asynchronous (no sync write on the sampling path) and per-server maps are
+//    pruned for stopped servers, removed entirely for deleted ones.
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { IpcContext, Handler } from '../ipc';
-import { Store, appError } from './store';
+import { Store, appError, type ServerDto } from './store';
+import { readProperties } from './properties';
+import {
+  cpuPercent,
+  parseListReply,
+  parseProcessSampleOutput,
+  parseTpsReply,
+  validateHours,
+} from './player-metrics-core';
 import type { ServerProcesses } from './server-process';
 
 export interface MetricsEvent {
   id: string;
+  /** Percent of total CPU capacity (normalized by logical cores, Task Manager semantics). */
   cpuPct: number | null;
   memoryMb: number | null;
   ramPct: number | null;
@@ -37,42 +59,51 @@ interface Previous {
   memoryMb: number;
 }
 
-const INTERVAL_MS = 2_000;
+interface BatchedReading {
+  cpuSeconds: number | null;
+  workingSetBytes: number;
+}
+
+/** 5 s cadence: one batched process sample covers every running server (M-13). */
+const INTERVAL_MS = 5_000;
+/** Player count refresh cadence for the metrics event (unrelated to the Players tab). */
+const LIST_INTERVAL_MS = 15_000;
+/** Paper `tps` command cadence (M-13: ≤ 1 per 30 s). */
+const TPS_INTERVAL_MS = 30_000;
+/** How long a console reply is awaited before the pending probe is abandoned. */
+const REPLY_TIMEOUT_MS = 10_000;
+const SAMPLE_TIMEOUT_MS = 5_000;
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
-const LIST_REPLY = /There are (\d+) of a max of (\d+) players online:?\s*(.*)$/;
-const TPS_REPLY = /TPS from last 1m, 5m, 15m:\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)/i;
+const LIST_SCAN_LIMIT = 400;
 const MSPT_REPLY = /Average tick time:\s*([\d.]+)\s*ms/i;
 
-function runPowerShell(pid: number, timeoutMs = 5000): Promise<{ cpuSeconds: number; workingSetBytes: number }> {
-  return new Promise((resolve, reject) => {
-    const command = `Get-Process -Id ${pid} | ForEach-Object { "$($_.CPU) $($_.WorkingSet64)" }`;
+/** One batched `Get-Process` invocation; invariant-culture `pid|cpuSeconds|workingSetBytes` lines. */
+function runGetProcessBatch(pids: number[], timeoutMs = SAMPLE_TIMEOUT_MS): Promise<Map<number, BatchedReading>> {
+  if (pids.length === 0) return Promise.resolve(new Map());
+  return new Promise((resolve) => {
+    const command =
+      `Get-Process -Id ${pids.join(',')} -ErrorAction SilentlyContinue | ForEach-Object { ` +
+      `[string]::Format([System.Globalization.CultureInfo]::InvariantCulture, '{0}|{1}|{2}', ` +
+      `$_.Id, $_.CPU, $_.WorkingSet64) }`;
     const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { windowsHide: true });
     let output = '';
     let settled = false;
-    const against = (error: Error): void => {
+    const finish = (value: Map<number, BatchedReading>): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      child.kill();
-      reject(error);
+      try { child.kill(); } catch { /* already gone */ }
+      resolve(value);
     };
-    const timer = setTimeout(() => against(new Error(`Get-Process timed out reading pid ${pid}`)), timeoutMs);
+    const timer = setTimeout(() => finish(new Map()), timeoutMs);
     child.stdout.on('data', (chunk: Buffer) => { output += chunk.toString('utf8'); });
-    child.on('error', (error) => against(error));
-    child.on('close', (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      const parts = output.trim().split(/\s+/);
-      const cpu = Number((parts[0] ?? '').replace(',', '.'));
-      const memory = Number(parts[1]);
-      if (code !== 0 || !Number.isFinite(cpu) || !Number.isFinite(memory)) {
-        reject(new Error(`Get-Process could not read pid ${pid}`));
-        return;
-      }
-      resolve({ cpuSeconds: cpu, workingSetBytes: memory });
-    });
+    child.on('error', () => finish(new Map()));
+    child.on('close', () => finish(parseProcessSampleOutput(output)));
   });
+}
+
+function isPaper(dto: ServerDto): boolean {
+  return /paper/i.test(dto.loader ?? '');
 }
 
 export class Metrics {
@@ -80,8 +111,22 @@ export class Metrics {
   private previous = new Map<string, Previous>();
   private history = new Map<string, Bucket[]>();
   private lastBucket = new Map<string, number>();
-  private lastList = new Map<string, number>();
+  /** Server -> next allowed `list` / `tps` probe timestamp. */
+  private nextListAt = new Map<string, number>();
+  private nextTpsAt = new Map<string, number>();
+  /** Outstanding console probes: server -> log sequence the command was sent at. */
+  private pendingList = new Map<string, number>();
+  private pendingListAt = new Map<string, number>();
+  private pendingTps = new Map<string, number>();
+  private pendingTpsAt = new Map<string, number>();
+  /** Latest parsed console values, refreshed by the pending probes. */
+  private livePlayersOnline = new Map<string, number | null>();
+  private liveTps = new Map<string, number | null>();
+  private inFlightSaves = new Map<string, Promise<void>>();
+  private dirtyHistory = new Set<string>();
   private ticking = false;
+  /** Task Manager parity: CPU percent is normalized by the logical processor count. */
+  private readonly cpuCount = Math.max(1, os.cpus().length);
 
   constructor(private ctx: IpcContext, private processes: ServerProcesses) {}
 
@@ -94,57 +139,73 @@ export class Metrics {
     let rows: Bucket[] = [];
     try {
       rows = JSON.parse(fs.readFileSync(this.historyFile(id), 'utf8')) as Bucket[];
+      if (!Array.isArray(rows)) rows = [];
     } catch {
       rows = [];
     }
     const cutoff = Date.now() - RETENTION_MS;
-    rows = rows.filter((row) => Date.parse(row.at) >= cutoff);
+    rows = rows.filter((row) => row && typeof row === 'object' && Date.parse(row.at) >= cutoff);
     this.history.set(id, rows);
     return rows;
   }
 
-  private saveHistory(id: string): void {
-    const rows = this.history.get(id);
-    if (!rows) return;
-    try {
-      fs.mkdirSync(path.dirname(this.historyFile(id)), { recursive: true });
-      const temp = `${this.historyFile(id)}.tmp`;
-      fs.writeFileSync(temp, JSON.stringify(rows));
-      fs.renameSync(temp, this.historyFile(id));
-    } catch {
-      // History is a convenience; a read-only data root must not break metrics.
+  /** Async, coalesced history write — never blocks the sampling tick or the IPC thread. */
+  private flushHistory(id: string): Promise<void> {
+    const inFlight = this.inFlightSaves.get(id);
+    if (inFlight) {
+      this.dirtyHistory.add(id);
+      return inFlight;
     }
-  }
-
-  private fromRing(id: string): { playersOnline: number | null; maxPlayers: number | null; tps: number | null; mspt: number | null } {
-    const ring = this.processes.history(id).slice(-400);
-    let playersOnline: number | null = null;
-    let maxPlayers: number | null = null;
-    let tps: number | null = null;
-    let mspt: number | null = null;
-    for (const line of ring) {
-      const list = LIST_REPLY.exec(line);
-      if (list) {
-        playersOnline = Number(list[1]);
-        maxPlayers = Number(list[2]);
+    this.dirtyHistory.add(id);
+    const task = (async (): Promise<void> => {
+      try {
+        while (this.dirtyHistory.delete(id)) {
+          const rows = this.history.get(id);
+          if (!rows) return;
+          const file = this.historyFile(id);
+          const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+          try {
+            await fsp.mkdir(path.dirname(file), { recursive: true });
+            await fsp.writeFile(temp, JSON.stringify(rows), 'utf8');
+            await fsp.rename(temp, file);
+          } catch {
+            try { await fsp.rm(temp, { force: true }); } catch { /* best effort cleanup */ }
+          }
+        }
+      } finally {
+        this.inFlightSaves.delete(id);
       }
-      const tpsMatch = TPS_REPLY.exec(line);
-      if (tpsMatch) {
-        const value = Number(tpsMatch[1]);
-        if (Number.isFinite(value)) tps = value;
-      }
-      const msptMatch = MSPT_REPLY.exec(line);
-      if (msptMatch) {
-        const value = Number(msptMatch[1]);
-        if (Number.isFinite(value)) mspt = value;
-      }
-    }
-    return { playersOnline, maxPlayers, tps, mspt };
+    })();
+    this.inFlightSaves.set(id, task);
+    return task;
   }
 
   private ramPct(memoryMb: number | null, ramMb: number): number | null {
     if (memoryMb === null || ramMb <= 0) return null;
     return Math.round((memoryMb / ramMb) * 1000) / 10;
+  }
+
+  /** server.properties is the authority for the cap (M-06); fall back to the DTO then 20. */
+  private propertyMaxPlayers(dto: ServerDto): number {
+    try {
+      const value = Number(readProperties(path.join(this.ctx.dataRoot, 'servers', dto.id)).values['max-players']);
+      if (Number.isInteger(value) && value > 0) return value;
+    } catch {
+      /* unreadable properties: fall back */
+    }
+    return Number.isInteger(dto.maxPlayers) && (dto.maxPlayers ?? 0) > 0 ? dto.maxPlayers! : 20;
+  }
+
+  /** Last `Average tick time` line in the ring (kept null unless a real MSPT line appears). */
+  private recentMspt(id: string): number | null {
+    const ring = this.processes.history(id).slice(-LIST_SCAN_LIMIT);
+    for (let index = ring.length - 1; index >= 0; index -= 1) {
+      const match = MSPT_REPLY.exec(ring[index]!);
+      if (!match) continue;
+      const value = Number(match[1]);
+      if (Number.isFinite(value)) return value;
+    }
+    return null;
   }
 
   private record(id: string, event: MetricsEvent): void {
@@ -164,7 +225,7 @@ export class Metrics {
     });
     const cutoff = Date.now() - RETENTION_MS;
     while (rows.length > 0 && Date.parse(rows[0]!.at) < cutoff) rows.shift();
-    this.saveHistory(id);
+    void this.flushHistory(id);
   }
 
   start(): void {
@@ -178,87 +239,152 @@ export class Metrics {
     this.timer = null;
   }
 
-  private async tick(): Promise<void> {
-    if (this.ticking) return;
-    this.ticking = true;
-    try {
-      const ids = this.processes.runningIds();
-      for (const id of ids) {
-        await this.sample(id);
-      }
-    } finally {
-      this.ticking = false;
+  /** Drop per-server state for stopped servers; forget cached history for deleted servers (no unbounded maps). */
+  private pruneMaps(servers: Map<string, ServerDto>, running: Set<string>): void {
+    for (const map of [
+      this.previous, this.nextListAt, this.nextTpsAt,
+      this.pendingList, this.pendingListAt, this.pendingTps, this.pendingTpsAt,
+      this.livePlayersOnline, this.liveTps,
+    ]) {
+      for (const key of [...map.keys()]) if (!running.has(key)) map.delete(key);
+    }
+    for (const key of [...this.history.keys()]) if (!servers.has(key)) this.history.delete(key);
+    for (const key of [...this.lastBucket.keys()]) if (!servers.has(key)) this.lastBucket.delete(key);
+    for (const key of [...this.dirtyHistory]) if (!servers.has(key)) this.dirtyHistory.delete(key);
+    for (const key of [...this.inFlightSaves.keys()]) if (!servers.has(key)) this.inFlightSaves.delete(key);
+  }
+
+  /** Send due `list`/`tps` probes and consume replies to probes sent on earlier ticks. */
+  private serviceConsole(id: string, dto: ServerDto, at: number): void {
+    this.scanPendingReplies(id, at);
+    if (at >= (this.nextListAt.get(id) ?? 0)) {
+      try {
+        this.pendingList.set(id, this.processes.lineSeq(id));
+        this.pendingListAt.set(id, at);
+        this.processes.command(id, 'list');
+        this.nextListAt.set(id, at + LIST_INTERVAL_MS);
+      } catch { /* server stopped between listing and write */ }
+    }
+    if (!isPaper(dto)) return;
+    if (at >= (this.nextTpsAt.get(id) ?? 0)) {
+      try {
+        this.pendingTps.set(id, this.processes.lineSeq(id));
+        this.pendingTpsAt.set(id, at);
+        this.processes.command(id, 'tps');
+        this.nextTpsAt.set(id, at + TPS_INTERVAL_MS);
+      } catch { /* server stopped between listing and write */ }
     }
   }
 
-  private async sample(id: string): Promise<void> {
-    const dto = this.store().getServer(id);
-    if (!dto) return;
-    const pid = this.processes.pid(id);
-    const startedAt = this.processes.startedAt(id);
-    if (pid === null || startedAt === null) return;
-    const at = Date.now();
-    const uptimeSec = Math.max(0, Math.floor((at - startedAt) / 1000));
-    const last = this.previous.get(id);
-    const baseline = last && last.startedAt === startedAt ? last : null;
-    // Refresh the player count without spamming the console: one `list` every 15 s.
-    const lastList = this.lastList.get(id) ?? 0;
-    if (at - lastList >= 15_000) {
-      try { this.processes.command(id, 'list'); this.lastList.set(id, at); } catch { /* server just stopped */ }
-    }
-    const live = this.fromRing(id);
-    let reading: { cpuSeconds: number; workingSetBytes: number };
-    try {
-      reading = await runPowerShell(pid);
-    } catch {
-      if (baseline === null) return;
-      const event: MetricsEvent = {
-        id,
-        cpuPct: null,
-        memoryMb: baseline.memoryMb,
-        ramPct: this.ramPct(baseline.memoryMb, dto.ramMb),
-        uptimeSec,
-        playersOnline: live.playersOnline,
-        maxPlayers: live.maxPlayers ?? dto.maxPlayers ?? null,
-        tps: live.tps,
-        mspt: live.mspt,
-        at: new Date(at).toISOString(),
-      };
-      this.ctx.send(`metrics://${id}`, event);
-      this.record(id, event);
-      return;
-    }
-    const memoryMb = Math.round(reading.workingSetBytes / 1024 / 1024);
-    let cpuPct: number | null = null;
-    if (baseline) {
-      const elapsed = at - baseline.at;
-      if (elapsed > 0) {
-        const pct = ((reading.cpuSeconds - baseline.cpuSeconds) / elapsed) * 1000 * 100;
-        cpuPct = Math.max(0, Math.min(100, Math.round(pct * 10) / 10));
+  private scanPendingReplies(id: string, at: number): void {
+    const listFrom = this.pendingList.get(id);
+    if (listFrom !== undefined) {
+      for (const entry of this.processes.entriesSince(id, listFrom, LIST_SCAN_LIMIT)) {
+        const reply = parseListReply(entry.text);
+        if (!reply) continue;
+        this.livePlayersOnline.set(id, reply.online);
+        this.pendingList.delete(id);
+        this.pendingListAt.delete(id);
+        break;
+      }
+      if (this.pendingList.has(id) && at - (this.pendingListAt.get(id) ?? at) > REPLY_TIMEOUT_MS) {
+        this.pendingList.delete(id);
+        this.pendingListAt.delete(id);
       }
     }
-    this.previous.set(id, { startedAt, cpuSeconds: reading.cpuSeconds, at, memoryMb });
+    const tpsFrom = this.pendingTps.get(id);
+    if (tpsFrom !== undefined) {
+      for (const entry of this.processes.entriesSince(id, tpsFrom, LIST_SCAN_LIMIT)) {
+        const reply = parseTpsReply(entry.text);
+        if (!reply) continue;
+        this.liveTps.set(id, reply.tps1m);
+        this.pendingTps.delete(id);
+        this.pendingTpsAt.delete(id);
+        break;
+      }
+      if (this.pendingTps.has(id) && at - (this.pendingTpsAt.get(id) ?? at) > REPLY_TIMEOUT_MS) {
+        this.pendingTps.delete(id);
+        this.pendingTpsAt.delete(id);
+      }
+    }
+  }
+
+  private emitSample(
+    id: string,
+    dto: ServerDto,
+    reading: BatchedReading | null,
+    at: number,
+  ): void {
+    const startedAt = this.processes.startedAt(id);
+    if (startedAt === null) return;
+    const baseline = this.previous.get(id);
+    const sameRun = baseline !== undefined && baseline.startedAt === startedAt ? baseline : null;
+    if (reading === null && sameRun === null) return; // nothing to report on the first failed sample
+    const memoryMb = reading !== null
+      ? Math.round(reading.workingSetBytes / 1024 / 1024)
+      : sameRun?.memoryMb ?? null;
+    let cpu: number | null = null;
+    if (reading !== null && reading.cpuSeconds !== null && sameRun !== null) {
+      cpu = cpuPercent(reading.cpuSeconds - sameRun.cpuSeconds, at - sameRun.at, this.cpuCount);
+    }
+    if (reading !== null && reading.cpuSeconds !== null) {
+      this.previous.set(id, { startedAt, cpuSeconds: reading.cpuSeconds, at, memoryMb: memoryMb ?? 0 });
+    } else if (sameRun !== null) {
+      this.previous.set(id, { ...sameRun, at, memoryMb: memoryMb ?? sameRun.memoryMb });
+    }
     const event: MetricsEvent = {
       id,
-      cpuPct,
+      cpuPct: cpu,
       memoryMb,
       ramPct: this.ramPct(memoryMb, dto.ramMb),
-      uptimeSec,
-      playersOnline: live.playersOnline,
-      maxPlayers: live.maxPlayers ?? dto.maxPlayers ?? null,
-      tps: live.tps,
-      mspt: live.mspt,
+      uptimeSec: Math.max(0, Math.floor((at - startedAt) / 1000)),
+      playersOnline: this.livePlayersOnline.get(id) ?? null,
+      maxPlayers: this.propertyMaxPlayers(dto),
+      tps: this.liveTps.get(id) ?? null,
+      mspt: this.recentMspt(id),
       at: new Date(at).toISOString(),
     };
     this.ctx.send(`metrics://${id}`, event);
     this.record(id, event);
   }
 
-  async get(id: string, hours = 1): Promise<{ samples: Bucket[]; disk: { freeBytes: number; totalBytes: number }; current: Bucket | null }> {
+  private async tick(): Promise<void> {
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      const servers = new Map(this.store().listServers().map((dto) => [dto.id, dto]));
+      const runningIds = this.processes.runningIds();
+      this.pruneMaps(servers, new Set(runningIds));
+      if (runningIds.length === 0) return;
+      const at = Date.now();
+      // One PowerShell invocation for all running servers (M-13).
+      const pidByServer = new Map<string, number>();
+      for (const id of runningIds) {
+        const pid = this.processes.pid(id);
+        if (pid !== null && Number.isInteger(pid) && pid > 0) pidByServer.set(id, pid);
+      }
+      const batch = await runGetProcessBatch([...pidByServer.values()]);
+      for (const id of runningIds) {
+        const dto = servers.get(id);
+        if (!dto) continue;
+        this.serviceConsole(id, dto, at);
+        const pid = pidByServer.get(id);
+        this.emitSample(id, dto, pid === undefined ? null : batch.get(pid) ?? null, at);
+      }
+    } catch {
+      // A transient store/process error must not kill the sampler; the next tick retries.
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  async get(id: string, hours: unknown = 1): Promise<{ samples: Bucket[]; disk: { freeBytes: number; totalBytes: number }; current: Bucket | null }> {
     const dto = this.store().getServer(id);
     if (!dto) throw appError('not-found', `Server ${id} not found.`);
+    const valid = validateHours(hours);
+    if (!valid.ok) throw appError('validation', valid.reason);
     const rows = this.loadHistory(id);
-    const cutoff = Date.now() - Math.max(1, Math.min(168, hours)) * 60 * 60 * 1000;
+    const cutoff = Date.now() - valid.hours * 60 * 60 * 1000;
     const samples = rows.filter((row) => Date.parse(row.at) >= cutoff);
     let disk = { freeBytes: 0, totalBytes: 0 };
     try {
@@ -281,7 +407,7 @@ export class Metrics {
 
   handlers(): Record<string, Handler> {
     return {
-      metrics_get: (a) => this.get(String(a.id), Number(a.hours ?? 1)),
+      metrics_get: (a) => this.get(String(a.id), a.hours === undefined ? 1 : a.hours),
       system_disk: () => this.disk(),
     };
   }

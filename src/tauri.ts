@@ -562,7 +562,7 @@ export const tauriContent = {
   versions: (id: string, projectId: string) =>
     invokeRequired<ContentVersionDto[]>('content_versions', { id, projectId }),
   install: (id: string, projectId: string, versionId: string | null, title: string | null, jobId: string) =>
-    invokeRequired<{ installed: number; files: string[]; warnings: string[] }>('content_install', {
+    invokeRequired<{ installed: number; files: string[]; warnings: string[]; skipped?: number }>('content_install', {
       id, projectId, versionId, title, jobId,
     }),
 };

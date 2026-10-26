@@ -15,9 +15,17 @@ import { appError, type Store, type ServerDto } from './store';
 type Status = 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed';
 type StartOutcome = 'running' | 'stopped' | 'crashed';
 
+interface LogEntry {
+  seq: number;
+  text: string;
+}
+
 interface Running {
   proc: ChildProcess;
   ring: string[];
+  /** Monotonic per-server log sequence; consumers (players/metrics) use it instead of ring length. */
+  entries: LogEntry[];
+  seq: number;
   status: Status;
   startedAt: number;
   logStream?: fs.WriteStream;
@@ -143,6 +151,22 @@ export class ServerProcesses {
   }
 
   history(id: string): string[] { return this.running.get(id)?.ring ?? []; }
+
+  /** Monotonic log sequence for a running server (0 when not running). */
+  lineSeq(id: string): number { return this.running.get(id)?.seq ?? 0; }
+
+  /** Entries appended after `fromSeq` (ascending), bounded to `limit` newest. */
+  entriesSince(id: string, fromSeq: number, limit = 500): LogEntry[] {
+    const running = this.running.get(id);
+    if (!running) return [];
+    const out: LogEntry[] = [];
+    for (let index = running.entries.length - 1; index >= 0 && out.length < limit; index -= 1) {
+      const entry = running.entries[index]!;
+      if (entry.seq <= fromSeq) break;
+      out.push(entry);
+    }
+    return out.reverse();
+  }
 
   /**
    * Boot-time reaping: kill only a PID whose image is java AND whose command line carries this
@@ -391,6 +415,8 @@ export class ServerProcesses {
     const running: Running = {
       proc: null as unknown as ChildProcess,
       ring: [],
+      entries: [],
+      seq: 0,
       status: 'starting',
       startedAt: Date.now(),
       userStop: false,
@@ -453,6 +479,9 @@ export class ServerProcesses {
       const line = rawLine.length > 4096 ? rawLine.slice(0, 4096) : rawLine;
       running.ring.push(line);
       if (running.ring.length > 5000) running.ring.shift();
+      running.seq += 1;
+      running.entries.push({ seq: running.seq, text: line });
+      if (running.entries.length > 5000) running.entries.shift();
       try { running.logStream?.write(`${line}\n`); } catch { /* log history is best effort */ }
       this.send(`server://log/${id}`, line);
       if (!running.sawDone && /Done \(\d/.test(line)) {
