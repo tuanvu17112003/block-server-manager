@@ -4,7 +4,8 @@ import type { BrowserWindow, IpcMain } from 'electron';
 import { dialog, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Store, appError, type CreateServerInput } from './services/store';
+import { Store, appError, type CreateServerInput, type ServerDto } from './services/store';
+import { applySettingsToDto, serverDir } from './services/properties';
 
 export interface IpcContext {
   dataRoot: string;
@@ -16,18 +17,38 @@ export type Handler = (args: Record<string, unknown>, ctx: IpcContext) => Promis
 
 const store = (ctx: IpcContext): Store => new Store(ctx.dataRoot);
 
+/** Merge the server.properties subset into every DTO the renderer sees (file stays authoritative). */
+function enrich(ctx: IpcContext, dto: ServerDto): ServerDto {
+  return applySettingsToDto(dto, serverDir(ctx, dto.id));
+}
+
 const handlers: Record<string, Handler> = {
   // ---- phase 0: shell + servers store ----
   ping: () => 'pong',
-  servers_list: (_a, ctx) => store(ctx).listServers(),
-  server_get: (a, ctx) => store(ctx).getServer(String(a.id)),
-  servers_create: (a, ctx) => store(ctx).createServer(a.input as CreateServerInput),
-  servers_delete: (a, ctx) => { store(ctx).deleteServer(String(a.id)); },
-  servers_set_java_path: (a, ctx) => store(ctx).setJavaPath(String(a.id), (a.path as string | null) ?? null),
+  servers_list: (_a, ctx) => store(ctx).listServers().map((dto) => enrich(ctx, dto)),
+  server_get: (a, ctx) => {
+    const dto = store(ctx).getServer(String(a.id));
+    return dto === null ? null : enrich(ctx, dto);
+  },
+  servers_create: (a, ctx) => enrich(ctx, store(ctx).createServer(a.input as CreateServerInput)),
+  servers_delete: (a, ctx) => {
+    const id = String(a.id);
+    const dto = store(ctx).getServer(id);
+    if (!dto) throw appError('not-found', `Server ${id} not found.`);
+    if (dto.status === 'running' || dto.status === 'starting' || dto.status === 'stopping') {
+      throw appError('conflict', 'Stop the server before deleting it.');
+    }
+    const backups = store(ctx).listBackups(id);
+    store(ctx).deleteServer(id);
+    for (const backup of backups) fs.rmSync(backup.path, { force: true });
+    fs.rmSync(path.join(ctx.dataRoot, 'metrics', `${id}.json`), { force: true });
+    fs.rmSync(path.join(ctx.dataRoot, 'servers', id), { recursive: true, force: true });
+  },
+  servers_set_java_path: (a, ctx) => enrich(ctx, store(ctx).setJavaPath(String(a.id), (a.path as string | null) ?? null)),
 };
 
 // ---- P1: runtime (java, versions/loaders, install, lifecycle) ----
-// Late-bound because they need the window-broadcast context wired in registerIpc.
+// Merge only: registerIpc() snapshots this map, so it MUST be called after this function.
 export function registerRuntimeHandlers(extra: Record<string, Handler>): void {
   for (const [name, handler] of Object.entries(extra)) handlers[name] = handler;
 }
@@ -60,15 +81,28 @@ const dialogs: Record<string, (ctx: IpcContext) => Promise<unknown>> = {
   'shell:open-external': async (a: unknown) => { await shell.openExternal(String(a)); },
 };
 
+let ipcRegistered = false;
+
+/**
+ * Bind the command map to ipcMain. Call ONCE, after every runtime handler was merged with
+ * registerRuntimeHandlers(); this function snapshots the map, so a later merge is invisible to IPC.
+ *
+ * Results travel in an envelope ({__ipc:true, ok, value|error}) instead of a thrown Error.
+ * Electron prefixes thrown IPC errors with `Error invoking remote method ...`, which would break
+ * the renderer's JSON {code,message} contract; the preload unwraps this envelope.
+ */
 export function registerIpc(ipcMain: IpcMain, ctx: IpcContext): void {
+  if (ipcRegistered) throw new Error('registerIpc called twice');
+  ipcRegistered = true;
+
   for (const [name, handler] of Object.entries(handlers)) {
     ipcMain.handle('cmd:' + name, async (_event, args: Record<string, unknown> = {}) => {
       try {
-        return await handler(args, ctx);
+        return { __ipc: true, ok: true, value: await handler(args, ctx) };
       } catch (err) {
         const code = (err as { code?: string }).code ?? 'internal';
         const message = err instanceof Error ? err.message : String(err);
-        throw new Error(JSON.stringify({ code, message }));
+        return { __ipc: true, ok: false, error: { code, message } };
       }
     });
   }
@@ -100,10 +134,10 @@ export async function runSelfTest(ctx: IpcContext): Promise<boolean> {
   await handlers.servers_delete({ id: created.id }, ctx);
   const after = await handlers.servers_list({}, ctx) as { name: string }[];
   results.push(t('delete', !after.some(s => s.name === created.name)));
-  // error contract
+  // error contract: servers_delete throws not-found before touching any filesystem path
   let errShape = 'no-error';
-  try { await handlers.server_get({ id: 'missing' }, ctx); } catch (e) { errShape = ((e as { code?: string }).code === 'not-found') ? 'not-found' : 'wrong'; }
-  results.push(t('error-code', errShape));
+  try { await handlers.servers_delete({ id: 'missing' }, ctx); } catch (e) { errShape = ((e as { code?: string }).code === 'not-found') ? 'not-found' : 'wrong'; }
+  results.push(t('error-code', errShape === 'not-found'));
   const pass = results.every(r => r.v === true || typeof r.v === 'string');
   // eslint-disable-next-line no-console
   console.log(results.map(r => `${r.name}=${String(r.v)}`).join(' | '));

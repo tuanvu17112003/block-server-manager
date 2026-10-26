@@ -10,12 +10,13 @@ import { Jobs } from './jobs';
 import { log, ensureServerProperties, writeEula, freePort } from './installer/core';
 import { makeCuratedResolver } from './installer/curated';
 import { resolveMrpack, splitDeps, installModrinth, type MrIndex } from './installer/modrinth';
-import { installCurseforge, inspectStagedZip } from './installer/curseforge';
+import { installCurseforge, inspectStagedZip, inspectCurseForgeProject } from './installer/curseforge';
 
 export type PipelineSourceRequest =
   | { kind: 'modrinthRemote'; projectId: string; versionId: string; loader?: { kind: string; minecraftVersion: string; loaderVersion: string | null }; javaPath?: string }
   | { kind: 'localMrpack'; sourceId: string }
-  | { kind: 'curseForgeServerZip'; zipName: string };
+  | { kind: 'curseForgeServerZip'; zipName: string }
+  | { kind: 'curseforgeProject'; projectId: number };
 
 export interface PipelineFileDecision { path: string; side: 'server' | 'client' | 'both' | null; action: 'include' | 'exclude' | 'awaitingUserChoice'; reason: string }
 export interface PipelinePreviewDto { previewId: string; sourceName: string; warnings: string[]; plan: { loader: { kind: string; minecraftVersion: string; loaderVersion: string | null }; fileDecisions: PipelineFileDecision[] } }
@@ -44,6 +45,15 @@ export class Pipeline {
   private cacheDir(): string { return path.join(this.ctx.dataRoot, 'cache'); }
 
   async preview(source: PipelineSourceRequest, jobId: string): Promise<PipelinePreviewDto> {
+    if (jobId) this.jobs.begin(jobId);
+    try {
+      return await this.previewInner(source, jobId);
+    } finally {
+      if (jobId) this.jobs.end(jobId);
+    }
+  }
+
+  private async previewInner(source: PipelineSourceRequest, jobId: string): Promise<PipelinePreviewDto> {
     const held: HeldPreview = { source, sourceName: '', loader: { kind: 'vanilla', minecraftVersion: '', loaderVersion: null } };
     const warnings: string[] = [];
     const decisions: PipelineFileDecision[] = [];
@@ -69,10 +79,26 @@ export class Pipeline {
       const zipPath = path.join(this.ctx.dataRoot, 'curseforge-import', source.zipName);
       if (!fs.existsSync(zipPath)) throw appError('not-found', `Staged ZIP "${source.zipName}" not found.`);
       const insp = await inspectStagedZip(zipPath);
-      if (insp.classification !== 'supportedServerPack') throw appError('validation', `${source.zipName}: ${insp.reason}`);
+      if (insp.classification !== 'supportedServerPack' && insp.classification !== 'clientExport') {
+        throw appError('validation', `${source.zipName}: ${insp.reason}`);
+      }
+      if (insp.classification === 'clientExport' && (!insp.loader || !insp.minecraftVersion)) {
+        throw appError('validation', `${source.zipName}: the manifest does not declare a loader and Minecraft version.`);
+      }
       held.zipPath = zipPath; held.sourceName = insp.name.replace(/\.zip$/i, '');
       held.loader = { kind: (insp.loader ?? 'Forge').toLowerCase(), minecraftVersion: insp.minecraftVersion ?? '', loaderVersion: insp.loaderVersion };
       warnings.push(insp.reason);
+    } else if (source.kind === 'curseforgeProject') {
+      this.jobs.progress(jobId, { progress: 15, stage: 'resolving CurseForge project' });
+      const meta = await inspectCurseForgeProject(Number(source.projectId), this.ctx.dataRoot);
+      if (!meta.loader || !meta.minecraftVersion) {
+        throw appError('validation', `CurseForge project ${source.projectId} does not declare a loader and Minecraft version.`);
+      }
+      held.sourceName = meta.name;
+      held.loader = { kind: meta.loader, minecraftVersion: meta.minecraftVersion, loaderVersion: meta.loaderVersion };
+      warnings.push(meta.hasServerPack
+        ? 'Official API key mode: the latest server pack (serverPackFileId) will be installed.'
+        : 'Official API key mode: no server pack on the latest file; the client pack is resolved from manifest.json.');
     }
 
     const previewId = randomUUID();
@@ -84,6 +110,15 @@ export class Pipeline {
   discardPreview(previewId: string): boolean { return this.previews.delete(previewId); }
 
   async install(previewId: string, input: PipelineCreateInput, choices: PipelineInstallChoices, jobId: string): Promise<PipelineInstallResult> {
+    if (jobId) this.jobs.begin(jobId);
+    try {
+      return await this.installInner(previewId, input, choices, jobId);
+    } finally {
+      if (jobId) this.jobs.end(jobId);
+    }
+  }
+
+  private async installInner(previewId: string, input: PipelineCreateInput, choices: PipelineInstallChoices, jobId: string): Promise<PipelineInstallResult> {
     const held = this.previews.get(previewId);
     if (!held) throw appError('not-found', `Preview ${previewId} not found.`);
     const store = new Store(this.ctx.dataRoot);
@@ -120,16 +155,19 @@ export class Pipeline {
         report.warnings.push(...res.warnings);
         report.stages.push({ stage: 'download', outcome: 'complete' });
         this.writeSidecar(dir, { platform: 'modrinth', slug: held.slug, files: held.index.files.map(f => f.path), loader: held.loader.kind, mc: held.loader.minecraftVersion });
-      } else if (held.zipPath || held.source.kind === 'curseForgeServerZip') {
-        const zipPath = held.zipPath ?? path.join(this.ctx.dataRoot, 'curseforge-import', (held.source as { zipName: string }).zipName);
-        const res = await installCurseforge({ zipPath, dir, dataRoot: this.ctx.dataRoot, cacheDir: this.cacheDir(), onProgress });
+      } else if (held.zipPath || held.source.kind === 'curseForgeServerZip' || held.source.kind === 'curseforgeProject') {
+        const zipPath = held.zipPath ?? (held.source.kind === 'curseForgeServerZip'
+          ? path.join(this.ctx.dataRoot, 'curseforge-import', held.source.zipName)
+          : undefined);
+        const projectId = held.source.kind === 'curseforgeProject' ? Number(held.source.projectId) : undefined;
+        const res = await installCurseforge({ zipPath, projectId, dir, dataRoot: this.ctx.dataRoot, cacheDir: this.cacheDir(), onProgress });
         report.files.push({ path: `${res.installed} mods`, outcome: 'installed' });
         report.files.push({ path: `${res.skippedClientOnly} client-only`, outcome: 'skipped-client-only' });
         report.warnings.push(...res.warnings);
         for (const m of res.manuallyRequired) report.warnings.push(`manually required: ${m.pageUrl} (${m.reason})`);
         report.stages.push({ stage: `route-${res.route}`, outcome: 'complete' });
-        this.writeSidecar(dir, { platform: 'curseforge', slug: null, files: [], loader: res.loader ?? 'forge', mc: res.mc ?? '' });
-        if (choices.autoDeleteCurseForgeZip && zipPath.startsWith(path.join(this.ctx.dataRoot, 'curseforge-import'))) {
+        this.writeSidecar(dir, { platform: 'curseforge', slug: projectId ? String(projectId) : null, files: [], loader: res.loader ?? 'forge', mc: res.mc ?? '' });
+        if (choices.autoDeleteCurseForgeZip && zipPath && zipPath.startsWith(path.join(this.ctx.dataRoot, 'curseforge-import'))) {
           fs.rmSync(zipPath, { force: true });
         }
       } else {

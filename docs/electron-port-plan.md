@@ -70,3 +70,50 @@ Real bugs the E2E caught and fixed (all generic, none per-pack):
 
 Run it: `npm run dev` (vite:1420 + electron), `npm start` (build + app), `npm run selftest`, `electron . --e2e`.
 Key data: `.app-data/` (dev data root, gitignored) · `.app-data/curseforge-key.txt` (key-mode, gitignored).
+
+---
+
+## Management + content completion (2026-10-26)
+
+The P0–P3 port kept Players/Worlds/Backups/Metrics/Settings as mocks and listed Worlds/Players/Metrics backends,
+real backups, and content browsing as non-goals. Those gaps are now implemented in the Electron backend:
+
+- `properties.ts` — typed `server.properties` parse/merge/validate, EULA file, settings DTO hydration,
+  real port availability (`port_check`), open-folder.
+- `players.ts` — roster from `ops/whitelist/banned/usercache`, live `list` reply, last-seen/playtime from
+  `logs/latest.log`, op/deop/whitelist/kick/ban/pardon/gamemode/teleport/heal, Mojang name lookup.
+- `worlds.ts` — level.dat scan, activate with auto-backup, create-for-next-start, duplicate, delete with
+  safety backup, export/import ZIP (bounded extraction).
+- `backups.ts` — real deflated ZIP archives (`zip.ts`), save-off/flush when running, restore with
+  pre-restore copy + rollback, retention, export/delete, interval scheduler.
+- `metrics.ts` — 2 s process sampling (CPU delta, working set, uptime), `metrics://{id}` events, `list`
+  polling for players, Paper TPS/MSPT when present, 1-minute history persisted 7 days, disk probe.
+- `content.ts` + Content tab — installed mods/plugins, reversible enable/disable, remove, Modrinth search,
+  compatible versions, install with required dependencies, pre-update backup.
+- Console persistence — `logs/msm-console.log` (10 MB rotation) backs `logs_tail` after restarts;
+  command history reloads per server; `-Xms` matched to `-Xmx`.
+- Boot safety — `.msm-server.pid` identity file, orphan Java reaping (only a live `java` image is
+  killed), live statuses normalized to `stopped`, and persisted ports reconciled before spawn.
+
+Modrinth/CurseForge parity checked against `H:\TestAI\modrinth-curseforge`:
+
+- **CurseForge route B** (client pack ZIP via `manifest.json`) is now accepted by preview/install; the UI
+  labels it “Client pack — manifest install” instead of refusing it.
+- **Official API key one-click** — project URL/slug/id → latest file → `serverPackFileId`; exposed in the
+  Create wizard and by `curseforge_inspect_project`.
+- **L3 dependency fetch** — missing hard dependencies reported by the loader are resolved from Modrinth
+  (project id/slug, filtered by MC version + loader) before any jar is disabled.
+
+Gates: `npm run build` clean · `npm run ipctest` PASS (renderer → preload → ipcMain, plus Create UI
+smoke) · `npm run mgmttest` PASS 17/17 · `npm run selftest` PASS · `electron . --e2e` PASS 12/12
+(vanilla, Modrinth cobbleverse, CF SF5 key-mode).
+
+**IPC wiring fixed (2026-10-26):** `registerIpc()` used to run before `registerRuntimeHandlers()`;
+because it snapshots the handler map, every runtime command was absent from `ipcMain` and the UI
+showed `No handler registered` for versions/loaders/java. Wiring now runs runtime-merge → bind,
+`registerIpc` refuses a second call, and `--ipctest` drives the real preload/BrowserWindow path.
+Command errors now use a preload-unwrapped envelope, so toasts keep `{code,message}` instead of
+Electron's `Error invoking remote method ...` prefix.
+
+Still deferred (not part of the Tauri feature set): playit.gg orchestration, schedules beyond backups,
+i18n, auto-update, full files editor, RCON.

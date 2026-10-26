@@ -17,6 +17,38 @@ export interface ServerDto {
   eulaAccepted: boolean;
   status: string;
   createdAt: string;
+  // Display cache of the server.properties 7-field subset (file remains authoritative).
+  motd?: string;
+  maxPlayers?: number;
+  difficulty?: string;
+  gamemode?: string;
+  onlineMode?: boolean;
+  worldName?: string;
+}
+
+export interface BackupRecord {
+  id: string;
+  serverId: string;
+  name: string;
+  path: string;
+  bytes: number;
+  kind: 'Manual' | 'Auto' | 'Pre-install' | 'Pre-restore' | 'World-delete';
+  note: string;
+  createdAt: string;
+}
+
+export interface BackupSchedule {
+  auto: boolean;
+  interval: 'Hourly' | 'Daily' | 'Weekly';
+  maxKept: number;
+  lastRunAt: string | null;
+}
+
+export interface PendingWorld {
+  name: string;
+  seed: string;
+  levelType: string;
+  createdAt: string;
 }
 
 export interface CreateServerInput {
@@ -36,9 +68,22 @@ interface AppData {
   servers: ServerDto[];
   settings: Record<string, unknown>;
   consoleCommandHistory: { serverId: string; command: string; at: string }[];
+  backups: BackupRecord[];
+  backupSchedules: Record<string, BackupSchedule>;
+  pendingWorlds: Record<string, PendingWorld>;
 }
 
-const EMPTY: AppData = { schemaVersion: 1, servers: [], settings: {}, consoleCommandHistory: [] };
+function emptyData(): AppData {
+  return {
+    schemaVersion: 2,
+    servers: [],
+    settings: {},
+    consoleCommandHistory: [],
+    backups: [],
+    backupSchedules: {},
+    pendingWorlds: {},
+  };
+}
 
 export class Store {
   private file: string;
@@ -53,10 +98,20 @@ export class Store {
    *  must reflect the latest on-disk state (fixes cross-instance "not found"). */
   private reload(): void {
     try {
-      this.data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-      if (!Array.isArray(this.data.servers)) throw new Error('bad shape');
+      const parsed = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Partial<AppData>;
+      if (!Array.isArray(parsed.servers)) throw new Error('bad shape');
+      this.data = {
+        ...emptyData(),
+        ...parsed,
+        schemaVersion: 2,
+        settings: parsed.settings ?? {},
+        consoleCommandHistory: parsed.consoleCommandHistory ?? [],
+        backups: parsed.backups ?? [],
+        backupSchedules: parsed.backupSchedules ?? {},
+        pendingWorlds: parsed.pendingWorlds ?? {},
+      };
     } catch {
-      this.data = { ...EMPTY };
+      this.data = emptyData();
     }
   }
 
@@ -77,6 +132,7 @@ export class Store {
   }
 
   createServer(input: CreateServerInput): ServerDto {
+    this.reload();
     if (this.data.servers.some(s => s.name === input.name)) {
       throw appError('conflict', `A server named "${input.name}" already exists.`);
     }
@@ -93,6 +149,12 @@ export class Store {
       eulaAccepted: input.eulaAccepted ?? false,
       status: 'stopped',
       createdAt: new Date().toISOString(),
+      motd: '',
+      maxPlayers: 20,
+      difficulty: 'Normal',
+      gamemode: 'Survival',
+      onlineMode: true,
+      worldName: 'world',
     };
     this.data.servers.push(dto);
     this.save();
@@ -100,7 +162,71 @@ export class Store {
   }
 
   deleteServer(id: string): void {
+    this.reload();
     this.data.servers = this.data.servers.filter(s => s.id !== id);
+    this.data.backups = this.data.backups.filter(b => b.serverId !== id);
+    delete this.data.backupSchedules[id];
+    delete this.data.pendingWorlds[id];
+    this.save();
+  }
+
+  getSetting<T>(key: string): T | null {
+    this.reload();
+    return (this.data.settings[key] as T | undefined) ?? null;
+  }
+
+  setSetting(key: string, value: unknown): void {
+    this.reload();
+    this.data.settings[key] = value;
+    this.save();
+  }
+
+  listBackups(serverId: string): BackupRecord[] {
+    this.reload();
+    return this.data.backups
+      .filter(b => b.serverId === serverId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  getBackup(id: string): BackupRecord | null {
+    this.reload();
+    return this.data.backups.find(b => b.id === id) ?? null;
+  }
+
+  addBackup(record: BackupRecord): BackupRecord {
+    this.reload();
+    this.data.backups.push(record);
+    this.save();
+    return record;
+  }
+
+  removeBackup(id: string): void {
+    this.reload();
+    this.data.backups = this.data.backups.filter(b => b.id !== id);
+    this.save();
+  }
+
+  backupSchedule(serverId: string): BackupSchedule {
+    this.reload();
+    return this.data.backupSchedules[serverId] ?? { auto: false, interval: 'Daily', maxKept: 10, lastRunAt: null };
+  }
+
+  setBackupSchedule(serverId: string, schedule: BackupSchedule): BackupSchedule {
+    this.reload();
+    this.data.backupSchedules[serverId] = schedule;
+    this.save();
+    return schedule;
+  }
+
+  pendingWorld(serverId: string): PendingWorld | null {
+    this.reload();
+    return this.data.pendingWorlds[serverId] ?? null;
+  }
+
+  setPendingWorld(serverId: string, pending: PendingWorld | null): void {
+    this.reload();
+    if (pending) this.data.pendingWorlds[serverId] = pending;
+    else delete this.data.pendingWorlds[serverId];
     this.save();
   }
 

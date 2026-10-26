@@ -6,10 +6,16 @@ import { appError, Store, type ServerDto, type CreateServerInput } from './store
 import { Jobs } from './jobs';
 import { ServerProcesses } from './server-process';
 import { vanillaVersions, paperVersions, loadersResolve } from './versions';
-import { ensureJava, detectJava, requiredJavaMajor, installLoader, type LoaderKind } from './installer/core';
+import { ensureJava, detectJava, requiredJavaMajor, installLoader, ensureServerProperties, writeEula, freePort, type LoaderKind } from './installer/core';
 import { searchModpacks, projectVersions } from './installer/modrinth';
 import { Pipeline } from './pipeline';
 import { CurseForgeStaging } from './curseforge-staging';
+import { settingsHandlers } from './properties';
+import { Backups } from './backups';
+import { Worlds } from './worlds';
+import { Players } from './players';
+import { Metrics } from './metrics';
+import { Content } from './content';
 
 export interface Runtime {
   jobs: Jobs;
@@ -21,9 +27,15 @@ const LOADER_MAP: Record<string, LoaderKind> = {
   Vanilla: 'vanilla', Paper: 'paper', Fabric: 'fabric', Forge: 'forge', NeoForge: 'neoforge',
 };
 
-export function buildRuntime(): { register: (ctx: IpcContext) => Runtime; stopAll: () => Promise<void[]> } {
+export function buildRuntime(): {
+  register: (ctx: IpcContext) => Runtime;
+  stopAll: () => Promise<void[]>;
+  shutdown: () => Promise<void[]>;
+} {
   let jobs: Jobs | null = null;
   let processes: ServerProcesses | null = null;
+  let backups: Backups | null = null;
+  let metrics: Metrics | null = null;
 
   const register = (ctx: IpcContext): Runtime => {
     const j = new Jobs(ctx.send);
@@ -65,6 +77,12 @@ export function buildRuntime(): { register: (ctx: IpcContext) => Runtime; stopAl
       versions_vanilla: () => vanillaVersions(),
       versions_paper: () => paperVersions(),
       loaders_resolve: a => loadersResolve(String(a.mcVersion)),
+      port_check: async a => {
+        const port = Number(a.port);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) throw appError('validation', 'Port must be 1-65535.');
+        const suggested = await freePort(port);
+        return { port, available: suggested === port, suggested };
+      },
 
       server_install: async a => {
         const input = a.input as CreateServerInput;
@@ -73,22 +91,29 @@ export function buildRuntime(): { register: (ctx: IpcContext) => Runtime; stopAl
         const kind = LOADER_MAP[input.loader] ?? appErrorThrow(input.loader);
         const dto = s.createServer({ ...input, loader: input.loader });
         const dir = path.join(ctx.dataRoot, 'servers', dto.id);
+        if (jobId) j.begin(jobId);
         try {
           j.progress(jobId, { progress: 5, stage: 'resolving Java' });
           const major = await requiredJavaMajor(input.mcVersion);
           const rt = await ensureJava(major, path.join(ctx.dataRoot, 'runtime'), path.join(ctx.dataRoot, 'cache'));
+          if (jobId && j.isCancelled(jobId)) throw appError('cancelled', 'Install cancelled.');
           if (!input.javaPath) s.setJavaPath(dto.id, rt.javapath);
           j.progress(jobId, { progress: 25, stage: `installing ${kind}` });
           await installLoader(kind, dir, input.mcVersion, input.loaderVersion ?? '', rt.javapath, cacheDir);
+          if (jobId && j.isCancelled(jobId)) throw appError('cancelled', 'Install cancelled.');
           j.progress(jobId, { progress: 80, stage: 'writing config' });
-          if (input.eulaAccepted) { /* eula written at start; recorded on the DTO below */ }
-          const patch: Partial<ServerDto> = { javaPath: input.javaPath ?? rt.javapath, eulaAccepted: input.eulaAccepted ?? false };
+          const port = input.port && input.port > 0 ? input.port : dto.port;
+          ensureServerProperties(dir, port);
+          if (input.eulaAccepted) writeEula(dir);
+          const patch: Partial<ServerDto> = { javaPath: input.javaPath ?? rt.javapath, eulaAccepted: input.eulaAccepted ?? false, port };
           const updated = s.updateServer(dto.id, patch);
           j.progress(jobId, { progress: 100, stage: 'done' });
           return updated;
         } catch (err) {
           s.deleteServer(dto.id);
           throw err;
+        } finally {
+          if (jobId) j.end(jobId);
         }
       },
       server_install_cancel: a => jobs!.cancel(String(a.jobId)),
@@ -106,13 +131,40 @@ export function buildRuntime(): { register: (ctx: IpcContext) => Runtime; stopAl
     };
     const pipeline = new Pipeline(ctx, jobs);
     const staging = new CurseForgeStaging(ctx);
-    Object.assign(handlers, pipeline.handlers(), staging.handlers());
+    const backupService = new Backups(ctx, processes, j);
+    const worldService = new Worlds(ctx, processes, backupService);
+    const playerService = new Players(ctx, processes);
+    const metricService = new Metrics(ctx, processes);
+    const contentService = new Content(ctx, processes, j, backupService);
+    backups = backupService;
+    metrics = metricService;
+    metricService.start();
+    backupService.startScheduler();
+
+    Object.assign(
+      handlers,
+      pipeline.handlers(),
+      staging.handlers(),
+      settingsHandlers(ctx, async (id) => { await processes!.stop(id); }),
+      backupService.handlers(),
+      worldService.handlers(),
+      playerService.handlers(),
+      metricService.handlers(),
+      contentService.handlers(),
+    );
     return { jobs, processes, handlers };
+  };
+
+  const shutdown = async (): Promise<void[]> => {
+    backups?.stopScheduler();
+    metrics?.stop();
+    return processes ? processes.stopAll() : Promise.resolve([]);
   };
 
   return {
     register,
     stopAll: () => (processes ? processes.stopAll() : Promise.resolve([])),
+    shutdown,
   };
 }
 

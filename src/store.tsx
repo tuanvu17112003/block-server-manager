@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { LogLine, Server } from './types';
 import { initialLogs, initialServers, tickLogPool } from './mocks/data';
-import { hasBackend, onServerLog, onServerStatus, tauriServer, tauriServers } from './tauri';
+import { hasBackend, onServerLog, onServerMetrics, onServerStatus, tauriServer, tauriServers } from './tauri';
 import type { CreateServerInput, ServerDto } from './tauri';
 import { LOG_BATCH_DELAY_MS, MAX_RETAINED_LOG_LINES } from './logs';
 
@@ -97,6 +97,12 @@ function serverFromDto(dto: ServerDto): Server {
     ramMb: dto.ramMb,
     ramRecommendedMb: dto.modpackId ? 8192 : 4096,
     eulaAccepted: dto.eulaAccepted,
+    motd: dto.motd ?? '',
+    maxPlayers: dto.maxPlayers ?? 20,
+    difficulty: (dto.difficulty as Server['difficulty']) ?? 'Normal',
+    gamemode: (dto.gamemode as Server['gamemode']) ?? 'Survival',
+    onlineMode: dto.onlineMode ?? true,
+    worldName: dto.worldName ?? 'world',
     version: `${dto.mcVersion} ${dto.loader}`,
   };
 }
@@ -365,14 +371,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     void tauriServers.list().then((records) => {
       if (requestId !== serversListRequest.current) return;
       const loaded = records.map(serverFromDto);
-      setServers((current) => {
-        const merged = new Map<string, Server>();
-        loaded.forEach((server) => merged.set(server.id, server));
-        current.forEach((server) => {
-          if (!merged.has(server.id)) merged.set(server.id, server);
-        });
-        return [...merged.values()];
-      });
+      // The backend owns the server list: replacing (not merging) makes deletions stick.
+      setServers(loaded);
       setLogs((current) => {
         const next = { ...current };
         loaded.forEach((server) => {
@@ -399,6 +399,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       serversListRequest.current += 1;
     };
   }, [reloadServers]);
+
+  // Restored command history + append-only console log for the selected server.
+  useEffect(() => {
+    if (!hasBackend() || !activeId) return;
+    let cancelled = false;
+    void tauriServers.commandHistory(activeId).then((history) => {
+      if (!cancelled) setCmdHistory(history.slice(-50));
+    }).catch(() => undefined);
+    void tauriServers.logsTail(activeId, 500).then((raw) => {
+      if (cancelled || raw.length === 0) return;
+      setLogs((prev) => {
+        if ((prev[activeId]?.length ?? 0) > 0) return prev;
+        const lines: LogLine[] = raw.map((text) => {
+          const match = /^\[(\d{2}:\d{2}:\d{2})\]/.exec(text);
+          const msg = text.replace(/^\[[^\]]+\]\s*/, '');
+          const level: LogLine['level'] = /error/i.test(msg) ? 'ERROR' : /warn/i.test(msg) ? 'WARN' : 'INFO';
+          return { id: cmdSeq++, ts: match?.[1] ?? stamp(), level, source: 'Server', msg };
+        });
+        return { ...prev, [activeId]: lines.slice(-MAX_RETAINED_LOG_LINES) };
+      });
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [activeId]);
 
   // Live tick: while the active server runs, append ambient log lines + jitter stats.
   const serversRef = useRef(servers);
@@ -427,14 +450,31 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           const cur = serversRef.current.find((s) => s.id === sid);
           pushToast(`Server "${cur?.name ?? sid}" crashed. Check the Console for details.`, 'err');
           appendLog(sid, 'ERROR', 'Launcher', 'Server process exited unexpectedly (crash).');
-          updateServer(sid, { status, uptimeSec: 0, cpuPct: 0, ramPct: 0, playersOnline: 0, tps: null, mspt: null });
+          updateServer(sid, { status, uptimeSec: 0, cpuPct: 0, ramPct: 0, playersOnline: 0, tps: null, mspt: null, memoryMb: undefined });
         } else if (status === 'stopped') {
-          updateServer(sid, { status, uptimeSec: 0, cpuPct: 0, ramPct: 0, playersOnline: 0 });
+          updateServer(sid, { status, uptimeSec: 0, cpuPct: 0, ramPct: 0, playersOnline: 0, memoryMb: undefined });
         } else if (status === 'running') {
           updateServer(sid, { status, uptimeSec: 1 });
         } else {
           updateServer(sid, { status });
         }
+      }).then((off) => {
+        if (cancelled) off();
+        else cleanups.push(off);
+      });
+      void onServerMetrics(sid, (payload) => {
+        const cur = serversRef.current.find((s) => s.id === sid);
+        if (!cur) return;
+        updateServer(sid, {
+          uptimeSec: payload.uptimeSec,
+          cpuPct: payload.cpuPct ?? cur.cpuPct,
+          ramPct: payload.ramPct ?? cur.ramPct,
+          memoryMb: payload.memoryMb ?? cur.memoryMb,
+          playersOnline: payload.playersOnline ?? cur.playersOnline,
+          maxPlayers: payload.maxPlayers ?? cur.maxPlayers,
+          tps: payload.tps,
+          mspt: payload.mspt,
+        });
       }).then((off) => {
         if (cancelled) off();
         else cleanups.push(off);

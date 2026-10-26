@@ -72,6 +72,141 @@ export interface ServerDto {
   eulaAccepted: boolean;
   status: string;
   createdAt: string;
+  motd?: string;
+  maxPlayers?: number;
+  difficulty?: string;
+  gamemode?: string;
+  onlineMode?: boolean;
+  worldName?: string;
+}
+
+export interface ServerPropertyEntryDto {
+  key: string;
+  value: string;
+  known: boolean;
+  kind: 'int' | 'bool' | 'enum' | 'string';
+  options?: string[];
+  min?: number;
+  max?: number;
+}
+
+export interface ServerSettingsDto {
+  serverId: string;
+  status: string;
+  live: boolean;
+  eulaAccepted: boolean;
+  values: Record<string, string>;
+  entries: ServerPropertyEntryDto[];
+}
+
+export interface PlayerDto {
+  uuid: string;
+  name: string;
+  online: boolean;
+  op: boolean;
+  whitelisted: boolean;
+  banned: boolean;
+  lastSeen: string;
+  playtimeHrs: number;
+  gamemode: string;
+}
+
+export interface PlayerListDto {
+  players: PlayerDto[];
+  running: boolean;
+  maxPlayers: number;
+}
+
+export interface WorldDto {
+  name: string;
+  sizeBytes: number;
+  lastModified: string;
+  active: boolean;
+  pending?: boolean;
+}
+
+export type BackupKindDto = 'Manual' | 'Auto' | 'Pre-install' | 'Pre-restore' | 'World-delete';
+
+export interface BackupDto {
+  id: string;
+  serverId: string;
+  name: string;
+  path: string;
+  bytes: number;
+  kind: BackupKindDto;
+  note: string;
+  createdAt: string;
+}
+
+export interface BackupScheduleDto {
+  auto: boolean;
+  interval: 'Hourly' | 'Daily' | 'Weekly';
+  maxKept: number;
+  lastRunAt: string | null;
+}
+
+export interface MetricsEventDto {
+  id: string;
+  cpuPct: number | null;
+  memoryMb: number | null;
+  ramPct: number | null;
+  uptimeSec: number;
+  playersOnline: number | null;
+  maxPlayers: number | null;
+  tps: number | null;
+  mspt: number | null;
+  at: string;
+}
+
+export interface MetricsBucketDto {
+  at: string;
+  cpuPct: number | null;
+  memoryMb: number | null;
+  ramPct: number | null;
+  players: number | null;
+  tps: number | null;
+  mspt: number | null;
+}
+
+export interface MetricsHistoryDto {
+  samples: MetricsBucketDto[];
+  disk: { freeBytes: number; totalBytes: number };
+  current: MetricsBucketDto | null;
+}
+
+export interface ContentItemDto {
+  fileName: string;
+  enabled: boolean;
+  sizeBytes: number;
+  kind: 'mod' | 'plugin';
+  title?: string | null;
+  projectId?: string | null;
+  versionId?: string | null;
+  versionNumber?: string | null;
+}
+
+export interface ContentSearchHitDto {
+  id: string;
+  slug: string;
+  name: string;
+  author: string;
+  downloads: number;
+  iconUrl: string | null;
+  summary: string;
+  versions: string[];
+  loaders: string[];
+}
+
+export interface ContentVersionDto {
+  id: string;
+  name: string;
+  versionNumber: string;
+  gameVersions: string[];
+  loaders: string[];
+  downloads: number;
+  fileName: string;
+  fileSize: number;
+  dependencies: { projectId: string | null; versionId: string | null; type: string }[];
 }
 
 /** Create input (Rust CreateServerInput). `port` omitted/0 = auto 25565+. */
@@ -219,7 +354,17 @@ export type PipelineSourceRequest =
       javaPath: string;
     }
   | { kind: 'localMrpack'; sourceId: string }
-  | { kind: 'curseForgeServerZip'; zipName: string };
+  | { kind: 'curseForgeServerZip'; zipName: string }
+  | { kind: 'curseforgeProject'; projectId: number };
+
+export interface CurseForgeProjectMetaDto {
+  projectId: number;
+  name: string;
+  minecraftVersion: string | null;
+  loader: string | null;
+  loaderVersion: string | null;
+  hasServerPack: boolean;
+}
 
 export interface PipelineCreateInput {
   name: string;
@@ -349,9 +494,77 @@ export const tauriServers = {
   list: () => invokeRequired<ServerDto[]>('servers_list'),
   get: (id: string) => invokeOrStub<ServerDto>('server_get', { id }),
   create: (input: CreateServerInput) => invokeRequired<ServerDto>('servers_create', { input }),
-  remove: (id: string) => invokeOrStub<void>('servers_delete', { id }),
+  remove: (id: string) => invokeRequired<void>('servers_delete', { id }),
+  logsTail: (id: string, lines = 500) => invokeRequired<string[]>('logs_tail', { id, lines }),
+  commandHistory: (id: string) => invokeRequired<string[]>('server_command_history', { id }),
   setJavaPath: (id: string, path: string | null) =>
     invokeRequired<ServerDto>('servers_set_java_path', { id, path }),
+  settingsGet: (id: string) => invokeRequired<ServerSettingsDto>('server_settings_get', { id }),
+  settingsUpdate: (
+    id: string,
+    values: Record<string, string>,
+    extra?: { name?: string; ramMb?: number; eulaAccepted?: boolean },
+  ) => invokeRequired<ServerDto>('server_settings_update', { id, values, ...extra }),
+  openFolder: (id: string, sub?: string) => invokeRequired<boolean>('server_open_folder', { id, sub }),
+  portCheck: (port: number) =>
+    invokeRequired<{ port: number; available: boolean; suggested: number }>('port_check', { port }),
+};
+
+export const tauriPlayers = {
+  list: (id: string) => invokeRequired<PlayerListDto>('players_list', { id }),
+  action: (id: string, action: string, name: string, value?: string) =>
+    invokeRequired<boolean>('player_action', { id, action, name, value }),
+  addOffline: (id: string, name: string) =>
+    invokeRequired<PlayerDto>('players_add_offline', { id, name }),
+};
+
+export const tauriWorlds = {
+  list: (id: string) => invokeRequired<WorldDto[]>('worlds_list', { id }),
+  activate: (id: string, name: string) =>
+    invokeRequired<{ backupId: string }>('world_activate', { id, name }),
+  create: (id: string, name: string, seed: string, levelType: string) =>
+    invokeRequired<WorldDto>('world_create', { id, name, seed, levelType }),
+  duplicate: (id: string, name: string) => invokeRequired<WorldDto>('world_duplicate', { id, name }),
+  remove: (id: string, name: string) => invokeRequired<boolean>('world_delete', { id, name }),
+  exportWorld: (id: string, name: string) =>
+    invokeRequired<{ path: string } | { cancelled: true }>('world_export', { id, name }),
+  importWorld: (id: string) =>
+    invokeRequired<{ name: string } | { cancelled: true }>('world_import', { id }),
+};
+
+export const tauriBackups = {
+  list: (id: string) => invokeRequired<BackupDto[]>('backups_list', { id }),
+  create: (id: string, name: string, jobId?: string) =>
+    invokeRequired<BackupDto>('backup_create', { id, name, jobId }),
+  restore: (id: string, backupId: string, mode: 'in-place' | 'reset', jobId?: string) =>
+    invokeRequired<boolean>('backup_restore', { id, backupId, mode, jobId }),
+  remove: (backupId: string) => invokeRequired<boolean>('backup_delete', { backupId }),
+  exportBackup: (backupId: string) =>
+    invokeRequired<{ path: string } | { cancelled: true }>('backup_export', { backupId }),
+  scheduleGet: (id: string) => invokeRequired<BackupScheduleDto>('backup_schedule_get', { id }),
+  scheduleSet: (id: string, patch: Partial<BackupScheduleDto>) =>
+    invokeRequired<BackupScheduleDto>('backup_schedule_set', { id, ...patch }),
+};
+
+export const tauriMetrics = {
+  get: (id: string, hours = 1) => invokeRequired<MetricsHistoryDto>('metrics_get', { id, hours }),
+  disk: () => invokeRequired<{ freeBytes: number; totalBytes: number }>('system_disk'),
+};
+
+export const tauriContent = {
+  list: (id: string) => invokeRequired<ContentItemDto[]>('content_list', { id }),
+  toggle: (id: string, fileName: string, enabled: boolean) =>
+    invokeRequired<ContentItemDto[]>('content_toggle', { id, fileName, enabled }),
+  remove: (id: string, fileName: string) =>
+    invokeRequired<ContentItemDto[]>('content_remove', { id, fileName }),
+  search: (id: string, query: string, offset: number, limit: number) =>
+    invokeRequired<{ hits: ContentSearchHitDto[]; totalHits: number }>('content_search', { id, query, offset, limit }),
+  versions: (id: string, projectId: string) =>
+    invokeRequired<ContentVersionDto[]>('content_versions', { id, projectId }),
+  install: (id: string, projectId: string, versionId: string | null, title: string | null, jobId: string) =>
+    invokeRequired<{ installed: number; files: string[]; warnings: string[] }>('content_install', {
+      id, projectId, versionId, title, jobId,
+    }),
 };
 
 export const tauriJava = {
@@ -441,6 +654,8 @@ export const tauriCurseForge = {
   uploadZip: (file: File) => uploadHttp<CurseForgeStagedZip>('/uploads/curseforge-server-zip', file),
   inspectZip: (name: string) =>
     invokeRequired<CurseForgeArchiveInspection>('curseforge_inspect_zip', { name }),
+  inspectProject: (project: string | number) =>
+    invokeRequired<CurseForgeProjectMetaDto>('curseforge_inspect_project', { project }),
   cancelDownload: (transferId: string) =>
     invokeRequired<boolean>('curseforge_cancel_download', { transferId }),
 };
@@ -505,6 +720,18 @@ export function onJobProgress(
   return listenOrNoop<JobProgressPayload>(jobProgressEvent(jobId), cb);
 }
 
+/** `metrics://{id}` channel name (live process samples). */
+export function serverMetricsEvent(id: string): string {
+  return `metrics://${id}`;
+}
+
+export function onServerMetrics(
+  id: string,
+  cb: (payload: MetricsEventDto) => void,
+): Promise<UnlistenFn> {
+  return listenOrNoop<MetricsEventDto>(serverMetricsEvent(id), cb);
+}
+
 export const tauriServer = {
   // backend-wired (Phase 2): real `invoke()` under Tauri with error
   // propagation (see invokeStrict), mock fallback in browser.
@@ -514,6 +741,7 @@ export const tauriServer = {
   kill: (id: string) => invokeStrict<void>('server_kill', { id }),
   restart: (id: string) => invokeStrict<void>('server_restart', { id }),
   sendCommand: (id: string, cmd: string) => invokeStrict<void>('server_send_command', { id, cmd }),
-  backupNow: (id: string, name: string) => invokeOrStub('backup_now', { id, name }),
-  restoreBackup: (id: string, backupId: string) => invokeOrStub('backup_restore', { id, backupId }),
+  backupNow: (id: string, name: string) => invokeRequired<BackupDto>('backup_create', { id, name }),
+  restoreBackup: (id: string, backupId: string, mode: 'in-place' | 'reset' = 'in-place') =>
+    invokeRequired<boolean>('backup_restore', { id, backupId, mode }),
 };

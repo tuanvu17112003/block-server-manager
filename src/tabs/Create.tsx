@@ -4,7 +4,7 @@ import { FREE_RAM_MB, LOADERS, MC_VERSIONS, modpacks } from '../mocks/data';
 import { useStore } from '../store';
 import { Badge, Button, Card, CardTitle, Field, ProgressBar, inputCls } from '../components/ui';
 import { hasBackend, isDesktop, onCurseForgeDownload, onJobProgress, tauriCurseForge, tauriInstall, tauriJava, tauriModpackPipeline, tauriModrinth, tauriVersions } from '../tauri';
-import type { CreateServerInput, CurseForgeArchiveInspection, CurseForgeDownloadUpdate, CurseForgeStagedZip, JavaCandidate, JavaDetection, LoaderChoiceDto, MinecraftVersionDto, ModrinthInstallLoader, ModrinthModpackDto, ModrinthProjectVersionDto, ModrinthSearchIndex, PipelineCreateInput, PipelineFileChoice, PipelineInstallReport, PipelineLoaderPin, PipelinePreviewDto, PipelineSourceRequest, LocalMrpackSelection, ServerDto } from '../tauri';
+import type { CreateServerInput, CurseForgeArchiveInspection, CurseForgeDownloadUpdate, CurseForgeProjectMetaDto, CurseForgeStagedZip, JavaCandidate, JavaDetection, LoaderChoiceDto, MinecraftVersionDto, ModrinthInstallLoader, ModrinthModpackDto, ModrinthProjectVersionDto, ModrinthSearchIndex, PipelineCreateInput, PipelineFileChoice, PipelineInstallReport, PipelineLoaderPin, PipelinePreviewDto, PipelineSourceRequest, LocalMrpackSelection, ServerDto } from '../tauri';
 
 type Kind = 'vanilla' | 'curseforge' | 'modrinth';
 
@@ -54,6 +54,10 @@ function modrinthLoaderOptions(version: ModrinthProjectVersionDto | null): Modri
       reason: id === 'quilt' ? 'Quilt pack installs are not supported.' : `The ${name} loader is not supported for new server installs.`,
     };
   });
+}
+
+function cfInstallable(inspection: CurseForgeArchiveInspection | null): boolean {
+  return Boolean(inspection && (inspection.classification === 'supportedServerPack' || inspection.classification === 'clientExport'));
 }
 
 function errorText(error: unknown, fallback: string): string {
@@ -118,6 +122,11 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
   const [curseforgeError, setCurseforgeError] = useState('');
   const [curseforgeBrowserMessage, setCurseforgeBrowserMessage] = useState('');
   const [curseforgeDownloads, setCurseforgeDownloads] = useState<CurseForgeDownloadUpdate[]>([]);
+  const [cfProjectInput, setCfProjectInput] = useState('');
+  const [cfProjectId, setCfProjectId] = useState<number | null>(null);
+  const [cfProjectMeta, setCfProjectMeta] = useState<CurseForgeProjectMetaDto | null>(null);
+  const [cfProjectBusy, setCfProjectBusy] = useState(false);
+  const [cfProjectError, setCfProjectError] = useState('');
   const localMrpackInputRef = useRef<HTMLInputElement>(null);
   const curseforgeZipInputRef = useRef<HTMLInputElement>(null);
   const [localMrpack, setLocalMrpack] = useState<LocalMrpackSelection | null>(null);
@@ -291,13 +300,25 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
     && (!javaOverride || javaSelected.path === javaPath.trim())
   );
   const modrinthInstallReady = localMrpack ? localModrinthInstallReady : modrinthRemoteInstallReady;
+  const cfProjectInspection: CurseForgeArchiveInspection | null = cfProjectId !== null && cfProjectMeta
+    ? {
+        name: cfProjectMeta.name,
+        classification: 'supportedServerPack',
+        reason: cfProjectMeta.hasServerPack
+          ? 'Official API key mode: the latest server pack (serverPackFileId) will be installed.'
+          : 'Official API key mode: no server pack on the latest file; the client pack is resolved from manifest.json.',
+        minecraftVersion: cfProjectMeta.minecraftVersion,
+        loader: cfProjectMeta.loader,
+        loaderVersion: cfProjectMeta.loaderVersion,
+      }
+    : null;
   const curseforgeInspectionMatchesSelection = Boolean(
-    curseforgeInspection && curseforgeInspection.name === curseforgeSelectedName,
+    cfProjectId !== null ? cfProjectMeta !== null : curseforgeInspection && curseforgeInspection.name === curseforgeSelectedName,
   );
-  const selectedCurseforgeInspection = curseforgeInspectionMatchesSelection ? curseforgeInspection : null;
+  const selectedCurseforgeInspection = cfProjectId !== null ? cfProjectInspection : (curseforgeInspectionMatchesSelection ? curseforgeInspection : null);
   const hasPackSelected = Boolean(pack || localMrpack)
     || (hasBackend() && Boolean(selectedModrinthPack))
-    || (hasBackend() && selectedCurseforgeInspection?.classification === 'supportedServerPack');
+    || (hasBackend() && cfInstallable(selectedCurseforgeInspection));
 
   const portConflict = usedPorts.includes(port);
   const recommended = hasPackSelected ? 8192 : 4096;
@@ -322,6 +343,11 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
   };
 
   const selectCurseforgeZip = (name: string) => {
+    if (cfProjectId !== null) {
+      setCfProjectId(null);
+      setCfProjectMeta(null);
+      setCfProjectError('');
+    }
     if (curseforgeSelectedNameRef.current !== name) {
       clearPipelineReview();
       curseforgeInspectionRequestId.current += 1;
@@ -376,6 +402,32 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
       const message = errorText(error, 'Could not open CurseForge in the external browser.');
       setCurseforgeBrowserMessage(message);
       pushToast(message, 'err');
+    }
+  };
+
+  /** Official API key mode: project URL/slug/id → latest file → serverPackFileId. */
+  const resolveCurseforgeProject = async () => {
+    const raw = cfProjectInput.trim();
+    if (!raw) {
+      setCfProjectError('Paste a CurseForge modpack URL, slug or numeric project id.');
+      return;
+    }
+    setCfProjectBusy(true);
+    setCfProjectError('');
+    try {
+      const meta = await tauriCurseForge.inspectProject(raw);
+      clearPipelineReview();
+      setCfProjectId(meta.projectId);
+      setCfProjectMeta(meta);
+      setCurseforgeBrowserMessage(
+        `${meta.name}: Minecraft ${meta.minecraftVersion ?? '?'} · ${meta.loader ?? '?'} · ${meta.hasServerPack ? 'server pack available (one-click)' : 'no server pack; client manifest install'}`,
+      );
+    } catch (error) {
+      setCfProjectId(null);
+      setCfProjectMeta(null);
+      setCfProjectError(errorText(error, 'Could not resolve the CurseForge project.'));
+    } finally {
+      setCfProjectBusy(false);
     }
   };
 
@@ -813,8 +865,13 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
 
   const activePipelineSource = (): { request: PipelineSourceRequest; key: string } | null => {
     if (kind === 'curseforge') {
-      if (!curseforgeSelectedName || !selectedCurseforgeInspection
-        || selectedCurseforgeInspection.classification !== 'supportedServerPack') return null;
+      if (cfProjectId !== null && cfProjectMeta) {
+        return {
+          request: { kind: 'curseforgeProject', projectId: cfProjectId },
+          key: `curseforge-project:${cfProjectId}`,
+        };
+      }
+      if (!curseforgeSelectedName || !cfInstallable(selectedCurseforgeInspection)) return null;
       return {
         request: { kind: 'curseForgeServerZip', zipName: curseforgeSelectedName },
         key: `curseforge:${curseforgeSelectedName}`,
@@ -1464,7 +1521,9 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
             <Card>
               <CardTitle>Find the server pack</CardTitle>
               <p className="text-sm text-zinc-300">
-                On a modpack page, open <strong>Files</strong>, choose a version, then open <strong>Additional Files</strong> and download the <strong>SERVER</strong> pack. The regular client modpack ZIP is not a server installation archive; some projects do not offer a server pack.
+                On a modpack page, open <strong>Files</strong>, choose a version, then open <strong>Additional Files</strong> and download the <strong>SERVER</strong> pack.
+                The regular client modpack ZIP is also installable: its <code>manifest.json</code> is resolved keylessly and client-only files are skipped.
+                With a classic API key in <code>curseforge-key.txt</code>, paste the project URL below for a one-click server-pack install.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button onClick={() => { void openCurseforgeBrowser(); }}>Open CurseForge</Button>
@@ -1523,6 +1582,41 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
                   {curseforgeLoading ? 'Scanning ZIPs…' : 'Next — Choose a downloaded ZIP →'}
                 </Button>
               </div>
+            </Card>
+          )}
+          {kind === 'curseforge' && (
+            <Card>
+              <CardTitle>One-click with the official API key</CardTitle>
+              <p className="text-sm text-zinc-300">
+                Put a classic CurseForge key in <code>curseforge-key.txt</code> under the app data folder.
+                Paste a modpack URL, slug or numeric project id; the latest file's <code>serverPackFileId</code> is resolved automatically.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <input
+                  aria-label="CurseForge project URL, slug or id"
+                  value={cfProjectInput}
+                  onChange={(e) => { setCfProjectInput(e.target.value); setCfProjectError(''); }}
+                  placeholder="https://www.curseforge.com/minecraft/modpacks/skyfactory-5 or 392141"
+                  className={`${inputCls} max-w-xl`}
+                />
+                <Button onClick={() => { void resolveCurseforgeProject(); }} disabled={cfProjectBusy || !hasBackend()}>
+                  {cfProjectBusy ? 'Resolving…' : 'Resolve project'}
+                </Button>
+              </div>
+              {cfProjectError && <p role="alert" className="mt-2 text-xs text-red-300">{cfProjectError}</p>}
+              {cfProjectMeta && (
+                <div className="mt-3 rounded border border-emerald-800 bg-emerald-950/30 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="green">{cfProjectMeta.hasServerPack ? 'server pack' : 'client manifest'}</Badge>
+                    <strong className="text-sm">{cfProjectMeta.name}</strong>
+                    <span className="text-xs text-zinc-300">Minecraft {cfProjectMeta.minecraftVersion ?? '?'} · {cfProjectMeta.loader ?? '?'}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-zinc-400">Project id {cfProjectMeta.projectId}. {cfProjectMeta.hasServerPack ? 'The latest server pack is downloaded and installed.' : 'No server pack on the latest file; manifest mods are resolved keylessly.'}</p>
+                  <div className="mt-3 flex justify-end">
+                    <Button onClick={() => { if (cfProjectId !== null) setStep(3); }}>Continue to Configure →</Button>
+                  </div>
+                </div>
+              )}
             </Card>
           )}
           </>
@@ -1614,19 +1708,22 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
                         {selectedCurseforgeInspection.classification === 'supportedServerPack'
                           ? 'Supported server pack'
                           : selectedCurseforgeInspection.classification === 'clientExport'
-                            ? 'Client modpack export'
+                            ? 'Client pack — manifest install'
                             : 'Invalid or unsupported archive'}
                       </Badge>
                       {selectedCurseforgeInspection.minecraftVersion && <span className="text-xs text-zinc-300">Minecraft {selectedCurseforgeInspection.minecraftVersion}</span>}
                       {selectedCurseforgeInspection.loader && <span className="text-xs text-zinc-300">{selectedCurseforgeInspection.loader} {selectedCurseforgeInspection.loaderVersion}</span>}
                     </div>
                     <p role="status" className="mt-2 text-sm text-zinc-300">{selectedCurseforgeInspection.reason}</p>
-                    {selectedCurseforgeInspection.classification === 'supportedServerPack' && (
+                    {cfInstallable(selectedCurseforgeInspection) && (
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs text-zinc-500">This ZIP is preserved after installation unless automatic deletion is enabled in Settings.</p>
+                        <p className="text-xs text-zinc-500">
+                          {selectedCurseforgeInspection.classification === 'clientExport'
+                            ? 'Mods are resolved keylessly from manifest.json; client-only files are skipped. This ZIP is preserved unless automatic deletion is enabled.'
+                            : 'This ZIP is preserved after installation unless automatic deletion is enabled in Settings.'}
+                        </p>
                         <Button onClick={() => {
-                          if (curseforgeInspection?.name === curseforgeSelectedName
-                            && curseforgeInspection.classification === 'supportedServerPack') setStep(3);
+                          if (curseforgeInspection?.name === curseforgeSelectedName && cfInstallable(curseforgeInspection)) setStep(3);
                         }}>Continue to Configure →</Button>
                       </div>
                     )}
@@ -1788,11 +1885,13 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
               : hasBackend()
                 ? <CardTitle>Configure — {selectedLoaderChoice?.loader === serverLoader ? selectedLoaderChoice.label : serverLoader}</CardTitle>
                 : <CardTitle>Configure {kind === 'vanilla' ? '— Vanilla (2-click)' : `— ${pack?.name ?? 'modpack'}`}</CardTitle>}
-          {hasBackend() && kind === 'curseforge' && selectedCurseforgeInspection?.classification === 'supportedServerPack' && (
+          {hasBackend() && kind === 'curseforge' && cfInstallable(selectedCurseforgeInspection) && (
             <div className="mb-3 rounded border border-zinc-800 bg-zinc-950 p-3">
-              <p className="text-sm font-medium">Detected server pack</p>
+              <p className="text-sm font-medium">
+                {selectedCurseforgeInspection!.classification === 'clientExport' ? 'Detected client pack (manifest)' : 'Detected server pack'}
+              </p>
               <p className="mt-1 text-xs text-zinc-300">
-                Minecraft {selectedCurseforgeInspection.minecraftVersion} · {selectedCurseforgeInspection.loader} {selectedCurseforgeInspection.loaderVersion}
+                Minecraft {selectedCurseforgeInspection!.minecraftVersion} · {selectedCurseforgeInspection!.loader} {selectedCurseforgeInspection!.loaderVersion}
               </p>
               <p className="mt-1 text-xs text-zinc-500">
                 A new server folder will be created. The importer will not run scripts from the archive.
@@ -1999,11 +2098,11 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
             <Field label="Server name (unique)">
               <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
             </Field>
-            {hasBackend() && kind === 'curseforge' && selectedCurseforgeInspection?.classification === 'supportedServerPack' && (
+            {hasBackend() && kind === 'curseforge' && cfInstallable(selectedCurseforgeInspection) && (
               <Field label="Imported Minecraft version and loader">
                 <input
                   readOnly
-                  value={`Minecraft ${selectedCurseforgeInspection.minecraftVersion} · ${selectedCurseforgeInspection.loader} ${selectedCurseforgeInspection.loaderVersion}`}
+                  value={`Minecraft ${selectedCurseforgeInspection!.minecraftVersion} · ${selectedCurseforgeInspection!.loader} ${selectedCurseforgeInspection!.loaderVersion}`}
                   className={`${inputCls} opacity-80`}
                 />
               </Field>
@@ -2253,7 +2352,7 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
             <Button variant="ghost" onClick={() => setStep(kind === 'vanilla' ? 1 : 2)}>← Back</Button>
             <Button
               disabled={hasBackend() && (kind === 'curseforge'
-                ? installing || !name.trim() || !curseforgeInspectionMatchesSelection || curseforgeInspection?.classification !== 'supportedServerPack' || javaLoading || javaInstalling || !javaSelected || (javaOverride && javaSelected.path !== javaPath.trim()) || (pipelinePreviewMatchesSource && unresolvedPipelineChoiceCount > 0)
+                ? installing || !name.trim() || !curseforgeInspectionMatchesSelection || !cfInstallable(selectedCurseforgeInspection) || javaLoading || javaInstalling || !javaSelected || (javaOverride && javaSelected.path !== javaPath.trim()) || (pipelinePreviewMatchesSource && unresolvedPipelineChoiceCount > 0)
                 : kind === 'modrinth'
                   ? installing || !name.trim() || !modrinthInstallReady || (pipelinePreviewMatchesSource && unresolvedPipelineChoiceCount > 0)
                   : installing || !name.trim() || versionsLoading || loaderLoading || !selectedLoaderChoice || Boolean(loaderError) || Boolean(loaderToggleStale) || Boolean(snapshotStale) || selectedLoaderChoice?.loader !== serverLoader || javaLoading || javaInstalling || !javaSelected || (javaOverride && javaSelected.path !== javaPath.trim()))}
@@ -2371,15 +2470,17 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
             <div className="mt-3 rounded border border-emerald-800 bg-emerald-950/40 p-3 text-sm">
               <p>
                 ✅ {kind === 'curseforge'
-                  ? 'CurseForge server pack installed and saved.'
+                  ? selectedCurseforgeInspection?.classification === 'clientExport'
+                    ? 'CurseForge client pack installed and saved (manifest mods resolved keylessly).'
+                    : 'CurseForge server pack installed and saved.'
                   : kind === 'modrinth' && selectedModrinthPack
                     ? `${selectedModrinthPack.name} installed and saved.`
                     : 'Server installed and saved'}
                 {!eula ? ' Start stays blocked until you accept the EULA in Settings.' : ''}
               </p>
-              {kind === 'curseforge' && selectedCurseforgeInspection?.classification === 'supportedServerPack' ? (
+              {kind === 'curseforge' && cfInstallable(selectedCurseforgeInspection) ? (
                 <p className="mt-1 text-xs text-zinc-400">
-                  Join with Minecraft {selectedCurseforgeInspection.minecraftVersion} and {selectedCurseforgeInspection.loader} {selectedCurseforgeInspection.loaderVersion}.
+                  Join with Minecraft {selectedCurseforgeInspection!.minecraftVersion} and {selectedCurseforgeInspection!.loader} {selectedCurseforgeInspection!.loaderVersion}.
                   {' '}{autoDeleteCurseForgeZip ? 'The staged ZIP copy was set to delete after successful installation.' : 'The staged ZIP was retained.'}
                   {' '}LAN hint: share 127.0.0.1:{port} on your network.
                 </p>

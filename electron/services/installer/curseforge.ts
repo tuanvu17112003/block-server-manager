@@ -37,6 +37,53 @@ async function downloadFile(projectId: number, fileId: number, dest: string, siz
 }
 const isClientOnly = (gameVersions: string[] | undefined): boolean => !!gameVersions?.includes('Client') && !gameVersions.includes('Server');
 
+// ---- official API key mode: project → latest file → serverPackFileId ----
+export interface CfProjectMeta {
+  projectId: number;
+  name: string;
+  minecraftVersion: string | null;
+  loader: LoaderKind | null;
+  loaderVersion: string | null;
+  hasServerPack: boolean;
+}
+
+function loaderFromGameVersions(gameVersions: string[] | undefined): LoaderKind | null {
+  const tags = gameVersions ?? [];
+  if (tags.includes('NeoForge')) return 'neoforge';
+  if (tags.includes('Fabric')) return 'fabric';
+  if (tags.includes('Quilt')) return 'quilt';
+  if (tags.includes('Forge')) return 'forge';
+  return null;
+}
+
+export async function inspectCurseForgeProject(ref: number | string, dataRoot: string): Promise<CfProjectMeta> {
+  if (!cfKey(dataRoot)) throw new Error('CurseForge API key not configured. Put the classic key in <data-root>/curseforge-key.txt.');
+  const raw = String(ref).trim();
+  let projectId = Number(raw);
+  if (!Number.isInteger(projectId) || projectId <= 0) {
+    // Accept a project URL, a slug, or a raw id; the official search resolves the slug.
+    const slug = (raw.match(/\/modpacks\/([^/?#]+)/i)?.[1] ?? raw).replace(/[^a-z0-9_-]/gi, '');
+    if (slug === '') throw new Error('Enter a CurseForge project URL, slug or numeric id.');
+    const found = await official(dataRoot, `/mods/search?gameId=432&classId=4471&slug=${encodeURIComponent(slug)}&pageSize=1`) as { data?: { id?: number }[] } | null;
+    projectId = Number(found?.data?.[0]?.id ?? 0);
+    if (!Number.isInteger(projectId) || projectId <= 0) throw new Error(`CurseForge project "${raw}" was not found.`);
+  }
+  const list = await official(dataRoot, `/mods/${projectId}/files?pageSize=1&index=0`) as { data?: CfFileMeta[] } | null;
+  const latest = list?.data?.[0];
+  if (!latest) throw new Error(`CurseForge project ${projectId} has no files.`);
+  const detail = await official(dataRoot, `/mods/${projectId}/files/${latest.id}`) as { data?: CfFileMeta } | null;
+  const meta = detail?.data ?? latest;
+  const tags = meta.gameVersions ?? [];
+  return {
+    projectId,
+    name: meta.displayName ?? meta.fileName ?? `CurseForge ${projectId}`,
+    minecraftVersion: tags.find((tag) => /^\d+\.\d+(?:\.\d+)?$/.test(tag)) ?? null,
+    loader: loaderFromGameVersions(tags),
+    loaderVersion: null,
+    hasServerPack: meta.serverPackFileId !== undefined && meta.serverPackFileId !== null,
+  };
+}
+
 // ---- staged ZIP inspection (route A classify → UI DTO) ----
 export interface CfInspection { name: string; classification: 'supportedServerPack' | 'clientExport' | 'unsupported'; reason: string; minecraftVersion: string | null; loader: string | null; loaderVersion: string | null }
 export async function inspectStagedZip(zipPath: string): Promise<CfInspection> {
@@ -50,7 +97,7 @@ export async function inspectStagedZip(zipPath: string): Promise<CfInspection> {
       const m = JSON.parse((await readZipEntry(zipPath, 'manifest.json')).toString('utf8')) as { minecraft?: { version?: string; modLoaders?: { id?: string }[] } };
       const loaderId = m.minecraft?.modLoaders?.find(l => l.id)?.id ?? '';
       const [loader, ver] = loaderId.split('-');
-      return { name, classification: 'clientExport', reason: 'CurseForge client export (manifest.json) — use the website server pack or Modrinth instead.', minecraftVersion: m.minecraft?.version ?? null, loader: loader ?? null, loaderVersion: ver ?? null };
+      return { name, classification: 'clientExport', reason: 'CurseForge client pack (manifest.json) — mods are resolved keylessly from the manifest; client-only files are skipped.', minecraftVersion: m.minecraft?.version ?? null, loader: loader ?? null, loaderVersion: ver ?? null };
     } catch { return { name, classification: 'unsupported', reason: 'manifest.json is not parseable.', minecraftVersion: null, loader: null, loaderVersion: null }; }
   }
   // server-pack heuristics (route A, spike-proven)

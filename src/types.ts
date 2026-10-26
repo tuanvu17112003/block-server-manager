@@ -17,6 +17,7 @@ export interface Server {
   uptimeSec: number;
   cpuPct: number;
   ramPct: number; // % of allocated RAM used
+  memoryMb?: number;
   tps: number | null; // null => needs RCON hint
   mspt: number | null;
   address: string;
@@ -69,7 +70,7 @@ export interface Backup {
   name: string;
   created: string;
   sizeMb: number;
-  kind: 'Manual' | 'Auto' | 'Pre-install';
+  kind: 'Manual' | 'Auto' | 'Pre-install' | 'Pre-restore' | 'World-delete';
   note: string;
 }
 
@@ -91,6 +92,7 @@ export interface Modpack {
 export type TabId =
   | 'overview'
   | 'console'
+  | 'content'
   | 'players'
   | 'worlds'
   | 'backups'

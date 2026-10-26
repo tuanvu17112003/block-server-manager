@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
-import { Badge, Button, Card, CardTitle, Field, ProgressBar, inputCls } from '../components/ui';
-import { hasBackend, onJobProgress, tauriJava } from '../tauri';
-import type { JavaCandidate, JavaDetection } from '../tauri';
+import { Badge, Button, Card, CardTitle, Confirm, Field, ProgressBar, inputCls } from '../components/ui';
+import { hasBackend, onJobProgress, tauriJava, tauriServers } from '../tauri';
+import type { JavaCandidate, JavaDetection, ServerSettingsDto } from '../tauri';
 
 const CURSEFORGE_AUTO_DELETE_KEY = 'cf-auto-delete-zip';
 
 export default function Settings() {
-  const { active, updateServer, restart, pushToast, usedPorts, setJavaPath: persistJavaPath } = useStore();
+  const { active, updateServer, reloadServers, restart, pushToast, usedPorts, setJavaPath: persistJavaPath } = useStore();
   const [name, setName] = useState(active.name);
   const [motd, setMotd] = useState(active.motd);
   const [maxP, setMaxP] = useState(active.maxPlayers);
@@ -35,6 +35,12 @@ export default function Settings() {
   const [javaProgress, setJavaProgress] = useState(0);
   const [javaProgressLog, setJavaProgressLog] = useState('');
   const [javaError, setJavaError] = useState('');
+  const [settings, setSettings] = useState<ServerSettingsDto | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsError, setSettingsError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [portStatus, setPortStatus] = useState<{ available: boolean; suggested: number } | null>(null);
   const activeIdRef = useRef(active.id);
   activeIdRef.current = active.id;
 
@@ -68,7 +74,39 @@ export default function Settings() {
     setJavaProgress(0);
     setJavaProgressLog('');
     setJavaError('');
+    setSettings(null);
+    setSettingsError('');
+    setSettingsLoading(false);
   }, [active.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Read the authoritative server.properties values for this server.
+  useEffect(() => {
+    if (!hasBackend() || !active.id) return;
+    let cancelled = false;
+    setSettingsLoading(true);
+    setSettingsError('');
+    void tauriServers.settingsGet(active.id).then((loaded) => {
+      if (cancelled) return;
+      setSettings(loaded);
+      const v = loaded.values;
+      setName(active.name);
+      if (v['motd'] !== undefined) setMotd(v['motd']);
+      if (v['max-players'] !== undefined) setMaxP(Number(v['max-players']));
+      if (v['difficulty']) setDiff((v['difficulty'][0]!.toUpperCase() + v['difficulty'].slice(1)) as typeof diff);
+      if (v['gamemode']) setGm((v['gamemode'][0]!.toUpperCase() + v['gamemode'].slice(1)) as typeof gm);
+      if (v['server-port'] !== undefined) setPort(Number(v['server-port']));
+      if (v['online-mode'] !== undefined) setOnline(v['online-mode'] === 'true');
+      setEula(loaded.eulaAccepted);
+    }).catch((err: unknown) => {
+      if (cancelled) return;
+      setSettingsError(err && typeof err === 'object' && 'message' in err
+        ? String((err as { message: unknown }).message)
+        : 'Could not read server.properties.');
+    }).finally(() => {
+      if (!cancelled) setSettingsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [active.id, active.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!hasBackend() || !active.mcVersion) return;
@@ -202,16 +240,61 @@ export default function Settings() {
     diff !== active.difficulty || gm !== active.gamemode || port !== active.port ||
     ram !== active.ramMb || online !== active.onlineMode || eula !== active.eulaAccepted;
 
-  const portConflict = usedPorts.filter((p) => p !== active.port).includes(port);
+  useEffect(() => {
+    if (!hasBackend() || !Number.isInteger(port) || port < 1 || port > 65535) {
+      setPortStatus(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void tauriServers.portCheck(port).then((status) => {
+        if (!cancelled) setPortStatus(status);
+      }).catch(() => {
+        if (!cancelled) setPortStatus(null);
+      });
+    }, 350);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [port]);
+
+  const portConflict = hasBackend()
+    ? port !== active.port && portStatus !== null && !portStatus.available
+    : usedPorts.filter((p) => p !== active.port).includes(port);
 
   const save = () => {
-    updateServer(active.id, {
-      name, motd, maxPlayers: maxP, difficulty: diff, gamemode: gm,
-      port, ramMb: ram, onlineMode: online, eulaAccepted: eula,
-      version: `${active.mcVersion} ${active.loader}`,
-    });
-    pushToast(eula ? 'Settings saved (mock).' : 'Settings saved — Start still blocked until EULA is accepted.', eula ? 'ok' : 'err');
-    if (diff !== active.difficulty || gm !== active.gamemode || ram !== active.ramMb || port !== active.port) setNeedsRestart(true);
+    const values: Record<string, string> = {
+      'motd': motd,
+      'max-players': String(maxP),
+      'difficulty': diff.toLowerCase(),
+      'gamemode': gm.toLowerCase(),
+      'server-port': String(port),
+      'online-mode': String(online),
+    };
+    if (!hasBackend()) {
+      updateServer(active.id, {
+        name, motd, maxPlayers: maxP, difficulty: diff, gamemode: gm,
+        port, ramMb: ram, onlineMode: online, eulaAccepted: eula,
+        version: `${active.mcVersion} ${active.loader}`,
+      });
+      pushToast(eula ? 'Settings saved (mock).' : 'Settings saved — Start still blocked until EULA is accepted.', eula ? 'ok' : 'err');
+      if (diff !== active.difficulty || gm !== active.gamemode || ram !== active.ramMb || port !== active.port) setNeedsRestart(true);
+      return;
+    }
+    setSaving(true);
+    setSettingsError('');
+    void tauriServers.settingsUpdate(active.id, values, { name, ramMb: ram, eulaAccepted: eula })
+      .then(() => {
+        pushToast(eula ? 'Settings saved to server.properties.' : 'Settings saved — Start still blocked until EULA is accepted.', eula ? 'ok' : 'err');
+        setNeedsRestart(true);
+        void reloadServers();
+      })
+      .catch((err: unknown) => {
+        const message = err && typeof err === 'object' && 'message' in err
+          ? String((err as { message: unknown }).message)
+          : 'Could not save server settings.';
+        setSettingsError(message);
+        pushToast(message, 'err');
+      })
+      .finally(() => setSaving(false));
   };
 
   return (
@@ -224,11 +307,15 @@ export default function Settings() {
       )}
       <Card>
         <CardTitle>Server settings (7-field MVP subset)</CardTitle>
+        {settingsLoading && <p className="text-xs text-zinc-500">Reading server.properties…</p>}
+        {settingsError && <p role="alert" className="mb-2 rounded border border-red-800 bg-red-950/60 px-2 py-1 text-xs text-red-200">{settingsError}</p>}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <Field label="Server name"><input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} /></Field>
           <Field label="MOTD"><input value={motd} onChange={(e) => setMotd(e.target.value)} className={inputCls} /></Field>
           <Field label="Max players"><input type="number" min={1} max={500} value={maxP} onChange={(e) => setMaxP(Number(e.target.value))} className={inputCls} /></Field>
-          <Field label="Port" hint={portConflict ? 'Conflict with another server (mock check).' : 'Port looks free (mock check).'}>
+          <Field label="Port" hint={portConflict
+            ? `Port ${port} is in use — try ${portStatus?.suggested ?? port + 1}.`
+            : hasBackend() ? 'Port is free on 127.0.0.1.' : 'Port looks free (mock check).'}>
             <input type="number" value={port} onChange={(e) => setPort(Number(e.target.value))} className={inputCls} />
           </Field>
           <Field label="Difficulty (restart badge)">
@@ -254,10 +341,17 @@ export default function Settings() {
           </div>
         </div>
         <div className="mt-3 flex items-center gap-2">
-          <Button onClick={save} disabled={!dirty}>Save {dirty ? '(unsaved changes)' : ''}</Button>
+          <Button onClick={save} disabled={!dirty || saving}>{saving ? 'Saving…' : `Save ${dirty ? '(unsaved changes)' : ''}`}</Button>
           {dirty && <Badge tone="amber">unsaved</Badge>}
-          <button className="ml-auto text-xs text-zinc-500 underline" onClick={() => pushToast('Advanced server.properties editor deferred (mock link).', 'info')}>
-            Show advanced files (deferred)
+          <button className="ml-auto text-xs text-zinc-500 underline" onClick={() => {
+            if (!hasBackend()) {
+              pushToast('server.properties opens in your editor only in the desktop app.', 'info');
+              return;
+            }
+            void tauriServers.openFolder(active.id, 'server.properties')
+              .catch((err: unknown) => pushToast(err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : 'Could not open server.properties.', 'err'));
+          }}>
+            Open server.properties
           </button>
         </div>
       </Card>
@@ -342,8 +436,45 @@ export default function Settings() {
             </label>
           </div>
         </div>
-        <p className="mt-2 text-xs text-zinc-500">Versions are a picker in Create, not a tab. Plugins/mods browser deferred.</p>
+        <p className="mt-2 text-xs text-zinc-500">Versions are a picker in Create, not a tab.</p>
       </Card>
+
+      <Card>
+        <CardTitle>Danger zone</CardTitle>
+        <p className="text-xs text-zinc-400">
+          Deleting the server removes its record, server folder, worlds and backups index. This cannot be undone.
+          Stop the server first.
+        </p>
+        <div className="mt-3">
+          <Button
+            variant="destructive"
+            disabled={active.status !== 'stopped' && active.status !== 'crashed'}
+            onClick={() => setDeleteOpen(true)}
+          >
+            Delete server
+          </Button>
+        </div>
+      </Card>
+
+      <Confirm
+        open={deleteOpen}
+        title={`Delete "${active.name}"?`}
+        message={<p>The server folder and all worlds are removed permanently. Export any world or backup first.</p>}
+        confirmLabel="Delete server"
+        onConfirm={() => {
+          if (!hasBackend()) {
+            pushToast('Deleting a server requires the desktop backend.', 'info');
+            return;
+          }
+          void tauriServers.remove(active.id)
+            .then(() => {
+              pushToast(`Server "${active.name}" deleted.`, 'ok');
+              void reloadServers();
+            })
+            .catch((err: unknown) => pushToast(err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : 'Could not delete the server.', 'err'));
+        }}
+        onClose={() => setDeleteOpen(false)}
+      />
     </div>
   );
 }

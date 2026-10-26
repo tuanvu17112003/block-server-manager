@@ -6,6 +6,7 @@ import { CreateHeader, Header, Sidebar, TabBar, ToastHost } from './components/l
 import Overview from './tabs/Overview';
 import Create from './tabs/Create';
 import ConsoleTab from './tabs/ConsoleTab';
+import ContentTab from './tabs/Content';
 import Players from './tabs/Players';
 import Worlds from './tabs/Worlds';
 import Backups from './tabs/Backups';
@@ -96,6 +97,7 @@ function Shell() {
             <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-zinc-950 p-4 thin-scroll">
               {tab === 'overview' && <Overview go={setTab} onCreate={openCreate} />}
               {tab === 'console' && <ConsoleTab />}
+              {tab === 'content' && <ContentTab go={setTab} />}
               {tab === 'players' && <Players />}
               {tab === 'worlds' && <Worlds />}
               {tab === 'backups' && <Backups />}

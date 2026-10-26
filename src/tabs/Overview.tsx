@@ -1,9 +1,18 @@
 import type { TabId } from '../types';
 import { formatUptime, useStore } from '../store';
 import { Badge, Button, Card, CardTitle, ProgressBar } from '../components/ui';
+import { hasBackend, tauriServers } from '../tauri';
 
 export default function Overview({ go, onCreate }: { go: (t: TabId) => void; onCreate: () => void }) {
-  const { active, logs, start, stop, restart } = useStore();
+  const { active, logs, start, stop, restart, pushToast } = useStore();
+  const openFolder = () => {
+    if (!hasBackend()) {
+      go('worlds');
+      return;
+    }
+    void tauriServers.openFolder(active.id)
+      .catch((err: unknown) => pushToast(err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : 'Could not open the server folder.', 'err'));
+  };
   const tail = (logs[active.id] ?? []).slice(-3);
   const ramGb = (active.ramMb / 1024).toFixed(active.ramMb % 1024 ? 1 : 0);
 
@@ -75,7 +84,7 @@ export default function Overview({ go, onCreate }: { go: (t: TabId) => void; onC
             <div className="flex min-w-0 flex-wrap justify-between gap-x-2"><dt className="text-zinc-500">RAM</dt><dd className="min-w-0 text-right">{active.ramMb} MB {active.ramMb < active.ramRecommendedMb && <Badge tone="amber">below recommended</Badge>}</dd></div>
           </dl>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            <Button size="sm" variant="outline" onClick={() => go('worlds')}>Open Folder (mock)</Button>
+            <Button size="sm" variant="outline" onClick={openFolder}>Open Folder</Button>
             <Button size="sm" variant="outline" onClick={() => go('settings')}>Settings</Button>
           </div>
         </Card>

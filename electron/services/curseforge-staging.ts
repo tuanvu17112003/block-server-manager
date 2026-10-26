@@ -4,7 +4,7 @@ import { BrowserWindow, shell, dialog, session } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IpcContext, Handler } from '../ipc';
-import { inspectStagedZip } from './installer/curseforge';
+import { inspectStagedZip, inspectCurseForgeProject } from './installer/curseforge';
 
 interface ActiveDownload { id: string; name: string; cancel: () => void }
 
@@ -87,6 +87,7 @@ export class CurseForgeStaging {
         return inspectStagedZip(p);
       },
       curseforge_cancel_download: a => this.cancelDownload(String(a.transferId ?? a.id ?? '')),
+      curseforge_inspect_project: a => inspectCurseForgeProject(String(a.project), this.ctx.dataRoot),
     };
   }
 }

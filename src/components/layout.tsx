@@ -6,6 +6,7 @@ import { Button, Confirm, StatusDot } from './ui';
 export const TABS: { id: TabId; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'console', label: 'Console' },
+  { id: 'content', label: 'Content' },
   { id: 'players', label: 'Players' },
   { id: 'worlds', label: 'Worlds' },
   { id: 'backups', label: 'Backups' },

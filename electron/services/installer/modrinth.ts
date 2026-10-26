@@ -2,7 +2,7 @@
 // TS port of the proven spike (modrinth.mjs); behavior identical.
 import path from 'node:path';
 import fs from 'node:fs';
-import { download, extractZip, readZipEntry, listZip, ensureJava, installLoader, launchCommand, requiredJavaMajor, log, startWithAutoFix, writeEula, ensureServerProperties, UA, type LoaderKind, type AutoFixEntry } from './core';
+import { download, fetchOk, extractZip, readZipEntry, listZip, ensureJava, installLoader, launchCommand, requiredJavaMajor, log, startWithAutoFix, writeEula, ensureServerProperties, UA, type LoaderKind, type AutoFixEntry } from './core';
 import { makeCuratedResolver, appendLearned, type CuratedResolver } from './curated';
 
 const API = 'https://api.modrinth.com/v2';
@@ -70,6 +70,44 @@ export async function resolveMrpack(ref: { projectId?: string; versionId?: strin
 }
 
 const LOADER_OF: Record<string, LoaderKind> = { 'fabric-loader': 'fabric', 'quilt-loader': 'quilt', forge: 'forge', neoforge: 'neoforge' };
+
+/** L3 dependency fetch: resolve a missing mod id/slug to a compatible Modrinth file and install it. */
+export async function fetchModrinthDependency(opts: {
+  mc: string; loader: string; modId: string; modsDir: string;
+}): Promise<string | null> {
+  const loaderKey = opts.loader.trim().toLowerCase();
+  if (!['fabric', 'forge', 'neoforge', 'quilt', 'paper', 'spigot', 'bukkit', 'purpur', 'folia'].includes(loaderKey)) return null;
+  let projectId: string | null = null;
+  try {
+    const direct = await fetchOk(`${API}/project/${encodeURIComponent(opts.modId)}`, { headers: { 'User-Agent': UA } });
+    if (direct.ok) {
+      const project = await direct.json() as { id?: string; project_type?: string };
+      if (project.id && (project.project_type === undefined || project.project_type === 'mod')) projectId = project.id;
+    }
+  } catch {
+    // A mod id is often not a slug; search handles that case below.
+  }
+  if (!projectId) {
+    const facets = [['project_type:mod'], [`versions:${opts.mc}`], [`categories:${loaderKey}`]];
+    const url = `${API}/search?query=${encodeURIComponent(opts.modId)}&limit=1&facets=${encodeURIComponent(JSON.stringify(facets))}`;
+    const found = await (await fetchOk(url, { headers: { 'User-Agent': UA } })).json() as { hits?: { project_id?: string }[] };
+    projectId = found.hits?.[0]?.project_id ?? null;
+  }
+  if (!projectId) return null;
+  const query = `?game_versions=${encodeURIComponent(JSON.stringify([opts.mc]))}&loaders=${encodeURIComponent(JSON.stringify([loaderKey]))}`;
+  const versions = await (await fetchOk(`${API}/project/${projectId}/version${query}`, { headers: { 'User-Agent': UA } })).json() as {
+    files?: { url: string; filename: string; primary?: boolean; size?: number; hashes?: { sha1?: string; sha512?: string } }[];
+  }[];
+  const file = versions[0]?.files?.find((entry) => entry.primary) ?? versions[0]?.files?.[0];
+  if (!file?.url) return null;
+  const fileName = path.basename(file.filename);
+  if (!/\.jar$/i.test(fileName)) return null;
+  const dest = path.join(opts.modsDir, fileName);
+  if (!fs.existsSync(dest)) {
+    await download(file.url, dest, { sha1: file.hashes?.sha1, sha512: file.hashes?.sha512, size: file.size });
+  }
+  return dest;
+}
 
 export function splitDeps(index: MrIndex): { kind: LoaderKind | null; ver: string | null; mc: string } {
   const d = index.dependencies;
