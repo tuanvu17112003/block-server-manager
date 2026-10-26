@@ -83,10 +83,16 @@ export function buildRuntime(): {
       java_ensure: async a => {
         const major = Number(a.major);
         const jobId = String(a.jobId ?? '');
-        const candidate = await ensureJava(major, runtimeRoot, cacheDir,
-          progress => { if (jobId) j.progress(jobId, { progress: progress.pct ?? 10, stage: progress.phase }); });
-        if (jobId) j.progress(jobId, { progress: 100, stage: 'java ready' });
-        return { path: candidate.path, major: candidate.major, architectureBits: candidate.architectureBits, source: candidate.source };
+        const controller = jobId ? j.begin(jobId) : null;
+        try {
+          const candidate = await ensureJava(major, runtimeRoot, cacheDir,
+            progress => { if (jobId) j.progress(jobId, { progress: progress.pct ?? 10, stage: progress.phase }); });
+          if (controller?.signal.aborted) throw appError('cancelled', 'Java install cancelled.');
+          if (jobId) j.progress(jobId, { progress: 100, stage: 'java ready' });
+          return { path: candidate.path, major: candidate.major, architectureBits: candidate.architectureBits, source: candidate.source };
+        } finally {
+          if (jobId) j.end(jobId);
+        }
       },
       versions_vanilla: () => vanillaVersions(),
       versions_paper: () => paperVersions(),
@@ -110,7 +116,8 @@ export function buildRuntime(): {
         const jobId = String(a.jobId ?? '');
         const s = new Store(ctx.dataRoot);
         const kind = LOADER_MAP[input.loader] ?? appErrorThrow(input.loader);
-        if (jobId) j.begin(jobId);
+        const controller = jobId ? j.begin(jobId) : null;
+        const signal = controller?.signal ?? j.signalFor(jobId);
         try {
           assertServerNameAvailable(s, input.name);
           // WP-2.3 port model: allocate (record-free + OS-bindable) before provisioning; the same
@@ -125,6 +132,7 @@ export function buildRuntime(): {
           const installMajor = installMajorFor(requiredMajor) ?? requiredMajor;
           // A configured Java path is validated and used as-is; only a missing runtime triggers
           // provisioning. Start/install must not silently download a JDK over an explicit choice.
+          // NOTE: Java provisioning itself is not yet abortable; install engines and the transaction are.
           let javaExe: string;
           if (input.javaPath) {
             javaExe = (await validateJava(input.javaPath, requiredMajor)).path;
@@ -143,12 +151,17 @@ export function buildRuntime(): {
               javaPath: input.javaPath ?? javaExe,
               eulaAccepted: input.eulaAccepted ?? false,
             },
-            isCancelled: () => Boolean(jobId) && j.isCancelled(jobId),
+            isCancelled: () => j.isCancelled(jobId),
+            signal,
+            enforceManagerConfig: { port, eulaAccepted: input.eulaAccepted ?? false },
+            // WP-4.3: the new server must reach "Done (" once before it is published as a success.
+            // Without explicit EULA consent the server cannot legally boot, so verification is skipped.
+            bootVerify: { enabled: input.eulaAccepted === true, javaPath: javaExe },
             onProgress: p => j.progress(jobId, { stage: p.stage, progress: p.progress }),
             install: async ({ stagingDir, log }) => {
               j.progress(jobId, { progress: 25, stage: `installing ${kind}` });
               log(`installing ${kind} ${input.mcVersion}${input.loaderVersion ? ` ${input.loaderVersion}` : ''}`);
-              await installLoader(kind, stagingDir, input.mcVersion, input.loaderVersion ?? '', javaExe, cacheDir);
+              await installLoader(kind, stagingDir, input.mcVersion, input.loaderVersion ?? '', javaExe, cacheDir, { signal });
               j.progress(jobId, { progress: 80, stage: 'writing config' });
               ensureServerProperties(stagingDir, port);
               if (input.eulaAccepted) writeEula(stagingDir);

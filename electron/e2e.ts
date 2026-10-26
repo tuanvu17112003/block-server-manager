@@ -80,9 +80,14 @@ export async function runE2E(ctx: IpcContext): Promise<boolean> {
   t('modrinth-search', !!projectId);
   const versions = await H.modrinth_project_versions({ projectId }, ctx) as { id: string; gameVersions: string[] }[];
   const version = versions.find(v => v.gameVersions.includes('1.21.1')) ?? versions[0];
-  const preview = await H.modpack_pipeline_preview({ source: { kind: 'modrinthRemote', projectId, versionId: version.id }, jobId: 'jp' }, ctx) as { previewId: string; plan: { loader: { minecraftVersion: string } }; plan2?: unknown };
+  const preview = await H.modpack_pipeline_preview({ source: { kind: 'modrinthRemote', projectId, versionId: version.id }, jobId: 'jp' }, ctx) as { previewId: string; plan: { loader: { minecraftVersion: string }; fileDecisions?: { path: string; action: string }[] } };
   t('pipeline-preview', !!preview?.previewId && preview.plan.loader.minecraftVersion === '1.21.1');
-  const install = await H.modpack_pipeline_install({ previewId: preview.previewId, input: { name: 'e2e-cobbleverse', ramMb: 4096, eulaAccepted: true }, choices: { files: {}, approvedReplacements: [], autoDeleteCurseforgeZip: false }, jobId: 'ji' }, ctx) as { status: string; server: { id: string } | null };
+  // The UI asks the user to resolve conflicting signals; headless E2E accepts the reviewed default
+  // (include) so the install path mirrors a user clicking "include" for every flagged file.
+  const flagged = (preview.plan.fileDecisions ?? []).filter((decision) => decision.action === 'awaitingUserChoice');
+  const reviewedFiles: Record<string, 'include'> = {};
+  for (const decision of flagged) reviewedFiles[decision.path] = 'include';
+  const install = await H.modpack_pipeline_install({ previewId: preview.previewId, input: { name: 'e2e-cobbleverse', ramMb: 4096, eulaAccepted: true }, choices: { files: reviewedFiles, approvedReplacements: [], autoDeleteCurseforgeZip: false }, jobId: 'ji' }, ctx) as { status: string; server: { id: string } | null };
   t('pipeline-install', install?.status === 'complete' && !!install.server?.id);
   if (install.server?.id) {
     await H.server_start({ id: install.server.id }, ctx);

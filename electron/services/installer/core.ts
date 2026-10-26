@@ -2,64 +2,348 @@
 // Live-validated there: 12/12 packs, 4-layer client-mod defense, old-Forge 1.12.2/Java 8,
 // Mojang-metadata java mapping, CF keyless + key-mode. Keep this file logic-identical; changes
 // need re-validation against the spike's acceptance packs.
-import { createWriteStream, existsSync, mkdirSync, writeFileSync, renameSync, rmSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { createWriteStream, createReadStream, existsSync, mkdirSync, writeFileSync, renameSync, rmSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import net from 'node:net';
 import path from 'node:path';
 import yauzl from 'yauzl';
+import { appError } from '../store';
 
 export const UA = 'BlockServerManager/0.2 (github.com/local; windows)';
 export function log(msg: string): void { console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`); }
 export const sleep = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
 
+// ---------- cancellation (WP-4.1) ----------
+/** Optional abort signal shared by every installer engine entry point. */
+export interface Cancelable { signal?: AbortSignal }
+
+/** Typed cancellation error (`code: 'cancelled'`) consumed by the IPC envelope and job runner. */
+export function cancelledError(message = 'Install cancelled.'): Error {
+  return appError('cancelled', message);
+}
+export function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw cancelledError();
+}
+export function isAbortError(error: unknown): boolean {
+  const named = error as { name?: string; code?: string } | null | undefined;
+  return named?.name === 'AbortError' || named?.code === 'ABORT_ERR';
+}
+/** `sleep` that rejects promptly with a `cancelled` error when the signal aborts. */
+export function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) return sleep(ms);
+  if (signal.aborted) return Promise.reject(cancelledError());
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = (): void => { clearTimeout(timer); reject(cancelledError()); };
+    const timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+/**
+ * Race `work` against an abort signal. `onAbort` runs exactly once (e.g. destroy a fetch body or
+ * kill a child process); `dispose()` removes the listener on the success path.
+ */
+export function abortRace(signal: AbortSignal | undefined, onAbort?: () => void): { promise: Promise<never>; dispose: () => void } {
+  if (!signal) return { promise: new Promise<never>(() => undefined), dispose: () => undefined };
+  let handler: (() => void) | null = null;
+  const promise = new Promise<never>((_resolve, reject) => {
+    handler = () => {
+      try { onAbort?.(); } catch { /* abort cleanup is best effort */ }
+      reject(cancelledError());
+    };
+    if (signal.aborted) handler();
+    else signal.addEventListener('abort', handler, { once: true });
+  });
+  return {
+    promise,
+    dispose: () => { if (handler) signal.removeEventListener('abort', handler); },
+  };
+}
+
+// ---------- trusted hosts + manual redirects (WP-4.4 / INST-011) ----------
+export type HostAllowlist = readonly string[];
+
+/** Provider allowlists used by every metadata/artifact fetch (ADR-0018 per-hop validation). */
+export const MODRINTH_ALLOWED_HOSTS: HostAllowlist = [
+  'api.modrinth.com', 'cdn.modrinth.com', 'github.com', 'objects.githubusercontent.com',
+  'release-assets.githubusercontent.com',
+];
+export const CURSEFORGE_ALLOWED_HOSTS: HostAllowlist = [
+  'api.curseforge.com', 'www.curseforge.com', 'legacy.curseforge.com', 'curseforge.com',
+  'mediafilez.forgecdn.net', 'edge.forgecdn.net', 'mediafilez.curseforge.com',
+];
+export const LOADER_ALLOWED_HOSTS: HostAllowlist = [
+  'meta.fabricmc.net', 'maven.fabricmc.net', 'meta.quiltmc.org', 'maven.quiltmc.org',
+  'maven.minecraftforge.net', 'files.minecraftforge.net',
+  'maven.neoforged.net', 'fill.papermc.io', 'fill-data.papermc.io', 'piston-meta.mojang.com',
+  'piston-data.mojang.com', 'launchermeta.mojang.com', 'launcher.mojang.com',
+  'resources.download.minecraft.net', 'api.adoptium.net', 'api.github.com', 'github.com',
+  'objects.githubusercontent.com', 'release-assets.githubusercontent.com',
+];
+export const ADOPTIUM_ALLOWED_HOSTS: HostAllowlist = LOADER_ALLOWED_HOSTS;
+
+/** Exact host match; a leading `.` entry allows that domain and its subdomains. */
+export function isHostAllowed(host: string, allowlist: HostAllowlist): boolean {
+  const candidate = String(host ?? '').trim().toLowerCase();
+  if (!candidate) return false;
+  return allowlist.some((rawEntry) => {
+    const entry = rawEntry.trim().toLowerCase();
+    if (!entry) return false;
+    if (entry.startsWith('.')) return candidate === entry.slice(1) || candidate.endsWith(entry);
+    return candidate === entry;
+  });
+}
+
+export interface TrustedFetchOptions extends RequestInit { maxRedirects?: number }
+
+/**
+ * Fetch with provider policy: HTTPS only, manual redirect following (≤5 hops by default) where
+ * EVERY hop must be one of `allowedHosts`; a redirect to any other host/protocol is rejected.
+ * Network errors/5xx are retried up to 3 times (never on abort).
+ */
+export async function fetchTrusted(url: string, allowedHosts: HostAllowlist, opts: TrustedFetchOptions = {}): Promise<Response> {
+  const { maxRedirects = 5, ...init } = opts;
+  const signal = init.signal ?? undefined;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      const response = await trustedFetchWalk(String(url ?? '').trim(), allowedHosts, maxRedirects, init);
+      if (response.status >= 500 && attempt < 3) {
+        await abortableSleep(750 * attempt, signal);
+        continue;
+      }
+      return response;
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === 'cancelled' || code === 'validation' || isAbortError(error) || signal?.aborted) {
+        if (isAbortError(error) || signal?.aborted) throw cancelledError();
+        throw error;
+      }
+      if (attempt >= 3) throw error;
+      await abortableSleep(750 * attempt, signal);
+    }
+  }
+}
+
+async function trustedFetchWalk(initialUrl: string, allowedHosts: HostAllowlist, maxRedirects: number, init: RequestInit): Promise<Response> {
+  const signal = init.signal ?? undefined;
+  let current = initialUrl;
+  for (let hop = 0; hop <= maxRedirects; hop += 1) {
+    throwIfAborted(signal);
+    let parsed: URL;
+    try { parsed = new URL(current); } catch { throw appError('validation', `invalid URL: ${current}`); }
+    if (parsed.protocol !== 'https:') throw appError('validation', `refusing non-HTTPS URL: ${current}`);
+    if (!isHostAllowed(parsed.hostname, allowedHosts)) {
+      throw appError('validation', `host not allowed: ${parsed.hostname} (${current})`);
+    }
+    await throttle(parsed.host, signal);
+    let response: Response;
+    try {
+      response = await fetch(parsed.toString(), {
+        ...init,
+        redirect: 'manual',
+        signal,
+        headers: { 'User-Agent': UA, ...(init.headers as Record<string, string> | undefined ?? {}) },
+      });
+    } catch (error) {
+      if (isAbortError(error) || signal?.aborted) throw cancelledError();
+      throw new Error(`network ${current}: ${(error as Error).message}`);
+    }
+    if (response.status >= 300 && response.status < 400 && response.status !== 304) {
+      const location = response.headers.get('location');
+      if (!location) return response;
+      if (hop >= maxRedirects) throw appError('validation', `too many redirects (${maxRedirects}) for ${initialUrl}`);
+      try { void response.body?.cancel(); } catch { /* ignore body cleanup */ }
+      try { current = new URL(location, parsed).toString(); } catch { throw appError('validation', `invalid redirect location from ${parsed.toString()}: ${location}`); }
+      continue;
+    }
+    return response;
+  }
+  throw appError('validation', `too many redirects (${maxRedirects}) for ${initialUrl}`);
+}
+
 // ---------- http ----------
 const CF_HOST = /(^|\.)curseforge\.com$/;
 let lastCfReq = 0;
-async function throttle(host: string): Promise<void> {
+async function throttle(host: string, signal?: AbortSignal): Promise<void> {
   if (!CF_HOST.test(host)) return;
   const wait = lastCfReq + 550 - Date.now(); // 2 req/s cap (D-23)
-  if (wait > 0) await sleep(wait);
+  if (wait > 0) await abortableSleep(wait, signal);
   lastCfReq = Date.now();
 }
 
 export async function fetchOk(url: string, opts: RequestInit = {}): Promise<Response> {
   const host = new URL(url).host;
+  const signal = opts.signal ?? undefined;
   for (let attempt = 1; ; attempt++) {
-    await throttle(host);
+    throwIfAborted(signal);
+    await throttle(host, signal);
     let res: Response;
     try { res = await fetch(url, { redirect: 'follow', ...opts, headers: { 'User-Agent': UA, ...(opts.headers as Record<string, string> || {}) } }); }
-    catch (e) { if (attempt >= 3) throw new Error(`network ${url}: ${(e as Error).message}`); await sleep(1500 * attempt); continue; }
-    if (res.status >= 500 && attempt < 3) { await sleep(1500 * attempt); continue; }
+    catch (e) {
+      if (isAbortError(e) || signal?.aborted) throw cancelledError();
+      if (attempt >= 3) throw new Error(`network ${url}: ${(e as Error).message}`);
+      await abortableSleep(1500 * attempt, signal);
+      continue;
+    }
+    if (res.status >= 500 && attempt < 3) { await abortableSleep(1500 * attempt, signal); continue; }
     return res;
   }
 }
 
-export interface DownloadOpts { sha1?: string; sha256?: string; sha512?: string; size?: number }
+export interface DownloadOpts extends Cancelable {
+  sha1?: string;
+  sha256?: string;
+  sha512?: string;
+  size?: number;
+  /** When set, the URL (and every redirect hop) must stay on these HTTPS hosts. */
+  allowedHosts?: HostAllowlist;
+}
 export interface DownloadResult { bytes: number; sha1: string; sha256: string; sha512: string }
 // temp+rename, size+hash verify; never sends Range (www.curseforge.com /download 404s on Range).
+// Cancellable: an abort destroys the HTTP body + `.part` file and throws a typed `cancelled` error.
 export async function download(url: string, dest: string, opts: DownloadOpts = {}): Promise<DownloadResult> {
+  const { signal } = opts;
   mkdirSync(path.dirname(dest), { recursive: true });
   const tmp = dest + '.part';
-  const res = await fetchOk(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  const file = createWriteStream(tmp);
-  const h1 = createHash('sha1'), h256 = createHash('sha256'), h512 = createHash('sha512');
-  let n = 0;
-  if (res.body) for await (const chunk of res.body as unknown as AsyncIterable<Buffer>) {
-    n += chunk.length;
-    h1.update(chunk); h256.update(chunk); h512.update(chunk);
-    if (!file.write(chunk)) await once(file, 'drain');
+  let file: ReturnType<typeof createWriteStream> | null = null;
+  const abort = abortRace(signal, () => { try { void file?.destroy(); } catch { /* ignore */ } });
+  void abort.promise.catch(() => undefined); // race/cleanup path handles it; avoids unhandled rejections
+  try {
+    throwIfAborted(signal);
+    const res = opts.allowedHosts
+      ? await fetchTrusted(url, opts.allowedHosts, { signal })
+      : await fetchOk(url, { signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    throwIfAborted(signal);
+    file = createWriteStream(tmp);
+    const h1 = createHash('sha1'), h256 = createHash('sha256'), h512 = createHash('sha512');
+    let n = 0;
+    const pump = (async (): Promise<void> => {
+      if (!res.body) return;
+      for await (const chunk of res.body as unknown as AsyncIterable<Buffer>) {
+        n += chunk.length;
+        h1.update(chunk); h256.update(chunk); h512.update(chunk);
+        if (!file!.write(chunk)) await once(file!, 'drain');
+      }
+    })();
+    pump.catch(() => { /* surfaced through the race below (avoids unhandled rejection) */ });
+    try {
+      await Promise.race([pump, abort.promise]);
+    } catch (error) {
+      try { void res.body?.cancel().catch(() => undefined); } catch { /* ignore */ }
+      throw error;
+    }
+    await new Promise<void>((resolve, reject) => file!.end((error?: Error | null) => (error ? reject(error) : resolve())));
+    throwIfAborted(signal);
+    const digests = { sha1: h1.digest('hex'), sha256: h256.digest('hex'), sha512: h512.digest('hex') };
+    if (opts.size != null && n !== opts.size) throw new Error(`size mismatch ${url}: got ${n}, want ${opts.size}`);
+    if (opts.sha1 && digests.sha1 !== opts.sha1.toLowerCase()) throw new Error(`sha1 mismatch ${url}`);
+    if (opts.sha256 && digests.sha256 !== opts.sha256.toLowerCase()) throw new Error(`sha256 mismatch ${url}`);
+    if (opts.sha512 && digests.sha512 !== opts.sha512.toLowerCase()) throw new Error(`sha512 mismatch ${url}`);
+    renameSync(tmp, dest);
+    return { bytes: n, ...digests };
+  } catch (error) {
+    try { file?.destroy(); } catch { /* ignore */ }
+    try { rmSync(tmp, { force: true }); } catch { /* ignore */ }
+    if (isAbortError(error) || signal?.aborted) throw cancelledError();
+    throw error;
+  } finally {
+    abort.dispose();
   }
-  await new Promise<void>(r => file.end(r));
-  const digests = { sha1: h1.digest('hex'), sha256: h256.digest('hex'), sha512: h512.digest('hex') };
-  if (opts.size != null && n !== opts.size) { rmSync(tmp, { force: true }); throw new Error(`size mismatch ${url}: got ${n}, want ${opts.size}`); }
-  if (opts.sha1 && digests.sha1 !== opts.sha1) { rmSync(tmp, { force: true }); throw new Error(`sha1 mismatch ${url}`); }
-  if (opts.sha256 && digests.sha256 !== opts.sha256.toLowerCase()) { rmSync(tmp, { force: true }); throw new Error(`sha256 mismatch ${url}`); }
-  if (opts.sha512 && digests.sha512 !== opts.sha512) { rmSync(tmp, { force: true }); throw new Error(`sha512 mismatch ${url}`); }
-  renameSync(tmp, dest);
-  return { bytes: n, ...digests };
+}
+
+// ---------- integrity: cache re-verification + ordered source failover (WP-4.4 / INST-010) ----------
+export interface FileExpectation { size?: number; sha1?: string; sha256?: string; sha512?: string }
+
+/** Streaming hash of a local file (used to re-verify caches before reuse). */
+export async function hashFile(file: string): Promise<DownloadResult> {
+  const h1 = createHash('sha1'), h256 = createHash('sha256'), h512 = createHash('sha512');
+  let bytes = 0;
+  await new Promise<void>((resolve, reject) => {
+    const stream = createReadStream(file);
+    stream.on('data', (chunk: Buffer) => { bytes += chunk.length; h1.update(chunk); h256.update(chunk); h512.update(chunk); });
+    stream.once('error', reject);
+    stream.once('end', () => resolve());
+  });
+  return { bytes, sha1: h1.digest('hex'), sha256: h256.digest('hex'), sha512: h512.digest('hex') };
+}
+
+/** True when `file` exists and matches every expectation that is present. */
+export async function verifyCachedFile(file: string, expected: FileExpectation = {}): Promise<boolean> {
+  try {
+    if (!existsSync(file) || !statSync(file).isFile()) return false;
+    if (expected.size != null && statSync(file).size !== expected.size) return false;
+    const needsHash = Boolean(expected.sha1 || expected.sha256 || expected.sha512);
+    if (!needsHash) return true;
+    const digests = await hashFile(file);
+    if (expected.sha1 && digests.sha1 !== expected.sha1.toLowerCase()) return false;
+    if (expected.sha256 && digests.sha256 !== expected.sha256.toLowerCase()) return false;
+    if (expected.sha512 && digests.sha512 !== expected.sha512.toLowerCase()) return false;
+    return true;
+  } catch { return false; }
+}
+
+export interface DownloadCandidate extends FileExpectation { url: string }
+export interface DownloadFirstAvailableOpts extends Cancelable {
+  dest: string;
+  allowedHosts?: HostAllowlist;
+  /** Attempts per candidate URL (default 2); candidates themselves are tried in order. */
+  attemptsPerCandidate?: number;
+  onAttempt?: (candidate: DownloadCandidate, index: number, attempt: number) => void;
+}
+export interface DownloadFirstAvailableResult extends DownloadResult {
+  url: string;
+  cached: boolean;
+  attempts: number;
+}
+
+/**
+ * Ordered URL failover with per-candidate size/hash verification. An existing `dest` is re-hashed
+ * and reused only when it matches one candidate's expectations (corrupt caches are re-downloaded).
+ */
+export async function downloadFirstAvailable(
+  candidates: (string | DownloadCandidate)[],
+  opts: DownloadFirstAvailableOpts,
+): Promise<DownloadFirstAvailableResult> {
+  const { dest, signal } = opts;
+  throwIfAborted(signal);
+  const list: DownloadCandidate[] = (Array.isArray(candidates) ? candidates : [])
+    .map((candidate) => (typeof candidate === 'string' ? { url: candidate } : candidate))
+    .filter((candidate): candidate is DownloadCandidate => typeof candidate?.url === 'string' && candidate.url.trim().length > 0);
+  if (list.length === 0) throw appError('validation', `no download sources for ${dest}`);
+  if (existsSync(dest)) {
+    for (const candidate of list) {
+      if (await verifyCachedFile(dest, candidate)) {
+        const digests = await hashFile(dest);
+        return { ...digests, url: candidate.url, cached: true, attempts: 0 };
+      }
+    }
+    // Corrupt/incomplete cache: remove it so a failed re-download cannot silently leave a bad file.
+    try { rmSync(dest, { force: true }); } catch { /* ignore */ }
+  }
+  const attemptsPerCandidate = Math.max(1, opts.attemptsPerCandidate ?? 2);
+  const failures: string[] = [];
+  let attempts = 0;
+  for (const [index, candidate] of list.entries()) {
+    for (let attempt = 1; attempt <= attemptsPerCandidate; attempt += 1) {
+      throwIfAborted(signal);
+      attempts += 1;
+      opts.onAttempt?.(candidate, index, attempt);
+      try {
+        const result = await download(candidate.url, dest, {
+          sha1: candidate.sha1, sha256: candidate.sha256, sha512: candidate.sha512, size: candidate.size,
+          allowedHosts: opts.allowedHosts, signal,
+        });
+        return { ...result, url: candidate.url, cached: false, attempts };
+      } catch (error) {
+        if (isAbortError(error) || signal?.aborted || (error as { code?: string }).code === 'cancelled') throw cancelledError();
+        failures.push(`${candidate.url}#${attempt}: ${(error as Error).message}`);
+        if (attempt < attemptsPerCandidate) await abortableSleep(300 * attempt, signal);
+      }
+    }
+  }
+  throw new Error(`all download sources failed for ${dest}: ${failures.join(' | ')}`);
 }
 
 // ---------- zip (yauzl) ----------
@@ -111,12 +395,69 @@ export async function readZipEntry(zipPath: string, entryName: string): Promise<
   }
 }
 export interface ExtractResult { written: string[]; skippedExisting: string[]; excluded: string[] }
-export async function extractZip(zipPath: string, destDir: string, opts: { root?: string; skipExisting?: boolean; maxTotalBytes?: number; excludeFn?: (rel: string) => boolean } = {}): Promise<ExtractResult> {
-  const { root = '', skipExisting = true, maxTotalBytes = 2 * 1024 ** 3, excludeFn } = opts;
+// ---------- archive hardening (WP-4.4 / INST-019) ----------
+export const ARCHIVE_MAX_ENTRIES = 100_000;
+export const ARCHIVE_MAX_PATH_LENGTH = 1024;
+const WINDOWS_RESERVED_NAMES = new Set<string>([
+  'con', 'prn', 'aux', 'nul',
+  'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
+  'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9',
+]);
+
+/** Entry-name policy: path length, Win32 reserved device names, trailing dot/space segments. */
+export function unsafeArchiveEntryReason(entryName: string, opts: { maxPathLength?: number } = {}): string | null {
+  const maxPathLength = opts.maxPathLength ?? ARCHIVE_MAX_PATH_LENGTH;
+  const normalized = entryName.replaceAll('\\', '/');
+  if (!normalized) return `empty archive entry name`;
+  if (normalized.length > maxPathLength) {
+    return `archive entry path too long (${normalized.length} > ${maxPathLength}): ${entryName}`;
+  }
+  for (const segment of normalized.split('/')) {
+    if (!segment || segment === '.' || segment === '..') continue;
+    const base = segment.split('.')[0] ?? segment;
+    if (WINDOWS_RESERVED_NAMES.has(base.toLowerCase())) {
+      return `reserved Windows device name "${segment}" in archive entry: ${entryName}`;
+    }
+    if (/[. ]$/.test(segment)) {
+      return `archive entry segment has a trailing dot or space: "${segment}" (${entryName})`;
+    }
+  }
+  return null;
+}
+
+/** yauzl entry is a symlink/reparse point (unix mode bits or the Win32 reparse attribute). */
+export function isSymlinkArchiveEntry(entry: yauzl.Entry): boolean {
+  const attributes = (entry as unknown as { externalFileAttributes?: number }).externalFileAttributes ?? 0;
+  const unixMode = (attributes >>> 16) & 0xffff;
+  if ((unixMode & 0o170000) === 0o120000) return true;
+  return (attributes & 0x400) !== 0; // FILE_ATTRIBUTE_REPARSE_POINT
+}
+
+export interface ExtractOpts extends Cancelable {
+  root?: string;
+  skipExisting?: boolean;
+  maxTotalBytes?: number;
+  /** Hard cap on archive entries (default {@link ARCHIVE_MAX_ENTRIES}). */
+  maxEntries?: number;
+  /** Hard cap on normalized entry path length (default {@link ARCHIVE_MAX_PATH_LENGTH}). */
+  maxPathLength?: number;
+  excludeFn?: (rel: string) => boolean;
+}
+export async function extractZip(zipPath: string, destDir: string, opts: ExtractOpts = {}): Promise<ExtractResult> {
+  const { root = '', skipExisting = true, maxTotalBytes = 2 * 1024 ** 3, excludeFn, signal } = opts;
+  const maxEntries = opts.maxEntries ?? ARCHIVE_MAX_ENTRIES;
+  const maxPathLength = opts.maxPathLength ?? ARCHIVE_MAX_PATH_LENGTH;
+  throwIfAborted(signal);
   const z = await openZip(zipPath);
   const written: string[] = [], skippedExisting: string[] = [], excluded: string[] = [];
+  const seenPaths = new Set<string>(); // case-insensitive duplicate detection
+  let entriesSeen = 0;
   let total = 0;
   let failed = false; // set on the first failure: stops pumping entries and gates the promise
+  let abortDispose: () => void = () => undefined;
+  let activeStream: (NodeJS.ReadableStream & { destroy?: () => void }) | null = null;
+  let activeOut: ReturnType<typeof createWriteStream> | null = null;
+  let activeTarget = '';
   try {
     await new Promise<void>((res, rej) => {
       let settled = false;
@@ -126,16 +467,35 @@ export async function extractZip(zipPath: string, destDir: string, opts: { root?
         if (failed || settled) return;
         failed = true;
         settled = true;
+        try { activeStream?.destroy?.(); } catch { /* ignore */ }
+        try { activeOut?.destroy(); } catch { /* ignore */ }
+        if (activeTarget) { try { rmSync(activeTarget, { force: true }); } catch { /* handle may be open */ } }
         try { z.close(); } catch { /* already closed */ }
         rej(err instanceof Error ? err : new Error(String(err)));
       };
+      const abort = abortRace(signal, () => {
+        try { activeStream?.destroy?.(); } catch { /* ignore */ }
+        try { activeOut?.destroy(); } catch { /* ignore */ }
+        if (activeTarget) { try { rmSync(activeTarget, { force: true }); } catch { /* ignore */ } }
+      });
+      abortDispose = abort.dispose;
+      void abort.promise.catch((error) => fail(error));
       z.on('entry', (e: yauzl.Entry) => {
         void (async () => {
           try {
             if (failed) return;
+            throwIfAborted(signal);
+            entriesSeen += 1;
+            if (entriesSeen > maxEntries) throw new Error(`archive has too many entries (> ${maxEntries}): ${zipPath}`);
+            const unsafe = unsafeArchiveEntryReason(e.fileName, { maxPathLength });
+            if (unsafe) throw new Error(`unsafe archive entry: ${unsafe}`);
+            if (isSymlinkArchiveEntry(e)) throw new Error(`symlink/reparse entry not allowed: ${e.fileName}`);
             if (!e.fileName.startsWith(root)) { z.readEntry(); return; }
             const rel = e.fileName.slice(root.length);
             if (!rel || e.fileName.endsWith('/')) { z.readEntry(); return; }
+            const lowered = rel.replaceAll('\\', '/').toLowerCase();
+            if (seenPaths.has(lowered)) throw new Error(`duplicate archive path (case-insensitive): ${rel}`);
+            seenPaths.add(lowered);
             if (excludeFn && excludeFn(rel)) { excluded.push(rel); z.readEntry(); return; }
             const target = safeTarget(destDir, rel);
             total += e.uncompressedSize;
@@ -146,6 +506,7 @@ export async function extractZip(zipPath: string, destDir: string, opts: { root?
               if (er || !s) return fail(er ?? new Error('zip entry stream unavailable'));
               if (failed) { s.destroy(); return; }
               const out = createWriteStream(target);
+              activeStream = s; activeOut = out; activeTarget = target;
               const removePartial = (): void => { try { rmSync(target, { force: true }); } catch { /* handle may still be open */ } };
               // Corrupt/truncated entry: yauzl forwards zlib Z_DATA_ERROR on the read stream; without
               // these handlers it becomes an uncaughtException and the promise hangs (probe M-17).
@@ -155,6 +516,7 @@ export async function extractZip(zipPath: string, destDir: string, opts: { root?
               out.once('close', () => { if (failed) removePartial(); });
               out.once('finish', () => {
                 if (failed) return;
+                activeStream = null; activeOut = null; activeTarget = '';
                 written.push(rel);
                 z.readEntry();
               });
@@ -168,6 +530,7 @@ export async function extractZip(zipPath: string, destDir: string, opts: { root?
       z.readEntry();
     });
   } finally {
+    abortDispose();
     try { z.close(); } catch { /* closed by fail() */ }
   }
   return { written, skippedExisting, excluded };
@@ -177,15 +540,20 @@ export async function extractZip(zipPath: string, destDir: string, opts: { root?
 interface Manifest { versions: { id: string; url: string }[] }
 let mcJavaCache: Manifest | null = null;
 // Mojang metadata first (MC 26.x has no 1.x shape — live-proven on SkyBlock Enhanced); D-08 table as fallback.
-export async function requiredJavaMajor(mc: string): Promise<number> {
+export async function requiredJavaMajor(mc: string, opts: Cancelable = {}): Promise<number> {
   try {
-    if (!mcJavaCache) mcJavaCache = await (await fetchOk('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')).json() as Manifest;
+    if (!mcJavaCache) {
+      mcJavaCache = await (await fetchTrusted('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json', LOADER_ALLOWED_HOSTS, { signal: opts.signal })).json() as Manifest;
+    }
     const entry = mcJavaCache.versions.find(v => v.id === mc);
     if (entry) {
-      const meta = await (await fetchOk(entry.url)).json() as { javaVersion?: { majorVersion?: number } };
+      const meta = await (await fetchTrusted(entry.url, LOADER_ALLOWED_HOSTS, { signal: opts.signal })).json() as { javaVersion?: { majorVersion?: number } };
       if (meta.javaVersion?.majorVersion) return meta.javaVersion.majorVersion;
     }
-  } catch { /* fall through to table */ }
+  } catch (error) {
+    if (opts.signal?.aborted || isAbortError(error)) throw cancelledError();
+    /* fall through to table */
+  }
   const parts = mc.split('.').map(Number);
   if (parts[0] !== 1) throw new Error(`cannot map java major for non-1.x MC version "${mc}" without Mojang metadata`);
   const minor = parts[1] ?? 0, patch = parts[2] ?? 0;
@@ -221,19 +589,24 @@ export async function detectJava(major: number, extraRoots: string[]): Promise<J
   }
   return found;
 }
-export async function ensureJava(major: number, runtimeRoot: string, cacheDir: string, onProgress?: (p: { phase: string; pct?: number }) => void): Promise<JavaRuntime> {
+export async function ensureJava(major: number, runtimeRoot: string, cacheDir: string, onProgress?: (p: { phase: string; pct?: number }) => void, opts: Cancelable = {}): Promise<JavaRuntime> {
+  throwIfAborted(opts.signal);
   const found = await detectJava(major, [runtimeRoot]);
   const hit = found[0];
   if (hit) return hit;
   onProgress?.({ phase: `downloading Temurin ${major} (Adoptium)` });
-  const assets = await (await fetchOk(`https://api.adoptium.net/v3/assets/latest/${major}/hotspot?os=windows&architecture=x64&image_type=jdk`)).json() as { binary: { package: { link: string; size: number } } }[];
+  const assets = await (await fetchTrusted(`https://api.adoptium.net/v3/assets/latest/${major}/hotspot?os=windows&architecture=x64&image_type=jdk`, ADOPTIUM_ALLOWED_HOSTS, { signal: opts.signal })).json() as { binary: { package: { link: string; size: number } } }[];
   const pkg = assets[0].binary.package;
   const zipPath = path.join(cacheDir, `temurin-${major}.zip`);
-  if (!existsSync(zipPath)) await download(pkg.link, zipPath, { size: pkg.size });
+  // Cache re-verify: a truncated/stale JDK zip must be re-downloaded, never silently extracted.
+  if (!(await verifyCachedFile(zipPath, { size: pkg.size }))) {
+    await download(pkg.link, zipPath, { size: pkg.size, allowedHosts: ADOPTIUM_ALLOWED_HOSTS, signal: opts.signal });
+  }
+  throwIfAborted(opts.signal);
   const home = path.join(runtimeRoot, `temurin-${major}`);
   rmSync(home, { recursive: true, force: true });
   mkdirSync(home, { recursive: true });
-  await extractZip(zipPath, home, { skipExisting: false });
+  await extractZip(zipPath, home, { skipExisting: false, signal: opts.signal });
   const inner = readdirSync(home).find(d => d.startsWith('jdk-'));
   const javaExe = path.join(home, inner ?? '', 'bin', 'java.exe');
   if (!existsSync(javaExe)) throw new Error(`jdk extraction failed: ${javaExe}`);
@@ -242,18 +615,66 @@ export async function ensureJava(major: number, runtimeRoot: string, cacheDir: s
 
 // ---------- loaders ----------
 export type LoaderKind = 'vanilla' | 'paper' | 'fabric' | 'quilt' | 'forge' | 'neoforge';
-export async function runInstaller(javaExe: string, installerJar: string, args: string[], cwd: string, what: string, attempts = 2): Promise<void> {
+
+/** Minimal ChildProcess surface used by `runInstaller` (injectable for cancellation tests). */
+export interface InstallerChildProcess {
+  pid?: number;
+  stdout: { on(event: 'data', listener: (chunk: Buffer) => void): unknown };
+  stderr: { on(event: 'data', listener: (chunk: Buffer) => void): unknown };
+  once(event: 'exit', listener: (code: number | null, signal?: NodeJS.Signals | null) => void): unknown;
+  kill(signal?: NodeJS.Signals): boolean;
+}
+export interface RunInstallerOptions extends Cancelable {
+  attempts?: number;
+  /** Test seam: replace the real `spawn`. */
+  spawnProcess?: (exe: string, args: string[], options: { cwd: string }) => InstallerChildProcess;
+  /** Test seam: replace the Windows process-tree kill. */
+  killTree?: (pid: number) => void;
+}
+
+/** Kill a child process AND its descendants (installer scripts spawn java children). */
+export function killProcessTree(pid: number): void {
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  if (process.platform === 'win32') {
+    try { spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }); } catch { /* best effort */ }
+    return;
+  }
+  try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+}
+
+/**
+ * Run a java installer JAR. Cancellation kills the whole child tree and rejects with a
+ * `cancelled` error within milliseconds of the abort (never waits for the child to exit).
+ */
+export async function runInstaller(javaExe: string, installerJar: string, args: string[], cwd: string, what: string, opts: RunInstallerOptions = {}): Promise<void> {
+  const attempts = opts.attempts ?? 2;
+  const spawnProcess = opts.spawnProcess ?? ((exe, spawnArgs, options) => spawn(exe, spawnArgs, options) as unknown as InstallerChildProcess);
+  const killTree = opts.killTree ?? killProcessTree;
   for (let attempt = 1; ; attempt++) {
+    throwIfAborted(opts.signal);
     log(`installing ${what}: java -jar ${path.basename(installerJar)} ${args.join(' ')}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
-    const proc = spawn(javaExe, ['-jar', installerJar, ...args], { cwd });
+    const proc = spawnProcess(javaExe, ['-jar', installerJar, ...args], { cwd });
     let tail = '';
     const collect = (d: Buffer) => { tail += d.toString(); if (tail.length > 8000) tail = tail.slice(-4000); };
     proc.stdout.on('data', collect); proc.stderr.on('data', collect);
-    const code = (await once(proc, 'exit'))[0] as number;
+    const exit = new Promise<number | null>((resolve) => { proc.once('exit', (code) => resolve(code)); });
+    const abort = abortRace(opts.signal, () => {
+      try { if (proc.pid) killTree(proc.pid); } catch { /* best effort */ }
+      try { proc.kill('SIGKILL'); } catch { /* already gone */ }
+    });
+    let code: number | null;
+    try {
+      code = await Promise.race([exit, abort.promise]);
+    } catch (error) {
+      throw error; // cancelled
+    } finally {
+      abort.dispose();
+    }
+    throwIfAborted(opts.signal);
     if (code === 0) return;
     // installers are re-runnable; transient network failures (SSL/EOF mid-download) get one retry (§19.2)
     if (attempt >= attempts) throw new Error(`${what} installer failed (exit ${code}):\n` + tail.split('\n').slice(-15).join('\n'));
-    await sleep(5000);
+    await abortableSleep(5000, opts.signal);
   }
 }
 // ---------- neoforge install coordinates ----------
@@ -377,11 +798,13 @@ export function selectPaperBuildById(builds: FillBuild[], buildId: number): Pape
   if (!artifact) throw new Error(`Paper build ${buildId} is not artifact-complete (${PAPER_SERVER_DOWNLOAD} needs url + size + sha256)`);
   return artifact;
 }
-export async function installLoader(kind: LoaderKind, dir: string, mc: string, ver: string, javaExe: string, cacheDir: string): Promise<void> {
+export async function installLoader(kind: LoaderKind, dir: string, mc: string, ver: string, javaExe: string, cacheDir: string, opts: Cancelable = {}): Promise<void> {
+  const { signal } = opts;
+  throwIfAborted(signal);
   mkdirSync(dir, { recursive: true });
   if (kind === 'paper') {
     const buildsUrl = `https://fill.papermc.io/v3/projects/paper/versions/${encodeURIComponent(mc)}/builds`;
-    const res = await fetchOk(buildsUrl);
+    const res = await fetchTrusted(buildsUrl, LOADER_ALLOWED_HOSTS, { signal });
     if (res.status === 404) throw new Error(`Paper has no builds for Minecraft ${mc}`);
     if (!res.ok) throw new Error(`Fill API HTTP ${res.status} for ${buildsUrl}`);
     let payload: unknown;
@@ -396,37 +819,39 @@ export async function installLoader(kind: LoaderKind, dir: string, mc: string, v
       throw new Error(`Paper ${mc}: ${(e as Error).message}`);
     }
     log(`[paper] ${mc}: installing build ${artifact.buildId === -1 ? '?' : artifact.buildId} (${artifact.channel || 'unknown channel'}) ${artifact.name}`);
-    await download(artifact.url, path.join(dir, 'server.jar'), { size: artifact.size, sha256: artifact.sha256 });
+    await download(artifact.url, path.join(dir, 'server.jar'), { size: artifact.size, sha256: artifact.sha256, allowedHosts: LOADER_ALLOWED_HOSTS, signal });
     log(`[paper] ${mc}: server.jar verified (${artifact.size} bytes, sha256 ${artifact.sha256.slice(0, 12)}…)`);
     return;
   }
   if (kind === 'vanilla') {
-    const manifest = await (await fetchOk('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')).json() as { versions: { id: string; url: string }[] };
+    const manifest = await (await fetchTrusted('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json', LOADER_ALLOWED_HOSTS, { signal })).json() as { versions: { id: string; url: string }[] };
     const entry = manifest.versions.find(v => v.id === mc);
     if (!entry) throw new Error(`unknown MC version ${mc}`);
-    const meta = await (await fetchOk(entry.url)).json() as { downloads?: { server?: { url: string; sha1: string; size: number } } };
+    const meta = await (await fetchTrusted(entry.url, LOADER_ALLOWED_HOSTS, { signal })).json() as { downloads?: { server?: { url: string; sha1: string; size: number } } };
     const srv = meta.downloads?.server;
     if (!srv) throw new Error(`no server download for ${mc}`);
-    await download(srv.url, path.join(dir, 'server.jar'), { sha1: srv.sha1, size: srv.size });
+    await download(srv.url, path.join(dir, 'server.jar'), { sha1: srv.sha1, size: srv.size, allowedHosts: LOADER_ALLOWED_HOSTS, signal });
     return;
   }
   if (kind === 'fabric' || kind === 'quilt') {
     const metaHost = kind === 'fabric' ? 'https://meta.fabricmc.net/v2/versions/installer' : 'https://meta.quiltmc.org/v3/versions/installer';
-    const installers = await (await fetchOk(metaHost)).json() as { url?: string; version?: string; links?: { url?: string } }[];
+    const installers = await (await fetchTrusted(metaHost, LOADER_ALLOWED_HOSTS, { signal })).json() as { url?: string; version?: string; links?: { url?: string } }[];
     const iUrl = installers[0].url ?? installers[0].links?.url;
     if (!iUrl) throw new Error(`no ${kind} installer in meta`);
     const iJar = path.join(cacheDir, `${kind}-installer-${installers[0].version ?? path.basename(iUrl)}.jar`);
-    if (!existsSync(iJar)) await download(iUrl, iJar);
-    if (kind === 'fabric') await runInstaller(javaExe, iJar, ['server', '-dir', dir, '-mcversion', mc, '-loader', ver, '-downloadMinecraft'], dir, 'fabric');
-    else await runInstaller(javaExe, iJar, ['install', 'server', mc, ver, `--install-dir=${dir}`, '--download-server'], dir, 'quilt');
+    if (!(await verifyCachedFile(iJar, {}))) await download(iUrl, iJar, { allowedHosts: LOADER_ALLOWED_HOSTS, signal });
+    if (kind === 'fabric') await runInstaller(javaExe, iJar, ['server', '-dir', dir, '-mcversion', mc, '-loader', ver, '-downloadMinecraft'], dir, 'fabric', { signal });
+    else await runInstaller(javaExe, iJar, ['install', 'server', mc, ver, `--install-dir=${dir}`, '--download-server'], dir, 'quilt', { signal });
     return;
   }
   if (kind === 'forge') {
     const v = `${mc}-${ver}`;
     const url = `https://maven.minecraftforge.net/net/minecraftforge/forge/${v}/forge-${v}-installer.jar`;
     const jar = path.join(cacheDir, `forge-${v}-installer.jar`);
-    if (!existsSync(jar)) await download(url, jar);
-    await runInstaller(javaExe, jar, ['--installServer'], dir, 'forge');
+    const head = await fetchTrusted(url, LOADER_ALLOWED_HOSTS, { method: 'HEAD', signal });
+    if (!head.ok) throw new Error(`forge installer not found for ${v} (HTTP ${head.status})`);
+    if (!(await verifyCachedFile(jar, {}))) await download(url, jar, { allowedHosts: LOADER_ALLOWED_HOSTS, signal });
+    await runInstaller(javaExe, jar, ['--installServer'], dir, 'forge', { signal });
     return;
   }
   if (kind === 'neoforge') {
@@ -436,11 +861,11 @@ export async function installLoader(kind: LoaderKind, dir: string, mc: string, v
     if (candidates.length === 0) throw new Error(`neoforge loader version is required for Minecraft ${mc} (got "${ver}")`);
     const attempted: string[] = [];
     for (const candidate of candidates) {
-      const probe = await fetchOk(candidate.url, { method: 'HEAD' });
+      const probe = await fetchTrusted(candidate.url, LOADER_ALLOWED_HOSTS, { method: 'HEAD', signal });
       if (!probe.ok) { attempted.push(`${candidate.mavenVersion} (HTTP ${probe.status})`); continue; }
       const jar = path.join(cacheDir, candidate.name);
-      if (!existsSync(jar)) await download(candidate.url, jar);
-      await runInstaller(javaExe, jar, ['--installServer'], dir, 'neoforge');
+      if (!(await verifyCachedFile(jar, {}))) await download(candidate.url, jar, { allowedHosts: LOADER_ALLOWED_HOSTS, signal });
+      await runInstaller(javaExe, jar, ['--installServer'], dir, 'neoforge', { signal });
       return;
     }
     throw new Error(`neoforge installer not found for Minecraft ${mc} ${ver} (tried ${attempted.join(', ') || candidates.map(candidate => candidate.mavenVersion).join(', ')})`);

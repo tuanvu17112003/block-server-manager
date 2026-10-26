@@ -16,6 +16,12 @@ export class Jobs {
 
   isCancelled(jobId: string): boolean { return this.cancelled.has(jobId); }
 
+  /**
+   * AbortSignal owned by a running job (undefined while inactive). Installer engines accept it
+   * directly via their `{ signal }` option; `cancel(jobId)` aborts it.
+   */
+  signalFor(jobId: string): AbortSignal | undefined { return this.controllers.get(jobId)?.signal; }
+
   cancel(jobId: string): boolean {
     const c = this.controllers.get(jobId);
     if (!c) return false;

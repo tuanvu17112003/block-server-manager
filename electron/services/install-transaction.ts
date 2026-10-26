@@ -14,7 +14,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { appError, Store, type CreateServerInput, type ServerDto } from './store';
-import { launchCommand, type LaunchCommand, type LoaderKind } from './installer/core';
+import { launchCommand, startAndVerify, type LaunchCommand, type LoaderKind } from './installer/core';
+import { writeEulaFile, writePropertyValues } from './properties';
 
 export const STAGING_DIR = 'installer-staging';
 export const INSTALLER_LOG_FILE = 'installer.log';
@@ -117,6 +118,40 @@ export function validateStagedInstall(opts: ValidateStagedOptions): LaunchComman
   return launch;
 }
 
+export interface BootCheckResult {
+  ok: boolean;
+  reason: string;
+  tail: string[];
+}
+
+export interface VerifyStagedBootOptions {
+  stagingDir: string;
+  /** Resolved Java executable used for the one verification boot. */
+  javaPath: string;
+  /** Launch shape from `validateStagedInstall` (defaults to resolving it again). */
+  launch?: LaunchCommand;
+  timeoutMs?: number;
+  log?: (line: string) => void;
+}
+
+/**
+ * WP-4.3 (M-10): installs only succeed after the staged server has actually reached `Done (` once.
+ * The verification boot is allowed to write the initial world, then the process is stopped; the
+ * staged tree (now including world/logs) is what gets published.
+ */
+export async function verifyStagedBoot(opts: VerifyStagedBootOptions): Promise<void> {
+  const { stagingDir, javaPath, timeoutMs = 5 * 60_000, log } = opts;
+  const launch = opts.launch ?? validateStagedInstall({ stagingDir, loaderKind: null, log });
+  log?.(`boot verification: ${path.basename(launch.exe)} ${launch.args.slice(0, 6).join(' ')}`);
+  const result = await startAndVerify(stagingDir, javaPath ? { exe: javaPath, args: launch.args } : launch, { timeoutMs });
+  if (!result.ok) {
+    const tail = result.tail.slice(-20).join('\n');
+    log?.(`boot verification failed: ${result.reason}`);
+    throw appError('install-unverified', `The server did not reach "Done (" during install verification: ${result.reason}${tail ? `\n${tail}` : ''}`);
+  }
+  log?.(`boot verification passed: ${result.reason}`);
+}
+
 export interface PublishStagedServerOptions {
   dataRoot: string;
   store: Store;
@@ -129,6 +164,12 @@ export interface PublishStagedServerOptions {
   install: (ctx: StagedServerContext) => Promise<void> | void;
   /** Extra/override validation; defaults to `validateStagedInstall`. May return the launch shape. */
   verify?: (ctx: StagedServerContext) => Promise<LaunchCommand | void> | LaunchCommand | void;
+  /** WP-4.3: verify one `Done (` boot before publishing (default off; runtime/pipeline enable it). */
+  bootVerify?: { enabled: boolean; javaPath?: string | null; timeoutMs?: number };
+  /** Manager-owned config enforced after extraction, before validation/boot (archive cannot override). */
+  enforceManagerConfig?: { port: number; eulaAccepted: boolean };
+  /** Test seam: override the boot check. */
+  bootCheck?: (stagingDir: string, launch: LaunchCommand, javaPath: string | null) => Promise<BootCheckResult>;
   /** Reserved staging path, before any installer work (pipeline uses it for the report serverId). */
   onStaging?: (ctx: { stagingId: string; stagingDir: string }) => void;
   /** After validation + record creation, before the atomic publish (sync on purpose: no IPC gap). */
@@ -137,6 +178,8 @@ export interface PublishStagedServerOptions {
   publish?: (fromDir: string, toDir: string) => void;
   onProgress?: (event: { stage: string; progress: number }) => void;
   isCancelled?: () => boolean;
+  /** Cooperative cancellation signal shared with installer engines (WP-4.1). */
+  signal?: AbortSignal;
 }
 
 export interface PublishStagedServerResult {
@@ -213,6 +256,13 @@ export async function publishStagedServer(opts: PublishStagedServerOptions): Pro
 
     // Installers create the staging dir themselves (modrinth/curseforge reject an existing dir).
     await opts.install(ctx);
+    if (opts.enforceManagerConfig) {
+      // INST-005: an archive must never overwrite manager-owned state. The reviewed port wins and
+      // EULA consent is only what the user explicitly accepted (no silent archive acceptance).
+      writePropertyValues(stagingDir, { 'server-port': String(opts.enforceManagerConfig.port) });
+      writeEulaFile(stagingDir, opts.enforceManagerConfig.eulaAccepted);
+      log(`manager config enforced: server-port=${opts.enforceManagerConfig.port} eula=${opts.enforceManagerConfig.eulaAccepted}`);
+    }
     const installDurationMs = Date.now() - startedAt;
     throwIfCancelled();
 
@@ -229,6 +279,34 @@ export async function publishStagedServer(opts: PublishStagedServerOptions): Pro
     const launch = await validate();
     throwIfCancelled();
     flushLog();
+
+    // WP-4.3 / M-10: optional one-boot verification before the record exists (rollback is a plain
+    // staging cleanup). Runtime server_install and the modpack pipeline enable this.
+    if (opts.bootVerify?.enabled) {
+      const javaPath = opts.bootVerify.javaPath ?? opts.input.javaPath ?? null;
+      if (!javaPath) throw appError('validation', 'Boot verification requires a resolved Java runtime.');
+      const bootLaunch = launch ?? validateStagedInstall({ stagingDir, loaderKind, log });
+      opts.onProgress?.({ stage: 'boot verification', progress: 90 });
+      const bootCheck = opts.bootCheck ?? (async (dir, cmd, java) => {
+        const result = await startAndVerify(dir, java ? { exe: java, args: cmd.args } : cmd, {
+          timeoutMs: opts.bootVerify?.timeoutMs ?? 5 * 60_000,
+        });
+        return { ok: result.ok, reason: result.reason, tail: result.tail };
+      });
+      const bootResult = await bootCheck(stagingDir, bootLaunch, javaPath);
+      if (!bootResult.ok) {
+        log(`boot verification failed: ${bootResult.reason}`);
+        flushLog();
+        throw appError(
+          'install-unverified',
+          `The server did not reach "Done (" during install verification: ${bootResult.reason}` +
+          (bootResult.tail.length > 0 ? `\n${bootResult.tail.slice(-15).join('\n')}` : ''),
+        );
+      }
+      log(`boot verification passed: ${bootResult.reason}`);
+      flushLog();
+      throwIfCancelled();
+    }
 
     opts.onProgress?.({ stage: 'publishing', progress: 95 });
     const publishStartedAt = Date.now();

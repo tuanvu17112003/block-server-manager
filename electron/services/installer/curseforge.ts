@@ -3,8 +3,13 @@
 // keyless 2 req/s cap in core, no enumeration, CDN fetch needs no key).
 import path from 'node:path';
 import fs from 'node:fs';
-import { download, extractZip, readZipEntry, listZip, ensureJava, installLoader, runInstaller, launchCommand, requiredJavaMajor, log, UA, writeEula, type LoaderKind } from './core';
+import {
+  download, downloadFirstAvailable, fetchTrusted, extractZip, readZipEntry, listZip, ensureJava,
+  installLoader, runInstaller, launchCommand, requiredJavaMajor, log, writeEula,
+  CURSEFORGE_ALLOWED_HOSTS, UA, type Cancelable, type DownloadCandidate, type LoaderKind,
+} from './core';
 import { makeCuratedResolver } from './curated';
+import { appError } from '../store';
 
 const BASE = 'https://www.curseforge.com/api/v1';
 const OFFICIAL = 'https://api.curseforge.com/v1';
@@ -16,24 +21,44 @@ export function cfKey(dataRoot: string): string | null {
   return _key;
 }
 
-async function official(dataRoot: string, pathname: string): Promise<unknown> {
+async function official(dataRoot: string, pathname: string, opts: Cancelable = {}): Promise<unknown> {
   const key = cfKey(dataRoot);
   if (!key) return null;
-  const r = await fetch(OFFICIAL + pathname, { headers: { 'x-api-key': key, 'User-Agent': UA, Accept: 'application/json' } });
+  const r = await fetchTrusted(OFFICIAL + pathname, CURSEFORGE_ALLOWED_HOSTS, {
+    signal: opts.signal,
+    headers: { 'x-api-key': key, 'User-Agent': UA, Accept: 'application/json' },
+  });
   if (!r.ok) throw new Error(`official API HTTP ${r.status} for ${pathname}`);
   return r.json();
 }
 
 interface CfFileMeta { id: number; displayName?: string; fileName?: string; fileLength?: number; gameVersions?: string[]; serverPackFileId?: number }
-async function fileMetadata(projectId: number, fileId: number): Promise<CfFileMeta> {
-  const r = await fetch(`${BASE}/mods/${projectId}/files/${fileId}`, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+async function fileMetadata(projectId: number, fileId: number, opts: Cancelable = {}): Promise<CfFileMeta> {
+  const r = await fetchTrusted(`${BASE}/mods/${projectId}/files/${fileId}`, CURSEFORGE_ALLOWED_HOSTS, {
+    signal: opts.signal,
+    headers: { 'User-Agent': UA, Accept: 'application/json' },
+  });
   if (!r.ok) throw new Error(`cf metadata HTTP ${r.status}`);
   const j = await r.json() as { data: CfFileMeta | null };
   if (!j.data) throw new Error(`cf metadata empty for ${fileId}`);
   return j.data;
 }
-async function downloadFile(projectId: number, fileId: number, dest: string, size?: number): Promise<void> {
-  await download(`${BASE}/mods/${projectId}/files/${fileId}/download`, dest, size != null ? { size } : {});
+
+/** Ordered keyless download candidates for one CF file (endpoint, then CDN mirrors). */
+export function curseforgeDownloadCandidates(projectId: number, fileId: number, fileName?: string): DownloadCandidate[] {
+  const candidates: DownloadCandidate[] = [{ url: `${BASE}/mods/${projectId}/files/${fileId}/download` }];
+  if (fileName && Number.isInteger(fileId) && fileId > 0) {
+    const folder = Math.floor(fileId / 1000);
+    const remainder = fileId % 1000;
+    candidates.push({ url: `https://edge.forgecdn.net/files/${folder}/${remainder}/${encodeURIComponent(fileName)}` });
+    candidates.push({ url: `https://mediafilez.forgecdn.net/files/${folder}/${remainder}/${encodeURIComponent(fileName)}` });
+  }
+  return candidates;
+}
+
+async function downloadFile(projectId: number, fileId: number, dest: string, opts: { size?: number; fileName?: string; signal?: AbortSignal } = {}): Promise<void> {
+  const candidates = curseforgeDownloadCandidates(projectId, fileId, opts.fileName).map(candidate => ({ ...candidate, size: opts.size }));
+  await downloadFirstAvailable(candidates, { dest, allowedHosts: CURSEFORGE_ALLOWED_HOSTS, signal: opts.signal });
 }
 const isClientOnly = (gameVersions: string[] | undefined): boolean => !!gameVersions?.includes('Client') && !gameVersions.includes('Server');
 
@@ -122,7 +147,7 @@ export async function inspectStagedZip(zipPath: string): Promise<CfInspection> {
 }
 
 // ---- install engine ----
-export interface InstallCfOpts {
+export interface InstallCfOpts extends Cancelable {
   projectId?: number; zipPath?: string; dir: string; dataRoot: string; cacheDir: string;
   onProgress?: (p: { stage: string; pct?: number }) => void;
 }
@@ -130,41 +155,73 @@ export interface InstallCfResult { route: 'A' | 'B'; installed: number; skippedC
 
 interface CfManifest { manifestType: string; manifestVersion: number; minecraft: { version: string; modLoaders: { id: string; primary?: boolean }[] }; files?: { projectID: number; fileID: number; required?: boolean }[]; name?: string }
 
+/** Infer loader/MC/version from server-pack archive contents when no manifest.json exists (WP-4.5). */
+export function inferServerPackMetadata(entryNames: string[]): { loader: LoaderKind; mc: string; loaderVersion: string | null } | null {
+  const names = entryNames.map((name) => name.replace(/\\/g, '/'));
+  // `forge-<mc>-<forgeVer>-installer.jar` / `neoforge-<mc>-<ver>-installer.jar`
+  for (const name of names) {
+    const match = name.match(/(?:^|\/)(forge|neoforge)-(\d+\.\d+(?:\.\d+)?)-([\d.]+)-installer\.jar$/i);
+    if (match) return { loader: match[1]!.toLowerCase() as LoaderKind, mc: match[2]!, loaderVersion: match[3]! };
+  }
+  // Legacy maven layout inside the pack: libraries/net/minecraftforge/forge/<mc>-<ver>/
+  for (const name of names) {
+    const legacy = name.match(/libraries\/net\/minecraftforge\/forge\/(\d+\.\d+(?:\.\d+)?)-([\d.]+)(?:\/|$)/i);
+    if (legacy) return { loader: 'forge', mc: legacy[1]!, loaderVersion: legacy[2]! };
+  }
+  // Fabric/Quilt launch jar + vanilla server jar naming.
+  const fabric = names.some((name) => /fabric-server-launch\.jar$/i.test(name));
+  const quilt = names.some((name) => /quilt-server-launch\.jar$/i.test(name));
+  for (const name of names) {
+    const vanilla = name.match(/(?:^|\/)(?:server|minecraft_server)\.(\d+\.\d+(?:\.\d+)?)\.jar$/i)
+      ?? name.match(/libraries\/net\/minecraft\/server\/(\d+\.\d+(?:\.\d+)?)\//i);
+    if (vanilla) return { loader: quilt ? 'quilt' : fabric ? 'fabric' : 'vanilla', mc: vanilla[1]!, loaderVersion: null };
+  }
+  return null;
+}
+
 export async function installCurseforge(o: InstallCfOpts): Promise<InstallCfResult> {
+  const { signal } = o;
   const result: InstallCfResult = { route: 'A', installed: 0, skippedClientOnly: 0, skippedOptional: 0, manuallyRequired: [], warnings: [], loader: null, loaderVersion: null, mc: null };
   let clientZip = o.zipPath ?? null;
 
   // key mode one-click: latest file → serverPackFileId → CDN zip (route A)
   if (!clientZip && o.projectId && cfKey(o.dataRoot)) {
     try {
-      const list = await official(o.dataRoot, `/mods/${o.projectId}/files?pageSize=1&index=0`) as { data?: CfFileMeta[] } | null;
+      const list = await official(o.dataRoot, `/mods/${o.projectId}/files?pageSize=1&index=0`, { signal }) as { data?: CfFileMeta[] } | null;
       const latest = list?.data?.[0];
       if (latest) {
-        const f = await official(o.dataRoot, `/mods/${o.projectId}/files/${latest.id}`) as { data?: CfFileMeta } | null;
+        const f = await official(o.dataRoot, `/mods/${o.projectId}/files/${latest.id}`, { signal }) as { data?: CfFileMeta } | null;
         const sp = f?.data?.serverPackFileId;
         if (sp) {
-          const du = await official(o.dataRoot, `/mods/${o.projectId}/files/${sp}/download-url`) as { data?: unknown } | null;
+          const du = await official(o.dataRoot, `/mods/${o.projectId}/files/${sp}/download-url`, { signal }) as { data?: unknown } | null;
           const url = typeof du?.data === 'string' ? du.data : (du?.data as { downloadUrl?: string } | undefined)?.downloadUrl;
-          const meta = await official(o.dataRoot, `/mods/${o.projectId}/files/${sp}`) as { data?: CfFileMeta } | null;
+          const meta = await official(o.dataRoot, `/mods/${o.projectId}/files/${sp}`, { signal }) as { data?: CfFileMeta } | null;
           if (url) {
             const dest = path.join(o.cacheDir, 'cfpack', `${o.projectId}-server-${sp}.zip`);
-            if (!fs.existsSync(dest)) await download(url, dest, meta?.data?.fileLength != null ? { size: meta.data.fileLength } : {});
+            await downloadFirstAvailable([{ url, size: meta?.data?.fileLength }], {
+              dest, allowedHosts: CURSEFORGE_ALLOWED_HOSTS, signal,
+            });
             clientZip = dest;
             log(`[curseforge] key mode: server pack "${meta?.data?.displayName}" via serverPackFileId`);
           }
         } else log('[curseforge] key mode: no serverPackFileId — falling back to client pack');
       }
-    } catch (e) { log(`[curseforge] key mode unavailable (${(e as Error).message}) — falling back to keyless`); }
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      log(`[curseforge] key mode unavailable (${(e as Error).message}) — falling back to keyless`);
+    }
   }
 
   if (!clientZip && o.projectId) {
-    const r = await fetch(`${BASE}/mods/${o.projectId}/files?pageSize=1&index=0`, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+    const r = await fetchTrusted(`${BASE}/mods/${o.projectId}/files?pageSize=1&index=0`, CURSEFORGE_ALLOWED_HOSTS, {
+      signal, headers: { 'User-Agent': UA, Accept: 'application/json' },
+    });
     if (!r.ok) throw new Error(`cf files HTTP ${r.status}`);
     const j = await r.json() as { data: CfFileMeta[] };
     const latest = j.data[0];
     if (!latest) throw new Error('no files');
     clientZip = path.join(o.cacheDir, 'cfpack', `${o.projectId}-${latest.id}.zip`);
-    if (!fs.existsSync(clientZip)) await downloadFile(o.projectId, latest.id, clientZip, latest.fileLength);
+    await downloadFile(o.projectId, latest.id, clientZip, { size: latest.fileLength, fileName: latest.fileName, signal });
   }
   if (!clientZip) throw new Error('no CurseForge archive provided');
   if (fs.existsSync(o.dir)) throw new Error(`dir already exists: ${o.dir}`);
@@ -185,19 +242,41 @@ export async function installCurseforge(o: InstallCfOpts): Promise<InstallCfResu
     kind = names.some(n => /fabric-server-launch/.test(n)) ? 'fabric'
       : names.some(n => /quilt-server-launch/.test(n)) ? 'quilt' : 'forge';
     ver = null; mc = null;
+    // WP-4.5: server packs without manifest.json still identify their loader/MC through the
+    // shipped installer JAR name (e.g. forge-1.20.1-47.4.0-installer.jar) or the maven layout.
+    const inferred = inferServerPackMetadata(names);
+    if (inferred) {
+      kind = inferred.loader; mc = inferred.mc; ver = inferred.loaderVersion;
+      log(`[curseforge] inferred metadata from archive: ${kind} ${mc}${ver ? ` ${ver}` : ''}`);
+    }
   }
   result.loader = kind; result.loaderVersion = ver; result.mc = mc;
 
-  const javaMajor = mc ? await requiredJavaMajor(mc) : 21;
-  o.onProgress?.({ stage: `resolving Java ${javaMajor}`, pct: 2 });
-  const rt = await ensureJava(javaMajor, path.join(o.dataRoot, 'runtime'), o.cacheDir);
+  // WP-4.5: a blank mcVersion is never guessed into a Java major. Java is resolved lazily, only
+  // when a loader actually has to run/install; a prebuilt server pack needs no runtime to extract.
+  let rt: { javapath: string } | null = null;
+  const resolveJavaRuntime = async (): Promise<string> => {
+    if (!mc) {
+      throw appError(
+        'validation',
+        'CurseForge pack does not declare a Minecraft version; refusing to guess a Java runtime. '
+        + 'Use a pack with manifest.json or resolve the pack metadata first.',
+      );
+    }
+    if (!rt) {
+      const javaMajor = await requiredJavaMajor(mc, { signal });
+      o.onProgress?.({ stage: `resolving Java ${javaMajor}`, pct: 2 });
+      rt = await ensureJava(javaMajor, path.join(o.dataRoot, 'runtime'), o.cacheDir, undefined, { signal });
+    }
+    return rt.javapath;
+  };
   fs.mkdirSync(o.dir, { recursive: true });
 
   o.onProgress?.({ stage: 'extracting pack', pct: 8 });
   if (!hasManifest) {
-    await extractZip(clientZip, o.dir, { root: '', skipExisting: true });
+    await extractZip(clientZip, o.dir, { root: '', skipExisting: true, signal });
   } else {
-    await extractZip(clientZip, o.dir, { root: 'overrides/', skipExisting: true });
+    await extractZip(clientZip, o.dir, { root: 'overrides/', skipExisting: true, signal });
   }
 
   // loader (M-9): prebuilt → as-is; shipped installer → run it ourselves; else from manifest
@@ -206,9 +285,9 @@ export async function installCurseforge(o: InstallCfOpts): Promise<InstallCfResu
     const shipped = fs.readdirSync(o.dir).find(f => /^(forge|neoforge)-.*-installer\.jar$/i.test(f));
     if (shipped) {
       log(`[curseforge] pack ships installer "${shipped}" — running --installServer ourselves`);
-      await runInstaller(rt.javapath, path.join(o.dir, shipped), ['--installServer'], o.dir, 'shipped loader');
+      await runInstaller(await resolveJavaRuntime(), path.join(o.dir, shipped), ['--installServer'], o.dir, 'shipped loader', { signal });
     } else if (kind && mc && ver) {
-      await installLoader(kind, o.dir, mc, ver, rt.javapath, o.cacheDir);
+      await installLoader(kind, o.dir, mc, ver, await resolveJavaRuntime(), o.cacheDir, { signal });
     } else throw new Error('server pack has neither a loader nor a manifest to install one from');
   }
 
@@ -218,14 +297,15 @@ export async function installCurseforge(o: InstallCfOpts): Promise<InstallCfResu
     for (const f of manifest.files) {
       if (f.required === false) { result.skippedOptional++; continue; }
       try {
-        const meta = await fileMetadata(f.projectID, f.fileID);
+        const meta = await fileMetadata(f.projectID, f.fileID, { signal });
         if (isClientOnly(meta.gameVersions)) { result.skippedClientOnly++; continue; }
         const fileName = meta.fileName ?? `${f.fileID}.jar`;
         if (curated.resolve(`mods/${fileName}`, 'required').env === 'unsupported') { result.skippedClientOnly++; continue; }
-        await downloadFile(f.projectID, f.fileID, path.join(o.dir, 'mods', fileName), meta.fileLength);
+        await downloadFile(f.projectID, f.fileID, path.join(o.dir, 'mods', fileName), { size: meta.fileLength, fileName, signal });
         result.installed++;
         if (result.installed % 25 === 0) o.onProgress?.({ stage: `downloading mods ${result.installed}/${total}`, pct: 20 + Math.round(65 * result.installed / total) });
       } catch (e) {
+        if (signal?.aborted) throw e;
         result.manuallyRequired.push({ projectId: f.projectID, fileId: f.fileID, pageUrl: `https://www.curseforge.com/minecraft/mc-mods?fileID=${f.fileID}`, reason: (e as Error).message });
       }
     }

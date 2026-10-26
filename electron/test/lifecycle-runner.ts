@@ -97,6 +97,8 @@ function fixture(
   fs.writeFileSync(path.join(serverDir, 'eula.txt'), 'eula=true\n');
   fs.writeFileSync(path.join(serverDir, 'server.properties'), 'server-port=25601\nlevel-name=world\n');
   fs.mkdirSync(path.join(serverDir, 'mods'), { recursive: true });
+  // Managed-install sidecar: L2/L3 only run for managed servers (D9); fixtures exercise them.
+  fs.writeFileSync(path.join(serverDir, 'msm-install.json'), JSON.stringify({ platform: 'modrinth', slug: null, files: [], loader: 'fabric', mc: '1.21.1' }));
   const javaPath = path.join(root, 'fake-java.exe');
   fs.writeFileSync(javaPath, 'fake');
 

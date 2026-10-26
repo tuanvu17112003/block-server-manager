@@ -279,5 +279,39 @@ export async function runInstallSuite(run: TestRun): Promise<void> {
       assert.equal(rows.filter(row => row.name === 'Wired Pipeline Duplicate').length, 1);
       assert.deepEqual(listing(path.join(h.dataRoot, STAGING_DIR)), []);
     });
+    await run.must('boot verification runs before publication; a passing boot publishes', async () => {
+      const seen: string[] = [];
+      const result = await publishStagedServer({
+        dataRoot: h.dataRoot,
+        store: h.store(),
+        input: { ...VANILLA_INPUT, name: 'Boot Verified', port: 25901 } as never,
+        install: async ({ stagingDir }) => fakeVanillaInstall(stagingDir),
+        bootVerify: { enabled: true, javaPath: 'C:/fake/java.exe' },
+        bootCheck: async (_dir, launch) => {
+          seen.push(launch.args.join(' '));
+          return { ok: true, reason: 'Done (1.200s)! For help, type "help"', tail: [] };
+        },
+      });
+      assert.equal(result.server.name, 'Boot Verified');
+      assert.equal(seen.length, 1, 'boot verification must run exactly once');
+      assert.ok(fs.existsSync(path.join(h.dataRoot, 'servers', result.server.id, 'server.jar')));
+      const log = fs.readFileSync(path.join(h.dataRoot, 'servers', result.server.id, INSTALLER_LOG_FILE), 'utf8');
+      assert.match(log, /boot verification passed/);
+    });
+
+    await run.must('failed boot verification leaves no record/dir and rejects install-unverified (WP-4.3)', async () => {
+      const before = h.store().listServers().length;
+      await assert.rejects(() => publishStagedServer({
+        dataRoot: h.dataRoot,
+        store: h.store(),
+        input: { ...VANILLA_INPUT, name: 'Boot Failed', port: 25902 } as never,
+        install: async ({ stagingDir }) => fakeVanillaInstall(stagingDir),
+        bootVerify: { enabled: true, javaPath: 'C:/fake/java.exe' },
+        bootCheck: async () => ({ ok: false, reason: 'process exited (code 1) before Done(', tail: ['[x] boom'] }),
+      }), (error: unknown) => (error as { code?: string }).code === 'install-unverified');
+      assert.equal(h.store().listServers().length, before, 'failed boot verification must not add a record');
+      assert.ok(!h.store().listServers().some((row) => row.name === 'Boot Failed'));
+      assert.deepEqual(listing(path.join(h.dataRoot, STAGING_DIR)), []);
+    });
   });
 }

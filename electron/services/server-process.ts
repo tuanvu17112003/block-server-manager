@@ -40,6 +40,8 @@ interface PreparedLaunch {
   dir: string;
   cmd: { exe: string; args: string[] };
   learnedFile: string;
+  /** Managed install platform (sidecar). `null` = unmanaged server: L2/L3 must not mutate it (D9). */
+  sidecarPlatform: 'modrinth' | 'curseforge' | null;
 }
 
 export interface ReadinessPayload {
@@ -270,18 +272,24 @@ export class ServerProcesses {
     if (!cmd.args.some((arg) => arg.startsWith('-Xmx'))) cmd.args.unshift(`-Xmx${dto.ramMb}M`);
     if (!cmd.args.some((arg) => arg.startsWith('-Xms'))) cmd.args.unshift(`-Xms${dto.ramMb}M`);
 
-    // L2: disable jars that declare themselves client-side (protect community force-includes).
+    // L2: only managed installs are mutated (reference/spike install-time defense). Unmanaged
+    // servers are never auto-modified (D9), while managed packs keep the community protect set.
     const sidecar = this.readSidecar(dir);
-    const learnedFile = path.join(this.dataRoot, 'state', 'env-overrides-learned.json');
-    const curated = sidecar?.platform
-      ? makeCuratedResolver({ platform: sidecar.platform, packSlug: sidecar.slug ?? null, presentPaths: sidecar.files ?? [], learnedFile })
-      : null;
-    await applyJarSideness(path.join(dir, 'mods'), curated?.protectBasenames ?? new Set());
-    return { dir, cmd, learnedFile };
+    const managed = sidecar !== null;
+    if (managed) {
+      const learnedFile = path.join(this.dataRoot, 'state', 'env-overrides-learned.json');
+      const curated = sidecar?.platform
+        ? makeCuratedResolver({ platform: sidecar.platform, packSlug: sidecar.slug ?? null, presentPaths: sidecar.files ?? [], learnedFile })
+        : null;
+      await applyJarSideness(path.join(dir, 'mods'), curated?.protectBasenames ?? new Set());
+      return { dir, cmd, learnedFile, sidecarPlatform: sidecar.platform ?? null };
+    }
+    console.log(`[start] unmanaged server (no install sidecar): skipping L2/L3 auto-modification`);
+    return { dir, cmd, learnedFile: '', sidecarPlatform: null };
   }
 
   private async bootLoop(id: string, dto: ServerDto, prepared: PreparedLaunch): Promise<void> {
-    const { dir, cmd, learnedFile } = prepared;
+    const { dir, cmd, learnedFile, sidecarPlatform } = prepared;
     this.setStatus(id, 'starting');
     for (let round = 1; round <= 8; round += 1) {
       if (this.stopRequested.has(id)) {
@@ -310,6 +318,14 @@ export class ServerProcesses {
       }
       // Crashed before Done(: L3 attribution + disable + learn + retry. No user-visible crash
       // event until the retry loop gives up (avoids toast spam while auto-fixing).
+      // D9 policy: unmanaged servers are never auto-modified; CurseForge packs are prune-only
+      // (disable attributed jars, never fetch Modrinth dependencies); Modrinth managed packs may
+      // fetch missing hard dependencies.
+      if (sidecarPlatform === null) {
+        this.setStatus(id, 'crashed');
+        this.emitReadiness(id, { phase: 'failed', attempt: round, message: 'Unmanaged server crashed during boot; automatic mod repair is disabled for unmanaged servers.' });
+        return;
+      }
       const tail = exit.ring.slice(-400);
       const { disable, add } = analyzeFailure(tail);
       const crashJars = parseCrashReports(dir);
@@ -331,23 +347,27 @@ export class ServerProcesses {
         try { if (learned.length > 0) appendLearned(learned, learnedFile); }
         catch (error) { console.warn(`[autofix r${round}] could not persist learned entries: ${(error as Error).message}`); }
       }
-      // L3 dependency fetch: a missing hard dependency from Modrinth is installed, not skipped.
-      for (const depId of add) {
-        if (idMap.has(depId)) continue;
-        try {
-          const jar = await fetchModrinthDependency({
-            mc: dto.mcVersion,
-            loader: dto.loader,
-            modId: depId,
-            modsDir: path.join(dir, 'mods'),
-          });
-          if (jar) {
-            acted = true;
-            console.log(`[autofix r${round}] added missing dependency ${depId} (${path.basename(jar)})`);
+      if (sidecarPlatform === 'modrinth') {
+        // L3 dependency fetch: a missing hard dependency from Modrinth is installed, not skipped.
+        for (const depId of add) {
+          if (idMap.has(depId)) continue;
+          try {
+            const jar = await fetchModrinthDependency({
+              mc: dto.mcVersion,
+              loader: dto.loader,
+              modId: depId,
+              modsDir: path.join(dir, 'mods'),
+            });
+            if (jar) {
+              acted = true;
+              console.log(`[autofix r${round}] added missing dependency ${depId} (${path.basename(jar)})`);
+            }
+          } catch (error) {
+            console.log(`[autofix r${round}] could not fetch ${depId}: ${(error as Error).message}`);
           }
-        } catch (error) {
-          console.log(`[autofix r${round}] could not fetch ${depId}: ${(error as Error).message}`);
         }
+      } else if (add.length > 0) {
+        console.log(`[autofix r${round}] CurseForge pack: dependency fetch is prune-only; unresolved: ${add.join(', ')}`);
       }
       if (!acted) {
         this.setStatus(id, 'crashed');
