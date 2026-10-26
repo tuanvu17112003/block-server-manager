@@ -2,6 +2,8 @@
 import { TestRun } from './harness';
 import { runManagementSuite, runStoreSuite } from './services/management.suite';
 import { runPipelineSuite } from './services/pipeline.suite';
+import { runInstallSuite } from './services/install.suite';
+import { runValidationSuite } from './services/validation.suite';
 
 export interface SuiteResult {
   ok: boolean;
@@ -14,6 +16,8 @@ export async function runServiceTests(filter?: string): Promise<SuiteResult> {
     { name: 'store', run: runStoreSuite },
     { name: 'management', run: runManagementSuite },
     { name: 'pipeline', run: runPipelineSuite },
+    { name: 'install', run: runInstallSuite },
+    { name: 'validation', run: runValidationSuite },
   ];
   for (const suite of suites) {
     if (filter && !suite.name.includes(filter)) continue;

@@ -10,8 +10,9 @@
 |---|---|---|
 | 0 — Safety net & verification foundation | **DONE** | tag `pre-completion-fixes` + baseline commit; `.app-data` 6.6 GB mirror; zero-dep harness (unit via `node:test`, Electron service/contract/UI runners); `npm run verify` = **PASS 9/9**; screenshots under `artifacts/<ts>/`; test modes isolated to temp profiles/data roots; selftest verdict fixed (B-25 partially) |
 | 1 — Release blockers | **DONE (with two tracked verification items)** | Store durability/lock + corrupt quarantine + lost-update proof (unit 21 checks); Paper install via Fill v3 (live E2E `paper-install/start/kill-stopped` PASS); pipeline report full DTO + install-report.json + ErrorBoundary (service suite); bounded quit shutdown + tree-kill/status semantics; legacy Tauri importer + startup hook (12 unit checks); curated L4 data bundled with build-contract gate (`runtime-data` PASS). Live proofs: `node scripts/verify.mjs` PASS 9/9; engine e2e PASS incl. Paper/kill (261 s). Tracked: P0-7 verified install → WP-4.3; quit-while-running live proof → WP-8.1 |
-| 2 — Lifecycle & process correctness | in progress | target: lifecycle stress + identity/orphan tests |
-| 3–8 | pending | — |
+| 2 — Lifecycle & process correctness | **DONE** | Staged atomic install publish (new `install-transaction.ts`, shared by server_install + pipeline; record only after validation, EXDEV fallback, installer.log); per-server start reservation + stop-during-boot abort + single crash event + spawn-error io; identity marker `-Dtestmultiai.server.id` + CIM-verified reaping + legacy `server.lock` + tree kill; port allocator + create validation (loader/mc/RAM/port, Quilt rejected) + fail-closed start port conflicts; command-history contract (per-server 100, newest-first, timestamps) + validated single-line console commands + bounded async rotated tail; EULA authority (file+flag AND, atomic settings, containment); IPC sender-frame guard. Evidence: `npm run verify` **PASS 10/10** (new `lifecycle` suite 9 scenarios); engine e2e **PASS 17/17** after the changes (Paper build 232; Modrinth cobbleverse now logs `146 files · 22 unsupported` → bundled L4 curated data is live) |
+| 3 — Catalogue & Java | in progress | target: full provider catalogues + Java DTO/arch/SHA parity |
+| 4–8 | pending | — |
 
 ---
 

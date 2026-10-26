@@ -7,9 +7,25 @@
 // - a missing file is a fresh store, but an unreadable/corrupt file is NEVER treated as empty:
 //   it is quarantined (copy) and a loud `store-corrupt` error is thrown;
 // - writes go to a unique temp file, are fsynced, the previous file is kept as `.bak`, then renamed.
+//
+// WP-2.3 additions:
+// - `createServer` validates every field through `validate-args.ts` (name/loader/mcVersion/RAM/port)
+//   and rejects duplicate explicit ports (SQLite `port UNIQUE` parity);
+// - `allocatePort(preferred?, { probe })` is the async port allocator used by IPC create paths:
+//   range check + record uniqueness + injectable OS bind probe (real probe by default);
+// - command history is capped at 100 entries per server and read newest-first (lifecycle contract),
+//   while `commandHistory` still returns `string[]` for the renderer.
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import {
+  AUTO_PORT_START,
+  PORT_MAX,
+  normalizeCreateServerInput,
+  probePortAvailable,
+  validatePortNumber,
+  type PortAvailabilityProbe,
+} from './validate-args';
 
 export interface ServerDto {
   id: string;
@@ -81,6 +97,21 @@ interface AppData {
 }
 
 let tmpSeq = 0;
+
+/** Newest N commands retained per server (Rust `MAX_COMMAND_HISTORY` parity). */
+export const MAX_COMMAND_HISTORY_PER_SERVER = 100;
+/** Hard cap for the whole history blob (all servers); oldest rows roll off first. */
+const MAX_COMMAND_HISTORY_TOTAL = 2000;
+
+export interface AllocatePortOptions {
+  /** Injectable OS bind probe (`true` = port free). Defaults to the real 127.0.0.1 probe. */
+  probe?: PortAvailabilityProbe;
+}
+
+export interface CommandHistoryEntry {
+  command: string;
+  at: string;
+}
 
 function emptyData(): AppData {
   return {
@@ -216,22 +247,43 @@ export class Store {
     return this.data.servers.find((server) => server.id === id) ?? null;
   }
 
+  /**
+   * Create a server row. Input is normalised/validated first (WP-2.3): name ≤64 with no newline/`=`,
+   * loader allowlist (Quilt rejected per ADR-0005), Minecraft version syntax, RAM 512–65536 MB and an
+   * explicit port in 1024–65535. Loader spelling is preserved for legacy-friendly callers while new
+   * IPC/UI paths canonicalise before calling (see `normalizeCreateServerInput`).
+   *
+   * Explicit ports must be unique across records (SQLite `port UNIQUE` parity). Auto ports
+   * (`undefined`/`0`) are assigned synchronously from 25565+ skipping recorded ports; the async
+   * OS-probing allocator is {@link allocatePort} (used by the `servers_create` IPC handler).
+   */
   createServer(input: CreateServerInput): ServerDto {
+    const normalized = normalizeCreateServerInput(input, { preserveLoaderCase: true });
     return this.mutate(() => {
-      if (this.data.servers.some((server) => server.name === input.name)) {
-        throw appError('conflict', `A server named "${input.name}" already exists.`);
+      if (this.data.servers.some((server) => server.name === normalized.name)) {
+        throw appError('conflict', `A server named "${normalized.name}" already exists.`);
+      }
+      let port: number;
+      if (normalized.port !== undefined) {
+        port = validatePortNumber(normalized.port);
+        const owner = this.data.servers.find((server) => server.port === port);
+        if (owner) {
+          throw appError('conflict', `Port ${port} is already assigned to server "${owner.name}".`);
+        }
+      } else {
+        port = this.nextRecordFreePort();
       }
       const dto: ServerDto = {
         id: randomUUID(),
-        name: input.name,
-        loader: input.loader,
-        mcVersion: input.mcVersion,
-        loaderVersion: input.loaderVersion ?? null,
-        modpackId: input.modpackId ?? null,
-        port: input.port && input.port > 0 ? input.port : 25565,
-        ramMb: input.ramMb,
-        javaPath: input.javaPath ?? null,
-        eulaAccepted: input.eulaAccepted ?? false,
+        name: normalized.name,
+        loader: normalized.loader,
+        mcVersion: normalized.mcVersion,
+        loaderVersion: normalized.loaderVersion ?? null,
+        modpackId: normalized.modpackId ?? null,
+        port,
+        ramMb: normalized.ramMb,
+        javaPath: normalized.javaPath ?? null,
+        eulaAccepted: normalized.eulaAccepted ?? false,
         status: 'stopped',
         createdAt: new Date().toISOString(),
         motd: '',
@@ -244,6 +296,69 @@ export class Store {
       this.data.servers.push(dto);
       return dto;
     });
+  }
+
+  /**
+   * Allocate a game port (WP-2.3).
+   *
+   * - `preferred` given: must be an integer in 1024–65535 (`validation`), not assigned to another
+   *   record and currently bindable (`conflict`); the *same* port is returned — never rewritten.
+   * - no preferred (null/undefined/0): first free port ≥25565, skipping recorded ports and probing
+   *   each candidate; fails closed with `conflict` when the range is exhausted.
+   *
+   * The OS probe is injectable for deterministic tests; production uses
+   * {@link probePortAvailable} (127.0.0.1 bind).
+   */
+  async allocatePort(preferred?: number | null, options: AllocatePortOptions = {}): Promise<number> {
+    this.reload();
+    const probe = options.probe ?? probePortAvailable;
+    if (typeof probe !== 'function') throw appError('validation', 'Port probe must be a function.');
+    const used = new Map<number, string>();
+    for (const server of this.data.servers) {
+      if (Number.isInteger(server.port) && server.port >= 1 && server.port <= PORT_MAX) {
+        used.set(server.port, server.name);
+      }
+    }
+
+    const request = preferred === undefined || preferred === null || preferred === 0
+      ? null
+      : validatePortNumber(preferred);
+    const probePort = async (port: number): Promise<boolean> => {
+      try {
+        return await probe(port);
+      } catch (error) {
+        throw appError('io', `Could not verify port ${port}: ${(error as Error).message}`);
+      }
+    };
+
+    if (request !== null) {
+      const owner = used.get(request);
+      if (owner !== undefined) {
+        throw appError('conflict', `Port ${request} is already assigned to server "${owner}".`);
+      }
+      if (!(await probePort(request))) {
+        throw appError('conflict', `Port ${request} is already in use on this machine. Choose another port.`);
+      }
+      return request;
+    }
+
+    for (let port = AUTO_PORT_START; port <= PORT_MAX; port += 1) {
+      if (used.has(port)) continue;
+      if (await probePort(port)) return port;
+    }
+    throw appError('conflict', `No free game port is available between ${AUTO_PORT_START} and ${PORT_MAX}.`);
+  }
+
+  /** Synchronous record-only allocation for direct Store callers; the OS probe runs in allocatePort. */
+  private nextRecordFreePort(): number {
+    const used = new Set<number>();
+    for (const server of this.data.servers) {
+      if (Number.isInteger(server.port) && server.port >= 1 && server.port <= PORT_MAX) used.add(server.port);
+    }
+    for (let port = AUTO_PORT_START; port <= PORT_MAX; port += 1) {
+      if (!used.has(port)) return port;
+    }
+    throw appError('conflict', `No free game port is available between ${AUTO_PORT_START} and ${PORT_MAX}.`);
   }
 
   deleteServer(id: string): void {
@@ -331,16 +446,43 @@ export class Store {
     });
   }
 
+  /**
+   * Record a successful console command send. Retention (WP-2.3 / Rust `MAX_COMMAND_HISTORY`):
+   * newest `MAX_COMMAND_HISTORY_PER_SERVER` entries per server, with a whole-file safety cap.
+   * The row stores `{ serverId, command, at }` so timestamps survive a restart.
+   */
   pushCommand(serverId: string, command: string): void {
     this.mutate(() => {
       this.data.consoleCommandHistory.push({ serverId, command, at: new Date().toISOString() });
-      if (this.data.consoleCommandHistory.length > 2000) this.data.consoleCommandHistory.shift();
+      const forServer = this.data.consoleCommandHistory.filter((row) => row.serverId === serverId);
+      const excess = forServer.length - MAX_COMMAND_HISTORY_PER_SERVER;
+      if (excess > 0) {
+        const drop = new Set(forServer.slice(0, excess));
+        this.data.consoleCommandHistory = this.data.consoleCommandHistory.filter((row) => !drop.has(row));
+      }
+      if (this.data.consoleCommandHistory.length > MAX_COMMAND_HISTORY_TOTAL) {
+        this.data.consoleCommandHistory = this.data.consoleCommandHistory.slice(-MAX_COMMAND_HISTORY_TOTAL);
+      }
     });
   }
 
-  commandHistory(serverId: string): string[] {
+  /**
+   * Per-server command history, NEWEST FIRST (the renderer sends the newest command on Arrow-Up;
+   * Rust `console::command_history` also ordered newest-first). Returns `string[]` for
+   * `server_command_history`; use {@link commandHistoryEntries} when the timestamp is needed.
+   */
+  commandHistory(serverId: string, limit = MAX_COMMAND_HISTORY_PER_SERVER): string[] {
+    return this.commandHistoryEntries(serverId, limit).map((entry) => entry.command);
+  }
+
+  /** Per-server command history as `{ command, at }`, newest first, capped at 100 per server. */
+  commandHistoryEntries(serverId: string, limit = MAX_COMMAND_HISTORY_PER_SERVER): CommandHistoryEntry[] {
     this.reload();
-    return this.data.consoleCommandHistory.filter((row) => row.serverId === serverId).map((row) => row.command);
+    const rows = this.data.consoleCommandHistory.filter((row) => row.serverId === serverId);
+    const max = Math.max(0, Math.min(Math.trunc(limit), MAX_COMMAND_HISTORY_PER_SERVER));
+    const count = Math.min(max, rows.length);
+    if (count === 0) return [];
+    return rows.slice(rows.length - count).reverse().map((row) => ({ command: row.command, at: row.at }));
   }
 
   private requireInData(id: string): ServerDto {

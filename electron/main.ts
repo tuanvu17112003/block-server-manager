@@ -13,7 +13,7 @@ let mainWindow: BrowserWindow | null = null;
 /** Gate modes run headless against throwaway data roots; they must never share a profile or lock. */
 const TEST_FLAGS = [
   '--selftest', '--mgmttest', '--ipctest', '--e2e',
-  '--servicestest', '--contracttest', '--uitest',
+  '--servicestest', '--contracttest', '--uitest', '--lifetest',
 ];
 const testFlag = process.argv.find((arg) => TEST_FLAGS.includes(arg));
 
@@ -216,6 +216,22 @@ if (!hasSingleInstanceLock) {
         try { win.destroy(); } catch { /* already gone */ }
         try { await appRuntime?.shutdown(); } catch { /* best effort */ }
         fs.rmSync(root, { recursive: true, force: true });
+      }
+      return;
+    }
+
+    if (process.argv.includes('--lifetest')) {
+      const root = createTempRoot('msm-life');
+      try {
+        const { runLifecycleTests } = await import('./test/lifecycle-runner');
+        const result = await runLifecycleTests(root);
+        // eslint-disable-next-line no-console
+        console.log(result.report);
+        // eslint-disable-next-line no-console
+        console.log(result.ok ? 'LIFETEST PASS' : 'LIFETEST FAIL');
+        app.exit(result.ok ? 0 : 1);
+      } finally {
+        try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch { /* temp root */ }
       }
       return;
     }

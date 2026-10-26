@@ -4,10 +4,12 @@
 import { spawn, spawnSync, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
-import { launchCommand, ensureServerProperties, writeEula, freePort, analyzeFailure, parseCrashReports, scanModIds, applyJarSideness } from './installer/core';
+import fsp from 'node:fs/promises';
+import { launchCommand, ensureServerProperties, analyzeFailure, parseCrashReports, scanModIds, applyJarSideness } from './installer/core';
 import { makeCuratedResolver, appendLearned } from './installer/curated';
 import { fetchModrinthDependency } from './installer/modrinth';
-import { readProperties, writePropertyValues } from './properties';
+import { readProperties, readEulaState } from './properties';
+import { assertPortAvailable } from './validate-args';
 import { appError, type Store, type ServerDto } from './store';
 
 type Status = 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed';
@@ -36,16 +38,63 @@ interface ExitInfo {
 
 interface Sidecar { platform?: 'modrinth' | 'curseforge'; slug?: string | null; files?: string[] }
 
+export interface ServerProcessOptions {
+  /** Test seam: inject a fake child process instead of spawning java. Never used in production. */
+  spawnOverride?: (exe: string, args: string[], options: SpawnOptions) => ChildProcess;
+  /** Test seam: intercept a force-kill instead of taskkill/process.kill. Never used in production. */
+  killOverride?: (pid: number) => void;
+}
+
+/** JVM identity marker baked into every launch (Rust parity: `-Dtestmultiai.server.id=<id>`). */
+const IDENTITY_FLAG = '-Dtestmultiai.server.id=';
+
+/** Only a real `eula=true` line in eula.txt counts (B-20); see properties.ts readEulaState. */
+
+/** Read up to `maxLines` trailing lines from a log file, bounded to `maxBytes` from the end. */
+async function readTailLines(file: string, maxLines: number, maxBytes = 16 * 1024 * 1024): Promise<string[]> {
+  let handle: fsp.FileHandle;
+  try { handle = await fsp.open(file, 'r'); } catch { return []; }
+  try {
+    const stats = await handle.stat();
+    const readBytes = Math.min(stats.size, maxBytes);
+    if (readBytes <= 0) return [];
+    const buffer = Buffer.alloc(readBytes);
+    await handle.read(buffer, 0, readBytes, stats.size - readBytes);
+    const lines = buffer.toString('utf8').split('\n').filter((line) => line.trim() !== '');
+    // When the file is larger than the window we started mid-line: drop the partial first line.
+    if (stats.size > readBytes && lines.length > 0) lines.shift();
+    return lines.slice(-maxLines);
+  } finally {
+    await handle.close();
+  }
+}
+
+function processCommandLine(pid: number): string | null {
+  if (process.platform !== 'win32') return null;
+  const script = `(Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}").CommandLine`;
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+    encoding: 'utf8',
+    timeout: 5000,
+    windowsHide: true,
+  });
+  if (result.error || result.status !== 0) return null;
+  const output = (result.stdout ?? '').trim();
+  return output === '' ? '' : output;
+}
+
 export class ServerProcesses {
   private running = new Map<string, Running>();
   /** Reserved before the first await so duplicate `server_start` calls cannot spawn twice (B-03). */
   private starting = new Set<string>();
+  /** User asked to stop during a boot/retry loop: the loop must abort instead of respawning. */
+  private stopRequested = new Set<string>();
 
   constructor(
     private store: Store,
     private dataRoot: string,
     private send: (channel: string, payload: unknown) => void,
     private resolveJava: (dto: ServerDto) => Promise<string>,
+    private options: ServerProcessOptions = {},
   ) {}
 
   serverDir(id: string): string { return path.join(this.dataRoot, 'servers', id); }
@@ -81,31 +130,42 @@ export class ServerProcesses {
   history(id: string): string[] { return this.running.get(id)?.ring ?? []; }
 
   /**
-   * Boot-time reaping: a crash leaves the row `running` and a java child alive. Kill only a PID
-   * whose image is still Java, then normalize every live status because nothing is tracked yet.
+   * Boot-time reaping: kill only a PID whose image is java AND whose command line carries this
+   * server's identity marker (fail closed otherwise; Rust parity). Normalize every tracked status
+   * because nothing is tracked yet; unverified live processes are reported, never killed.
    */
   async reapOrphans(): Promise<void> {
     for (const dto of this.store.listServers()) {
-      const pidFile = path.join(this.serverDir(dto.id), '.msm-server.pid');
-      try {
-        const pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
-        if (Number.isInteger(pid) && pid > 0) {
-          let alive = false;
-          try { process.kill(pid, 0); alive = true; } catch { /* already gone */ }
-          if (alive) {
-            const image = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8' });
-            if (/java/i.test(image.stdout ?? '')) {
-              this.killPid(pid);
-              console.log(`[reap] killed orphaned java pid ${pid} for ${dto.name}`);
-            }
+      const dir = this.serverDir(dto.id);
+      const pidFiles = [path.join(dir, '.msm-server.pid'), path.join(dir, 'server.lock')];
+      let handled = false;
+      for (const pidFile of pidFiles) {
+        let pid = 0;
+        try { pid = Number(fs.readFileSync(pidFile, 'utf8').trim().split(/\s+/)[0]); } catch { continue; }
+        if (!Number.isInteger(pid) || pid <= 0) continue;
+        handled = true;
+        let alive = false;
+        try { process.kill(pid, 0); alive = true; } catch { /* already gone */ }
+        if (alive) {
+          const commandLine = processCommandLine(pid);
+          if (commandLine === null) {
+            console.warn(`[reap] ${dto.name}: cannot inspect pid ${pid} (CIM unavailable) — leaving it untouched (fail closed).`);
+            this.store.updateServer(dto.id, { status: 'crashed' });
+            continue;
           }
+          if (!/java/i.test(commandLine) || !commandLine.includes(`${IDENTITY_FLAG}${dto.id}`)) {
+            console.warn(`[reap] ${dto.name}: pid ${pid} is not this server's java process — leaving it untouched (fail closed).`);
+            this.store.updateServer(dto.id, { status: 'crashed' });
+            continue;
+          }
+          this.killPid(pid);
+          console.log(`[reap] killed orphaned java pid ${pid} for ${dto.name}`);
         }
-      } catch {
-        // No pid file: the clean path.
+        try { fs.rmSync(pidFile, { force: true }); } catch { /* best effort */ }
       }
-      try { fs.rmSync(pidFile, { force: true }); } catch { /* best effort */ }
-      if (['running', 'starting', 'stopping'].includes(dto.status)) {
-        this.store.updateServer(dto.id, { status: 'stopped' });
+      if (!handled) {
+        // No lockfile: only normalize rows that claim a live state.
+        if (['running', 'starting', 'stopping'].includes(dto.status)) this.store.updateServer(dto.id, { status: 'stopped' });
       }
     }
   }
@@ -119,6 +179,7 @@ export class ServerProcesses {
     const dto = this.store.getServer(id);
     if (!dto) throw appError('not-found', `Server ${id} not found.`);
     this.starting.add(id);
+    this.stopRequested.delete(id);
     try {
       await this.startInner(id, dto);
     } catch (error) {
@@ -127,18 +188,23 @@ export class ServerProcesses {
       throw error;
     } finally {
       this.starting.delete(id);
+      this.stopRequested.delete(id);
     }
   }
 
   private async startInner(id: string, dto: ServerDto): Promise<void> {
     const dir = this.serverDir(id);
+    // EULA authority (B-20): the JSON flag and the file must BOTH say accepted. Never auto-write
+    // `eula=true` here; acceptance is only written by an explicit Settings/Create action.
     if (!dto.eulaAccepted) throw appError('validation', 'EULA must be accepted before starting.');
-    writeEula(dir);
-    // server.properties is authoritative; if its port is taken, pick a free one and persist it.
+    if (!readEulaState(dir).accepted) {
+      throw appError('validation', 'This server\'s eula.txt does not accept the Minecraft EULA. Open Settings and accept it explicitly before starting.');
+    }
+    // server.properties is authoritative. A port that is no longer free is a conflict now:
+    // silently starting on a different port breaks the address the user configured (B-22).
     const configured = Number(readProperties(dir).values['server-port']);
     const preferred = Number.isInteger(configured) && configured > 0 ? configured : dto.port;
-    const port = await freePort(preferred);
-    writePropertyValues(dir, { 'server-port': String(port) });
+    const port = await assertPortAvailable(preferred);
     ensureServerProperties(dir, port);
     if (port !== dto.port) this.store.updateServer(id, { port });
 
@@ -147,6 +213,8 @@ export class ServerProcesses {
       throw appError('io', `Java executable not found: ${javaExe ?? '(none)'}. Install or select a Java runtime in Settings.`);
     }
     const cmd = launchCommand(dir, javaExe);
+    // Identity marker: lets boot-time reaping prove a java process is ours (B-14).
+    if (!cmd.args.some((arg) => arg.startsWith(IDENTITY_FLAG))) cmd.args.unshift(`${IDENTITY_FLAG}${id}`);
     if (!cmd.args.some((arg) => arg.startsWith('-Xmx'))) cmd.args.unshift(`-Xmx${dto.ramMb}M`);
     if (!cmd.args.some((arg) => arg.startsWith('-Xms'))) cmd.args.unshift(`-Xms${dto.ramMb}M`);
 
@@ -160,11 +228,12 @@ export class ServerProcesses {
 
     this.setStatus(id, 'starting');
     for (let round = 1; round <= 8; round += 1) {
-      const watch = this.spawnWatch(id, dir, cmd);
+      if (this.stopRequested.has(id)) { this.setStatus(id, 'stopped'); return; }
+      const watch = this.spawnWatch(id, dir, cmd, this.options.spawnOverride);
       const outcome = await watch.started; // resolves on Done(, user stop, or early exit
       if (outcome === 'running') return;
       const exit = await watch.exited; // wait for the dead process before reading crash data
-      if (outcome === 'stopped' || exit.userStop) {
+      if (outcome === 'stopped' || exit.userStop || this.stopRequested.has(id)) {
         this.setStatus(id, 'stopped');
         return;
       }
@@ -246,6 +315,7 @@ export class ServerProcesses {
       this.running.delete(id);
       try { running.logStream?.end(); } catch { /* already closed */ }
       try { fs.rmSync(path.join(this.serverDir(id), '.msm-server.pid'), { force: true }); } catch { /* best effort */ }
+      try { fs.rmSync(path.join(this.serverDir(id), 'server.lock'), { force: true }); } catch { /* best effort */ }
       const info2: ExitInfo = { ...info, ring: [...running.ring], spawnError };
       if (info2.userStop) this.setStatus(id, 'stopped');
       else if (info2.sawDone) this.setStatus(id, 'crashed');
@@ -272,6 +342,7 @@ export class ServerProcesses {
     }
     if (proc.pid) {
       try { fs.writeFileSync(path.join(dir, '.msm-server.pid'), String(proc.pid)); } catch { /* identity is best effort */ }
+      try { fs.writeFileSync(path.join(dir, 'server.lock'), String(proc.pid)); } catch { /* Rust-era lockfile parity */ }
     }
     this.running.set(id, running);
 
@@ -283,7 +354,9 @@ export class ServerProcesses {
       settleExit({ code, signal, userStop: running.userStop, sawDone: running.sawDone });
     });
 
-    const onLine = (line: string): void => {
+    const onLine = (rawLine: string): void => {
+      // Bound a single line so a mod spamming a huge line cannot balloon memory or payloads (B-18).
+      const line = rawLine.length > 4096 ? rawLine.slice(0, 4096) : rawLine;
       running.ring.push(line);
       if (running.ring.length > 5000) running.ring.shift();
       try { running.logStream?.write(`${line}\n`); } catch { /* log history is best effort */ }
@@ -310,6 +383,7 @@ export class ServerProcesses {
   }
 
   stop(id: string): Promise<void> {
+    this.stopRequested.add(id);
     const running = this.running.get(id);
     if (!running) return Promise.resolve();
     running.userStop = true;
@@ -333,6 +407,7 @@ export class ServerProcesses {
   }
 
   kill(id: string): void {
+    this.stopRequested.add(id);
     const running = this.running.get(id);
     if (!running) return;
     running.userStop = true;
@@ -340,7 +415,12 @@ export class ServerProcesses {
     this.killTree(id);
   }
 
-  async restart(id: string): Promise<void> { await this.stop(id); await new Promise((resolve) => setTimeout(resolve, 1500)); await this.start(id); }
+  async restart(id: string): Promise<void> {
+    if (this.starting.has(id)) throw appError('conflict', 'Server is starting; wait for it to finish before restarting.');
+    await this.stop(id);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await this.start(id);
+  }
 
   /** Raw stdin write for internal orchestration (save-off/list); callers own the history decision. */
   command(id: string, cmd: string): void {
@@ -350,20 +430,25 @@ export class ServerProcesses {
   }
 
   sendCommand(id: string, cmd: string): void {
-    this.command(id, cmd);
-    this.store.pushCommand(id, cmd);
+    const command = String(cmd ?? '').trim();
+    if (command === '') throw appError('validation', 'Command must not be empty.');
+    if (/[\r\n]/.test(command)) throw appError('validation', 'Command must be a single line.');
+    if (command.length > 1024) throw appError('validation', 'Command is too long (maximum 1024 characters).');
+    this.command(id, command);
+    this.store.pushCommand(id, command);
   }
 
-  tail(id: string, lines: number): string[] {
+  /** Bounded, rotation-tolerant tail (async, never reads an unbounded 10 MB file synchronously). */
+  async tail(id: string, lines: number): Promise<string[]> {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw appError('validation', 'Invalid server id.');
+    const wanted = Number.isFinite(lines) ? Math.max(1, Math.min(10_000, Math.floor(lines))) : 500;
     const running = this.running.get(id);
-    if (running) return running.ring.slice(-lines);
-    // After a restart the ring is gone; the append-only console log keeps the history.
-    try {
-      const text = fs.readFileSync(path.join(this.serverDir(id), 'logs', 'msm-console.log'), 'utf8');
-      return text.split('\n').filter((line) => line.trim() !== '').slice(-lines);
-    } catch {
-      return [];
-    }
+    if (running) return running.ring.slice(-wanted);
+    const logDir = path.join(this.serverDir(id), 'logs');
+    const current = await readTailLines(path.join(logDir, 'msm-console.log'), wanted);
+    if (current.length >= wanted) return current.slice(-wanted);
+    const older = await readTailLines(path.join(logDir, 'msm-console.log.1'), wanted - current.length);
+    return [...older, ...current].slice(-wanted);
   }
 
   /** Force-kill the process tree (Windows: taskkill /T /F; elsewhere: SIGKILL). */
@@ -374,6 +459,10 @@ export class ServerProcesses {
   }
 
   private killPid(pid: number): void {
+    if (this.options.killOverride) {
+      this.options.killOverride(pid);
+      return;
+    }
     if (process.platform === 'win32') {
       try { spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }); return; } catch { /* fall back */ }
     }

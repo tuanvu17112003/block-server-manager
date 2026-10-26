@@ -4,10 +4,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { IpcContext, Handler } from '../ipc';
-import { appError } from './store';
-import { Store, type ServerDto } from './store';
+import { appError, Store, type ServerDto } from './store';
 import { Jobs } from './jobs';
-import { log, ensureServerProperties, writeEula, freePort } from './installer/core';
+import { log, ensureServerProperties, writeEula } from './installer/core';
+import { publishStagedServer, assertServerNameAvailable } from './install-transaction';
 import { makeCuratedResolver } from './installer/curated';
 import { resolveMrpack, splitDeps, installModrinth, type MrIndex } from './installer/modrinth';
 import { installCurseforge, inspectStagedZip, inspectCurseForgeProject } from './installer/curseforge';
@@ -200,77 +200,109 @@ export class Pipeline {
     const held = this.previews.get(previewId);
     if (!held) {
       const message = `Preview ${previewId} not found.`;
-      return this.failOrCancel(new Store(this.ctx.dataRoot), null, '', 'failed', this.createReport(null), message);
+      return this.finalizeFailure('failed', this.createReport(null), message);
     }
     const store = new Store(this.ctx.dataRoot);
     const report = this.createReport(held);
-    const cancelled = (): boolean => this.jobs.isCancelled(jobId);
 
-    let dto: ServerDto | null = null;
-    let dir = '';
     try {
+      assertServerNameAvailable(store, input.name);
+      // WP-2.3 port model: allocate (record-free + OS-bindable) BEFORE the record is created; the
+      // same allocated port is used for the staged server.properties and the published record.
+      const port = await store.allocatePort(input.port ?? null);
       const loaderName = LOADER_DTO[held.loader.kind] ?? 'Vanilla';
-      dto = store.createServer({
-        name: input.name, loader: loaderName, mcVersion: held.loader.minecraftVersion,
-        loaderVersion: held.loader.loaderVersion ?? undefined,
-        modpackId: held.source.kind === 'modrinthRemote' ? held.source.projectId : held.slug ?? undefined,
-        port: input.port, ramMb: input.ramMb, javaPath: input.javaPath, eulaAccepted: input.eulaAccepted,
-      });
-      report.serverId = dto.id;
-      dir = path.join(this.ctx.dataRoot, 'servers', dto.id);
-
-      if (cancelled()) return this.failOrCancel(store, dto, dir, 'cancelled', report, null);
-
       this.jobs.progress(jobId, { progress: 5, stage: 'preparing' });
-      const onProgress = (p: { stage: string; pct?: number }): void => { this.jobs.progress(jobId, { progress: p.pct ?? 10, stage: p.stage }); };
+      // WP-2.4: the whole pack installs into <dataRoot>/installer-staging/<uuid>; the record and the
+      // servers/<id> directory are published atomically only after artifact/launch validation.
+      const installed = await publishStagedServer({
+        dataRoot: this.ctx.dataRoot,
+        store,
+        // Pack loaders vary per route: validate the launch shape (launchCommand) rather than one
+        // loader-specific artifact (the route-A inspection can only guess the loader).
+        loaderKind: null,
+        input: {
+          name: input.name,
+          loader: loaderName,
+          mcVersion: held.loader.minecraftVersion,
+          loaderVersion: held.loader.loaderVersion ?? undefined,
+          modpackId: held.source.kind === 'modrinthRemote' ? held.source.projectId : held.slug ?? undefined,
+          port,
+          ramMb: input.ramMb,
+          javaPath: input.javaPath,
+          eulaAccepted: input.eulaAccepted,
+        },
+        // Pack loaders vary by route; a usable launch shape (launchCommand) is the shared contract.
+        isCancelled: () => this.jobs.isCancelled(jobId),
+        // Provisional id for failed report DTOs (Phase 1 contract: serverId is always populated).
+        onStaging: ({ stagingId }) => { report.serverId = stagingId; },
+        onProgress: event => this.jobs.progress(jobId, { progress: event.progress, stage: event.stage }),
+        install: async ({ stagingDir, log: installLog }) => {
+          const onProgress = (p: { stage: string; pct?: number }): void => {
+            installLog(`${p.stage}${p.pct != null ? ` ${p.pct}%` : ''}`);
+            this.jobs.progress(jobId, { progress: p.pct ?? 10, stage: p.stage });
+          };
 
-      if (held.index && held.mrpackPath) {
-        const res = await installModrinth({
-          mrpackPath: held.mrpackPath, index: held.index, slug: held.slug ?? null,
-          dir, cacheDir: this.cacheDir(), dataRoot: this.ctx.dataRoot,
-          onProgress,
-          includeOptional: fp => choices.files[fp] === 'include',
-        });
-        report.files.push({ path: `${res.installed} files`, outcome: 'installed' });
-        report.files.push({ path: `${res.skippedOptional} optional`, outcome: 'skipped-optional' });
-        report.files.push({ path: `${res.skippedUnsupported} unsupported`, outcome: 'skipped-server-unsupported' });
-        report.warnings.push(...res.warnings);
-        report.stages.push({ stage: 'download', outcome: 'complete' });
-        this.writeSidecar(dir, { platform: 'modrinth', slug: held.slug, files: held.index.files.map(f => f.path), loader: held.loader.kind, mc: held.loader.minecraftVersion });
-      } else if (held.zipPath || held.source.kind === 'curseForgeServerZip' || held.source.kind === 'curseforgeProject') {
-        const zipPath = held.zipPath ?? (held.source.kind === 'curseForgeServerZip'
-          ? path.join(this.ctx.dataRoot, 'curseforge-import', held.source.zipName)
-          : undefined);
-        const projectId = held.source.kind === 'curseforgeProject' ? Number(held.source.projectId) : undefined;
-        const res = await installCurseforge({ zipPath, projectId, dir, dataRoot: this.ctx.dataRoot, cacheDir: this.cacheDir(), onProgress });
-        report.files.push({ path: `${res.installed} mods`, outcome: 'installed' });
-        report.files.push({ path: `${res.skippedClientOnly} client-only`, outcome: 'skipped-client-only' });
-        report.warnings.push(...res.warnings);
-        for (const m of res.manuallyRequired) report.warnings.push(`manually required: ${m.pageUrl} (${m.reason})`);
-        report.stages.push({ stage: `route-${res.route}`, outcome: 'complete' });
-        this.writeSidecar(dir, { platform: 'curseforge', slug: projectId ? String(projectId) : null, files: [], loader: res.loader ?? 'forge', mc: res.mc ?? '' });
-        if (choices.autoDeleteCurseForgeZip && zipPath && zipPath.startsWith(path.join(this.ctx.dataRoot, 'curseforge-import'))) {
-          fs.rmSync(zipPath, { force: true });
-        }
-      } else {
-        throw appError('validation', 'Unsupported pipeline source.');
-      }
+          if (held.index && held.mrpackPath) {
+            const res = await installModrinth({
+              mrpackPath: held.mrpackPath, index: held.index, slug: held.slug ?? null,
+              dir: stagingDir, cacheDir: this.cacheDir(), dataRoot: this.ctx.dataRoot,
+              onProgress,
+              includeOptional: fp => choices.files[fp] === 'include',
+            });
+            report.files.push({ path: `${res.installed} files`, outcome: 'installed' });
+            report.files.push({ path: `${res.skippedOptional} optional`, outcome: 'skipped-optional' });
+            report.files.push({ path: `${res.skippedUnsupported} unsupported`, outcome: 'skipped-server-unsupported' });
+            report.warnings.push(...res.warnings);
+            report.stages.push({ stage: 'download', outcome: 'complete' });
+            this.writeSidecar(stagingDir, { platform: 'modrinth', slug: held.slug, files: held.index.files.map(f => f.path), loader: held.loader.kind, mc: held.loader.minecraftVersion });
+          } else if (held.zipPath || held.source.kind === 'curseForgeServerZip' || held.source.kind === 'curseforgeProject') {
+            const zipPath = held.zipPath ?? (held.source.kind === 'curseForgeServerZip'
+              ? path.join(this.ctx.dataRoot, 'curseforge-import', held.source.zipName)
+              : undefined);
+            const projectId = held.source.kind === 'curseforgeProject' ? Number(held.source.projectId) : undefined;
+            const res = await installCurseforge({ zipPath, projectId, dir: stagingDir, dataRoot: this.ctx.dataRoot, cacheDir: this.cacheDir(), onProgress });
+            report.files.push({ path: `${res.installed} mods`, outcome: 'installed' });
+            report.files.push({ path: `${res.skippedClientOnly} client-only`, outcome: 'skipped-client-only' });
+            report.warnings.push(...res.warnings);
+            for (const m of res.manuallyRequired) report.warnings.push(`manually required: ${m.pageUrl} (${m.reason})`);
+            report.stages.push({ stage: `route-${res.route}`, outcome: 'complete' });
+            this.writeSidecar(stagingDir, { platform: 'curseforge', slug: projectId ? String(projectId) : null, files: [], loader: res.loader ?? 'forge', mc: res.mc ?? '' });
+            if (choices.autoDeleteCurseForgeZip && zipPath && zipPath.startsWith(path.join(this.ctx.dataRoot, 'curseforge-import'))) {
+              fs.rmSync(zipPath, { force: true });
+            }
+          } else {
+            throw appError('validation', 'Unsupported pipeline source.');
+          }
 
-      if (cancelled()) return this.failOrCancel(store, dto, dir, 'cancelled', report, null);
+          ensureServerProperties(stagingDir, port);
+          if (input.eulaAccepted) writeEula(stagingDir);
+          installLog('configuration written (server.properties/eula)');
+        },
+        beforePublish: (server, { stagingDir }) => {
+          report.serverId = server.id;
+          report.status = 'complete';
+          report.stages.push({ stage: 'publish', outcome: 'complete' });
+          // Written into the staged tree, so install-report.json is published atomically with it.
+          writeInstallReport(stagingDir, report);
+        },
+      });
 
-      const port = await freePort(input.port && input.port > 0 ? input.port : 25565);
-      ensureServerProperties(dir, port);
-      if (input.eulaAccepted) writeEula(dir);
-      store.updateServer(dto.id, { port });
-      report.stages.push({ stage: 'publish', outcome: 'complete' });
-      report.status = 'complete';
-      writeInstallReport(dir, report);
       this.jobs.progress(jobId, { progress: 100, stage: 'install complete' });
       this.previews.delete(previewId);
-      return { status: 'complete', server: store.getServer(dto.id), report, error: null };
+      return { status: 'complete', server: installed.server, report, error: null };
     } catch (err) {
-      return this.failOrCancel(store, dto, dir, 'failed', report, err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      const status = (err as { code?: string }).code === 'cancelled' ? 'cancelled' : 'failed';
+      return this.finalizeFailure(status, report, message);
     }
+  }
+
+  /** Terminal failure/cancel result: the transaction has already removed staging and any record. */
+  private finalizeFailure(status: 'failed' | 'cancelled', report: PipelineInstallReport, error: string | null): PipelineInstallResult {
+    report.status = status;
+    if (error) report.errors.push(error);
+    log(`[pipeline] ${status}${error ? `: ${error}` : ''}`);
+    return { status, server: null, report, error };
   }
 
   /** Full report skeleton shared by every terminal outcome (success/failure/cancel). */
@@ -294,20 +326,6 @@ export class Pipeline {
       warnings: [],
       errors: [],
     };
-  }
-
-  private failOrCancel(store: Store, dto: ServerDto | null, dir: string, status: 'failed' | 'cancelled', report: PipelineInstallReport, error: string | null): PipelineInstallResult {
-    report.status = status;
-    if (error) report.errors.push(error);
-    if (dir && fs.existsSync(dir)) {
-      // Best-effort failure report while the directory still exists; rollback below still removes it
-      // (complete-or-nothing, M-7), so successful installs are the durable copy.
-      writeInstallReport(dir, report);
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-    if (dto) store.deleteServer(dto.id);
-    log(`[pipeline] ${status}${error ? `: ${error}` : ''}`);
-    return { status, server: null, report, error };
   }
 
   private writeSidecar(dir: string, data: Record<string, unknown>): void {

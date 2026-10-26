@@ -1,11 +1,17 @@
 // Command router — same command names as the Rust backend; errors serialize as {code,message}
 // (JSON-in-message, the ipcRenderer.invoke convention) so the renderer adapter can rebuild AppError.
+// Security (WP-2.3): every `cmd:` invocation checks the sender frame origin against the app's own
+// file:// renderer (or the Vite dev-server origin); untrusted senders get a `{code:'forbidden'}`
+// envelope instead of reaching a handler. Dialogs are unchanged.
 import type { BrowserWindow, IpcMain } from 'electron';
-import { dialog, shell } from 'electron';
+import { app, dialog, shell } from 'electron';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { Store, appError, type CreateServerInput, type ServerDto } from './services/store';
+import { fileURLToPath } from 'node:url';
+import { Store, appError, type ServerDto } from './services/store';
 import { applySettingsToDto, serverDir } from './services/properties';
+import { normalizeCreateServerInput } from './services/validate-args';
 
 export interface IpcContext {
   dataRoot: string;
@@ -30,7 +36,13 @@ const handlers: Record<string, Handler> = {
     const dto = store(ctx).getServer(String(a.id));
     return dto === null ? null : enrich(ctx, dto);
   },
-  servers_create: (a, ctx) => enrich(ctx, store(ctx).createServer(a.input as CreateServerInput)),
+  servers_create: async (a, ctx) => {
+    const input = normalizeCreateServerInput(a.input);
+    const s = store(ctx);
+    // OS-probed allocation: explicit ports are validated/unique/free; omitted ports pick 25565+.
+    const port = await s.allocatePort(input.port);
+    return enrich(ctx, s.createServer({ ...input, port }));
+  },
   servers_delete: (a, ctx) => {
     const id = String(a.id);
     const dto = store(ctx).getServer(id);
@@ -83,6 +95,97 @@ const dialogs: Record<string, (ctx: IpcContext) => Promise<unknown>> = {
 
 let ipcRegistered = false;
 
+/** Where a renderer frame is allowed to come from. Injected in tests; see {@link trustedIpcPolicy}. */
+export interface IpcTrustPolicy {
+  /** Application root (`app.getAppPath()`); the packaged/preview `dist/index.html` lives beneath it. */
+  appPath: string;
+  /** `VITE_DEV_SERVER_URL` (dev mode); frames on the same origin are trusted. */
+  devUrl?: string | null;
+  /** Non-packaged builds allow gate pages loaded from a throwaway temp root (`--ipctest`). */
+  allowTempRoots?: boolean;
+  /** Temp root to allow when `allowTempRoots` is set; defaults to `os.tmpdir()`. */
+  tempRoot?: string;
+}
+
+function comparablePath(value: string): string {
+  const resolved = path.resolve(value);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+/** True when `candidate` is `root` itself or lies underneath it (no `..` escape). */
+function isPathInside(candidate: string, root: string): boolean {
+  const relative = path.relative(comparablePath(root), comparablePath(candidate));
+  if (relative === '') return true;
+  return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+/**
+ * Pure sender-origin decision (exported for unit tests):
+ * - the Vite dev-server origin when dev mode is configured;
+ * - `file:` URLs inside the application root (renderer bundle);
+ * - `file:` URLs under the temp root for non-packaged gate harnesses.
+ * Anything else (http(s)://, other file paths, data:, empty/malformed URLs) is rejected.
+ */
+export function isTrustedIpcUrl(rawUrl: string, policy: IpcTrustPolicy): boolean {
+  if (typeof rawUrl !== 'string' || rawUrl === '') return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+
+  const devUrl = typeof policy.devUrl === 'string' ? policy.devUrl.trim() : '';
+  if (devUrl !== '') {
+    try {
+      if (parsed.origin === new URL(devUrl).origin) return true;
+    } catch {
+      // Misconfigured dev URL must never open the gate.
+    }
+  }
+
+  if (parsed.protocol !== 'file:') return false;
+  let filePath: string;
+  try {
+    filePath = fileURLToPath(parsed);
+  } catch {
+    return false;
+  }
+  if (typeof policy.appPath === 'string' && policy.appPath !== '' && isPathInside(filePath, policy.appPath)) {
+    return true;
+  }
+  if (policy.allowTempRoots) {
+    const tempRoot = policy.tempRoot ?? os.tmpdir();
+    if (isPathInside(filePath, tempRoot)) return true;
+  }
+  return false;
+}
+
+/** Policy for the running app. Computed once per `registerIpc()` call. */
+export function trustedIpcPolicy(): IpcTrustPolicy {
+  let appPath = '';
+  try { appPath = app.getAppPath(); } catch { appPath = process.cwd(); }
+  let allowTempRoots = true;
+  try { allowTempRoots = !app.isPackaged; } catch { allowTempRoots = true; }
+  return {
+    appPath,
+    devUrl: process.env.VITE_DEV_SERVER_URL ?? null,
+    allowTempRoots,
+    tempRoot: os.tmpdir(),
+  };
+}
+
+/** Reject frames whose URL cannot be read (destroyed/absent) — fail closed. */
+function isTrustedSender(event: unknown, policy: IpcTrustPolicy): boolean {
+  try {
+    const frame = (event as { senderFrame?: { url?: string } | null }).senderFrame;
+    if (!frame || typeof frame.url !== 'string' || frame.url === '') return false;
+    return isTrustedIpcUrl(frame.url, policy);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Bind the command map to ipcMain. Call ONCE, after every runtime handler was merged with
  * registerRuntimeHandlers(); this function snapshots the map, so a later merge is invisible to IPC.
@@ -90,13 +193,27 @@ let ipcRegistered = false;
  * Results travel in an envelope ({__ipc:true, ok, value|error}) instead of a thrown Error.
  * Electron prefixes thrown IPC errors with `Error invoking remote method ...`, which would break
  * the renderer's JSON {code,message} contract; the preload unwraps this envelope.
+ *
+ * Sender hardening (WP-2.3): command invocations from any frame outside the app's own renderer get
+ * `{ok:false, error:{code:'forbidden'}}`; direct handler-map calls (unit/service/contract gates) do
+ * not go through ipcMain and are unaffected.
  */
 export function registerIpc(ipcMain: IpcMain, ctx: IpcContext): void {
   if (ipcRegistered) throw new Error('registerIpc called twice');
   ipcRegistered = true;
+  const policy = trustedIpcPolicy();
 
   for (const [name, handler] of Object.entries(handlers)) {
-    ipcMain.handle('cmd:' + name, async (_event, args: Record<string, unknown> = {}) => {
+    ipcMain.handle('cmd:' + name, async (event, args: Record<string, unknown> = {}) => {
+      if (!isTrustedSender(event, policy)) {
+        // eslint-disable-next-line no-console
+        console.warn(`[ipc] blocked command "${name}" from an untrusted sender frame.`);
+        return {
+          __ipc: true,
+          ok: false,
+          error: { code: 'forbidden', message: 'Blocked an IPC command from an untrusted sender.' },
+        };
+      }
       try {
         return { __ipc: true, ok: true, value: await handler(args, ctx) };
       } catch (err) {

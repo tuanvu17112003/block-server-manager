@@ -1,4 +1,4 @@
-﻿// Unit tests for the legacy Tauri SQLite -> Electron JSON store importer (WP-1.6 / finding B-13).
+// Unit tests for the legacy Tauri SQLite -> Electron JSON store importer (WP-1.6 / finding B-13).
 //
 // Fixtures are built with `node:sqlite` in fresh temp dirs: a legacy root with `app.db` (Rust schema
 // v1+v2+v3), fake `servers/<id>/` folders, and a separate target data root. Each test owns its temp
@@ -442,8 +442,8 @@ test('runImport: imports servers/folders/backups/history/settings, writes marker
   assert.equal(backups[0].note, 'first backup');
   assert.equal(backups[0].createdAt, '2026-01-03T00:00:00.000Z');
 
-  // Console history: chronological per server.
-  assert.deepEqual(store.commandHistory(SERVER_A), ['list', 'say hi', 'stop']);
+  // Console history: newest-first per server (WP-2.3 / Rust `ORDER BY id DESC`).
+  assert.deepEqual(store.commandHistory(SERVER_A), ['stop', 'say hi', 'list']);
   assert.deepEqual(store.commandHistory(SERVER_B), ['op Steve']);
 
   // Settings: JSON values decoded, raw strings kept.

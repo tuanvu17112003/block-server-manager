@@ -7,7 +7,9 @@ import { appError, Store, type ServerDto, type CreateServerInput } from './store
 import { Jobs } from './jobs';
 import { ServerProcesses } from './server-process';
 import { vanillaVersions, paperVersions, loadersResolve } from './versions';
-import { ensureJava, detectJava, requiredJavaMajor, installLoader, ensureServerProperties, writeEula, freePort, type LoaderKind } from './installer/core';
+import { ensureJava, detectJava, requiredJavaMajor, installLoader, ensureServerProperties, writeEula, type LoaderKind } from './installer/core';
+import { probePortAvailable, PORT_MIN, PORT_MAX } from './validate-args';
+import { publishStagedServer, assertServerNameAvailable } from './install-transaction';
 import { searchModpacks, projectVersions } from './installer/modrinth';
 import { Pipeline } from './pipeline';
 import { CurseForgeStaging } from './curseforge-staging';
@@ -80,9 +82,16 @@ export function buildRuntime(): {
       loaders_resolve: a => loadersResolve(String(a.mcVersion)),
       port_check: async a => {
         const port = Number(a.port);
-        if (!Number.isInteger(port) || port < 1 || port > 65535) throw appError('validation', 'Port must be 1-65535.');
-        const suggested = await freePort(port);
-        return { port, available: suggested === port, suggested };
+        if (!Number.isInteger(port) || port < PORT_MIN || port > PORT_MAX) {
+          throw appError('validation', `Port must be ${PORT_MIN}-${PORT_MAX}.`);
+        }
+        // Availability must match what Start enforces: OS probe + no other server record.
+        const available = await probePortAvailable(port);
+        let suggested = port;
+        if (!available) {
+          try { suggested = await new Store(ctx.dataRoot).allocatePort(port); } catch { suggested = port; }
+        }
+        return { port, available, suggested };
       },
 
       server_install: async a => {
@@ -90,10 +99,12 @@ export function buildRuntime(): {
         const jobId = String(a.jobId ?? '');
         const s = new Store(ctx.dataRoot);
         const kind = LOADER_MAP[input.loader] ?? appErrorThrow(input.loader);
-        const dto = s.createServer({ ...input, loader: input.loader });
-        const dir = path.join(ctx.dataRoot, 'servers', dto.id);
         if (jobId) j.begin(jobId);
         try {
+          assertServerNameAvailable(s, input.name);
+          // WP-2.3 port model: allocate (record-free + OS-bindable) before provisioning; the same
+          // port is written to the staged server.properties and carried by the published record.
+          const port = await s.allocatePort(input.port ?? null);
           j.progress(jobId, { progress: 5, stage: 'resolving Java' });
           const major = await requiredJavaMajor(input.mcVersion);
           // A configured Java path is validated and used as-is; only a missing runtime triggers
@@ -105,28 +116,35 @@ export function buildRuntime(): {
             }
             javaExe = input.javaPath;
           } else {
-            const runtime = await ensureJava(major, path.join(ctx.dataRoot, 'runtime'), path.join(ctx.dataRoot, 'cache'));
+            const runtime = await ensureJava(major, runtimeRoot, cacheDir);
             javaExe = runtime.javapath;
-            s.setJavaPath(dto.id, javaExe);
           }
-          if (jobId && j.isCancelled(jobId)) throw appError('cancelled', 'Install cancelled.');
-          j.progress(jobId, { progress: 25, stage: `installing ${kind}` });
-          await installLoader(kind, dir, input.mcVersion, input.loaderVersion ?? '', javaExe, cacheDir);
-          if (jobId && j.isCancelled(jobId)) throw appError('cancelled', 'Install cancelled.');
-          j.progress(jobId, { progress: 80, stage: 'writing config' });
-          const port = input.port && input.port > 0 ? input.port : dto.port;
-          ensureServerProperties(dir, port);
-          if (input.eulaAccepted) writeEula(dir);
-          const patch: Partial<ServerDto> = { javaPath: input.javaPath ?? javaExe, eulaAccepted: input.eulaAccepted ?? false, port };
-          const updated = s.updateServer(dto.id, patch);
+          // WP-2.4: everything installs into <dataRoot>/installer-staging/<uuid>; the record and the
+          // final servers/<id> directory only appear after artifact + launch-shape validation.
+          const result = await publishStagedServer({
+            dataRoot: ctx.dataRoot,
+            store: s,
+            loaderKind: kind,
+            input: {
+              ...input,
+              port,
+              javaPath: input.javaPath ?? javaExe,
+              eulaAccepted: input.eulaAccepted ?? false,
+            },
+            isCancelled: () => Boolean(jobId) && j.isCancelled(jobId),
+            onProgress: p => j.progress(jobId, { stage: p.stage, progress: p.progress }),
+            install: async ({ stagingDir, log }) => {
+              j.progress(jobId, { progress: 25, stage: `installing ${kind}` });
+              log(`installing ${kind} ${input.mcVersion}${input.loaderVersion ? ` ${input.loaderVersion}` : ''}`);
+              await installLoader(kind, stagingDir, input.mcVersion, input.loaderVersion ?? '', javaExe, cacheDir);
+              j.progress(jobId, { progress: 80, stage: 'writing config' });
+              ensureServerProperties(stagingDir, port);
+              if (input.eulaAccepted) writeEula(stagingDir);
+              log('configuration written (server.properties/eula)');
+            },
+          });
           j.progress(jobId, { progress: 100, stage: 'done' });
-          return updated;
-        } catch (err) {
-          // Complete-or-nothing: a failed/cancelled install must not leave a partial server tree
-          // or a visible record (B-09). The pipeline path already did this; see WP-1.1/WP-2.4.
-          s.deleteServer(dto.id);
-          try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
-          throw err;
+          return result.server;
         } finally {
           if (jobId) j.end(jobId);
         }

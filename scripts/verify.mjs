@@ -58,6 +58,7 @@ runStep('unit', node, [path.join('scripts', 'unit.mjs')]);
 runStep('selftest', node, electron('--selftest'));
 runStep('contract', node, electron('--contracttest'));
 runStep('services', node, electron('--servicestest'));
+runStep('lifecycle', node, electron('--lifetest'));
 runStep('mgmttest', node, electron('--mgmttest'));
 runStep('ipctest', node, electron('--ipctest'));
 runStep('uitest', node, electron('--uitest', [`--artifacts=${artifacts}`]));

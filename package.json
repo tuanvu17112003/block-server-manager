@@ -18,6 +18,7 @@
     "test:unit": "npm run build:electron && node scripts/unit.mjs",
     "test:contract": "npm run build:electron && node node_modules/electron/cli.js . --contracttest",
     "test:services": "npm run build:electron && node node_modules/electron/cli.js . --servicestest",
+    "test:lifecycle": "npm run build:electron && node node_modules/electron/cli.js . --lifetest",
     "test:ui": "npm run build && node node_modules/electron/cli.js . --uitest --artifacts=artifacts/ui",
     "verify": "node scripts/verify.mjs",
     "verify:full": "node scripts/verify.mjs --full",
