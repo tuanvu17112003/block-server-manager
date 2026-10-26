@@ -53,13 +53,29 @@ export async function runSoak(options: SoakOptions): Promise<SoakSummary> {
   let started = false;
   let finalStatus = 'unknown';
 
-  const call = async <T>(name: string, args: Record<string, unknown> = {}): Promise<T | null> => {
+  const call = async <T>(name: string, args: Record<string, unknown> = {}, timeoutMs = 180_000): Promise<T | null> => {
     const handler = h[name];
     if (!handler) { errors.push(`missing handler ${name}`); return null; }
-    try { return await handler(args, ctx) as T; } catch (error) {
+    const started = Date.now();
+    try {
+      // Every handler is bounded: a stuck lifecycle transition must not freeze the soak silently.
+      let timer: NodeJS.Timeout | null = null;
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`handler "${name}" timed out after ${timeoutMs}ms`)), timeoutMs);
+        timer.unref?.();
+      });
+      try {
+        const value = await Promise.race([Promise.resolve(handler(args, ctx)) as Promise<T>, timeout]);
+        const elapsed = Date.now() - started;
+        if (elapsed > 5_000) write({ event: 'slow-handler', name, elapsedMs: elapsed });
+        return value;
+      } finally {
+        if (timer !== null) clearTimeout(timer);
+      }
+    } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       errors.push(`${name}: ${message}`.slice(0, 400));
-      write({ event: 'handler-error', name, message: message.slice(0, 400) });
+      write({ event: 'handler-error', name, message: message.slice(0, 400), elapsedMs: Date.now() - started });
       return null;
     }
   };
@@ -104,6 +120,7 @@ export async function runSoak(options: SoakOptions): Promise<SoakSummary> {
     while (Date.now() < deadline) {
       cycles += 1;
       const cycleStart = Date.now();
+      write({ event: 'cycle-begin', cycle: cycles });
       const status = await statusOf();
       const metrics = await call<{ samples?: unknown[]; event?: { cpu?: number; ram?: number } }>('metrics_get', { id: serverId, hours: 1 });
       const logTail = await call<unknown>('logs_tail', { id: serverId, lines: 50 });
