@@ -12,6 +12,10 @@ import { fileURLToPath } from 'node:url';
 import { Store, appError, type ServerDto } from './services/store';
 import { applySettingsToDto, serverDir } from './services/properties';
 import { normalizeCreateServerInput } from './services/validate-args';
+import { validateCommandArgs } from './services/validate-ipc';
+import { clearCurseForgeKey, curseForgeKeyStatus, setCurseForgeKey } from './services/secrets';
+import { resetCurseForgeKeyCache } from './services/installer/curseforge';
+import { createSupportBundle, recentDiagnostics } from './services/diagnostics';
 
 export interface IpcContext {
   dataRoot: string;
@@ -57,6 +61,31 @@ const handlers: Record<string, Handler> = {
     fs.rmSync(path.join(ctx.dataRoot, 'servers', id), { recursive: true, force: true });
   },
   servers_set_java_path: (a, ctx) => enrich(ctx, store(ctx).setJavaPath(String(a.id), (a.path as string | null) ?? null)),
+
+  // ---- Phase 7: secrets (D11) + diagnostics (WP-7.4) ----
+  curseforge_key_status: (_a, ctx) => curseForgeKeyStatus(ctx.dataRoot),
+  curseforge_key_set: (a, ctx) => {
+    const result = setCurseForgeKey(ctx.dataRoot, String(a.key ?? ''));
+    resetCurseForgeKeyCache();
+    return result;
+  },
+  curseforge_key_clear: (_a, ctx) => {
+    const result = clearCurseForgeKey(ctx.dataRoot);
+    resetCurseForgeKeyCache();
+    return result;
+  },
+  diagnostics_bundle: async (_a, ctx) => createSupportBundle({
+    dataRoot: ctx.dataRoot,
+    versions: {
+      app: app.getVersion(),
+      electron: process.versions.electron,
+      node: process.version,
+      chrome: process.versions.chrome,
+      platform: process.platform,
+      arch: process.arch,
+    },
+  }),
+  diagnostics_recent: (a) => recentDiagnostics(Number(a.limit ?? 200)),
 };
 
 // ---- P1: runtime (java, versions/loaders, install, lifecycle) ----
@@ -215,6 +244,9 @@ export function registerIpc(ipcMain: IpcMain, ctx: IpcContext): void {
         };
       }
       try {
+        // WP-7.1: light per-command argument validation at the IPC boundary only. Direct
+        // handlersMap callers (service/contract/selftest gates) keep their existing behavior.
+        validateCommandArgs(name, args);
         return { __ipc: true, ok: true, value: await handler(args, ctx) };
       } catch (err) {
         const code = (err as { code?: string }).code ?? 'internal';

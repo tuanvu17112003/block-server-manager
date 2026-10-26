@@ -1,5 +1,5 @@
 // Electron main — window + lifecycle + IPC wiring (port of src-tauri shell, see docs/electron-port-plan.md).
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
@@ -7,6 +7,7 @@ import { registerIpc, registerRuntimeHandlers, runSelfTest, type IpcContext } fr
 import { buildRuntime } from './services/runtime';
 import { dataRoot } from './services/paths';
 import { detectLegacy, planImport, runImport } from './services/legacy-import';
+import { initDiagnostics, installProcessHandlers, getDiagnostics, recordTimeline } from './services/diagnostics';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -31,6 +32,48 @@ function createTempRoot(label = 'msm-gate-data'): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `${label}-`));
 }
 
+/** True for the app's own renderer documents (Vite dev URL or the built `dist/` folder). */
+function isAppDocumentUrl(url: string): boolean {
+  const devUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devUrl && url.startsWith(devUrl)) return true;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'file:') return false;
+    const filePath = decodeURIComponent(parsed.pathname).replace(/^\/([A-Za-z]:)/, '$1');
+    const distDir = path.resolve(__dirname, '..', 'dist');
+    const resolved = path.resolve(filePath);
+    return resolved === distDir || resolved.startsWith(distDir + path.sep);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * WP-7.3 renderer/session hardening shared by the production window and hidden test windows:
+ * - popups are denied; http(s) links open in the OS browser instead of a privileged window;
+ * - navigation is restricted to the app's own document (dev URL/file dist), external navigation is
+ *   denied and only handed to the OS browser;
+ * - `webview` attachment and every permission request are denied;
+ * - DevTools are closed again in packaged builds.
+ */
+function hardenWebContents(win: BrowserWindow): void {
+  const { webContents } = win;
+  webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url).catch(() => undefined);
+    return { action: 'deny' };
+  });
+  webContents.on('will-navigate', (event, url) => {
+    if (isAppDocumentUrl(url)) return;
+    event.preventDefault();
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url).catch(() => undefined);
+  });
+  webContents.on('will-attach-webview', (event) => { event.preventDefault(); });
+  webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  if (app.isPackaged) {
+    webContents.on('devtools-opened', () => { try { webContents.closeDevTools(); } catch { /* ignore */ } });
+  }
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -44,8 +87,10 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      devTools: !app.isPackaged,
     },
   });
+  hardenWebContents(mainWindow);
   mainWindow.once('ready-to-show', () => mainWindow?.show());
   mainWindow.on('closed', () => { mainWindow = null; });
 
@@ -198,6 +243,7 @@ if (!hasSingleInstanceLock) {
           backgroundThrottling: false,
         },
       });
+      hardenWebContents(win);
       try {
         appRuntime = wireIpc(testCtx).appRuntime;
         const { runUiTests } = await import('./test/ui-runner');
@@ -250,6 +296,7 @@ if (!hasSingleInstanceLock) {
           sandbox: true,
         },
       });
+      hardenWebContents(win);
       try {
         const wired = wireIpc(testCtx);
         appRuntime = wired.appRuntime;
@@ -268,8 +315,23 @@ if (!hasSingleInstanceLock) {
     }
 
     const { appRuntime, runtime } = wireIpc(ctx);
+    // Diagnostics are production-only: gate runs use throwaway roots and must not leave log files.
+    const diagnostics = initDiagnostics({
+      dataRoot: ctx.dataRoot,
+      mirror: !app.isPackaged ? (line: string) => { /* eslint-disable-next-line no-console */ console.log(line); } : false,
+    });
+    diagnostics.logger.info('app starting', { version: app.getVersion(), dataRoot: ctx.dataRoot });
+    installProcessHandlers(diagnostics.logger, {
+      onFatal: (error: unknown) => {
+        try {
+          dialog.showErrorBox('Unexpected error', error instanceof Error ? (error.stack ?? error.message) : String(error));
+        } catch { /* headless */ }
+      },
+    });
+    recordTimeline({ kind: 'app', action: 'start', detail: { version: app.getVersion() } });
     await runtime.processes.reapOrphans();
     await runLegacyStartupMigration(ctx);
+    recordTimeline({ kind: 'app', action: 'legacy-import-check' });
     // Quit must be synchronous-safe: Electron continues quitting immediately after this event, so
     // we preventDefault, stop servers with a bounded budget (then tree-kill survivors), and quit.
     let quitStarted = false;
@@ -277,6 +339,8 @@ if (!hasSingleInstanceLock) {
       if (quitStarted) return; // second app.quit() below lets the quit proceed
       event.preventDefault();
       quitStarted = true;
+      recordTimeline({ kind: 'app', action: 'quit' });
+      getDiagnostics()?.logger.info('shutdown requested');
       let finished = false;
       const finish = (): void => {
         if (finished) return;
@@ -294,6 +358,7 @@ if (!hasSingleInstanceLock) {
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   }).catch((error: unknown) => {
     const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    try { getDiagnostics()?.logger.error('startup failed', error); } catch { /* diagnostics optional */ }
     try { dialog.showErrorBox('Startup failed', message); } catch { /* headless */ }
     // eslint-disable-next-line no-console
     console.error(message);

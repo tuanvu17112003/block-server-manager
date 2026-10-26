@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- The strict renderer Content-Security-Policy is injected into this document by the production
+         build (see vite.config.ts `inject-build-csp`). It is deliberately absent in `vite dev` so the
+         dev client/HMR can run; packaged/dists builds are the enforced path (verified by --uitest). -->
     <title>Block Server Manager</title>
   </head>
   <body>

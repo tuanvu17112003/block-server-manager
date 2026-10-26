@@ -15,11 +15,23 @@ const BASE = 'https://www.curseforge.com/api/v1';
 const OFFICIAL = 'https://api.curseforge.com/v1';
 
 let _key: string | null | undefined;
+/**
+ * CurseForge key resolution (D11): the Settings store keeps the key OS-encrypted via safeStorage with
+ * a plaintext fallback. Lazy-required so unit tests (plain Node, no Electron) still load this module.
+ */
 export function cfKey(dataRoot: string): string | null {
   if (_key !== undefined) return _key;
-  try { _key = fs.readFileSync(path.join(dataRoot, 'curseforge-key.txt'), 'utf8').trim() || null; } catch { _key = null; }
+  try {
+    const { curseForgeKeySync } = require('../secrets') as typeof import('../secrets');
+    _key = curseForgeKeySync(dataRoot);
+  } catch {
+    try { _key = fs.readFileSync(path.join(dataRoot, 'curseforge-key.txt'), 'utf8').trim() || null; } catch { _key = null; }
+  }
   return _key;
 }
+
+/** The Settings UI can change the key at runtime; drop the per-process cache after a key change. */
+export function resetCurseForgeKeyCache(): void { _key = undefined; }
 
 async function official(dataRoot: string, pathname: string, opts: Cancelable = {}): Promise<unknown> {
   const key = cfKey(dataRoot);

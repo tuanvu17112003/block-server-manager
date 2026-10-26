@@ -1,5 +1,13 @@
 # Port to Electron + TypeScript + React — approved plan (2026-10-26)
 
+> **STATUS (2026-10-26, Phase 7): port complete.** This document records the originally approved port
+> scope; it is historical. Current truth lives in:
+> - [completion plan + phase log](electron-completion-plan.md) — Phases 0–6 done, 7 in progress, 8 pending
+> - [verification guide](verification.md) — gates and evidence
+> - [audit reports](audit/01-backend-runtime.md) — findings/parity/evidence
+> - [ADR-0020](architecture/adr/0020-electron-sole-runtime.md) — Electron is the sole runtime; the Tauri
+>   tree is dormant and `frontend-export/` was retired. The command surface is now 71 renderer commands.
+
 Port "Block Server Manager" from Tauri (Rust backend, dormant after port) to Electron with a
 Node/TS main process, then integrate the proven modpack install modules
 (`H:\TestAI\modrinth-curseforge\sample` — 12/12 live PASS, 4-layer client-mod defense, CF key-mode).

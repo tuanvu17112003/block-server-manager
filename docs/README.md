@@ -150,7 +150,7 @@ Lean implementation-ready knowledge. See `WORKFLOW.md §3.3`.
 - `specs/java-provisioning.md` — server Java selection, installation, override, and validation behavior.
 - `specs/server-installs.md` — provider discovery, loader compatibility, safe installation, cancellation, and Create UI acceptance criteria.
 - `specs/new-server-improvements.md` — current New Server navigation, layout, release, Java, and loader acceptance criteria.
-- `implementation/` — concrete plan + checklist for Implementer (Full UI code, Tauri+React).
+- `implementation/` — concrete plan + checklist for Implementer (Electron + TypeScript + React).
 - `implementation/java-provisioning.md` — ordered backend/frontend implementation guide for Phase 3.
 - `implementation/phase4-server-installs.md` — owned paths, ordered Phase 4 work, constraints, and verification checklist.
 - `implementation/new-server-improvements.md` — active owned paths, implementation order, and checklist for the current follow-up.
@@ -158,7 +158,12 @@ Lean implementation-ready knowledge. See `WORKFLOW.md §3.3`.
 - `implementation/post-validation-publication.md` — scoped fix and regression plan for moving a validated staged server into its final folder.
 - `implementation/quilt-installer-checksum.md` — historical checksum handoff for the retired Quilt server-creation path.
 
-Stack decision: Tauri 2 + React (Vite) + Tailwind + shadcn (ADR-0002). Fallback: Electron with same frontend if zero Rust.
-Scope: modpack sources, console, players, worlds/backups/metrics. Deferred: full files browser, schedules, roles (see specs).
+Stack decision: Electron + TypeScript + React (Vite) + Tailwind (ADR-0020 supersedes the Tauri stack in
+ADR-0002 for the shipped app; the Rust tree is dormant reference). The framework-neutral HTTP backend
+contract (ADR-0019) remains an optional browser deployment target.
+Scope: modpack sources, console, players, worlds/backups/metrics/content/settings. Deferred: full files
+browser, schedules beyond backups, roles, RCON (ADR-0011).
+Current status/plan: `docs/electron-completion-plan.md`; verification: `docs/verification.md`; audit evidence:
+`docs/audit/`.
 
 The Phase 4 guide and Quilt checksum guide are historical records for retired new-server Quilt creation; see the active follow-up spec and guide above.

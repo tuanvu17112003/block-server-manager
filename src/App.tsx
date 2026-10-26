@@ -2,7 +2,7 @@ import { Component, useEffect, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import type { TabId } from './types';
 import { StoreProvider, useStore } from './store';
-import { backendUnavailableReason, hasBackend } from './tauri';
+import { backendUnavailableReason, hasBackend, mockBackendEnabled } from './tauri';
 import { CreateHeader, Header, Sidebar, TabBar, ToastHost } from './components/layout';
 import Overview from './tabs/Overview';
 import Create from './tabs/Create';
@@ -120,6 +120,15 @@ function Shell() {
 
   if (bridgeUnavailable !== null) {
     return <BackendBridgeUnavailable reason={bridgeUnavailable} />;
+  }
+  if (!hasBackend() && !mockBackendEnabled()) {
+    return (
+      <BackendBridgeUnavailable
+        reason={'No backend is available in this build. The desktop app reaches its Electron backend through the preload bridge; '
+          + 'a browser build needs backend-config.json (HTTP RPC) or the explicit development mock flag VITE_MOCK_BACKEND=1. '
+          + 'Mock data is never used implicitly.'}
+      />
+    );
   }
 
 

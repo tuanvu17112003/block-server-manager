@@ -1,9 +1,10 @@
-// Backend adapter (Electron | Tauri | HTTP | stub). Electron port: see docs/electron-port-plan.md —
-// the exported surface is unchanged; isElectron() branches ahead of Tauri/HTTP.
-import { invoke, isTauri as isTauriRuntime } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+// Backend adapter (Electron | framework-neutral HTTP | explicit dev mocks).
+// The dormant Tauri runtime is no longer part of the shipped renderer (ADR-0020): Electron is the
+// sole desktop host; browser builds require a configured HTTP backend or the explicit mock flag.
 import { getBackendConfigError, isHttpBackendConfigured } from './backend/config';
 import { invokeHttp, subscribeHttp, uploadHttp } from './backend/http';
+
+export type UnlistenFn = () => void;
 
 interface ElectronApi {
   invoke(command: string, args?: Record<string, unknown>): Promise<unknown>;
@@ -23,6 +24,11 @@ export function isElectron(): boolean {
   return isElectronHost() && typeof window !== 'undefined' && window.electronAPI !== undefined;
 }
 
+/** Mock data is a dev-only, explicit opt-in (`VITE_MOCK_BACKEND=1 npm run dev:web`), never implicit. */
+export function mockBackendEnabled(): boolean {
+  return import.meta.env.DEV && import.meta.env.VITE_MOCK_BACKEND === '1';
+}
+
 /** Electron invoke with the {code,message} JSON-in-message error contract rebuilt as AppError. */
 async function invokeElectron<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
@@ -38,16 +44,12 @@ async function invokeElectron<T>(command: string, args?: Record<string, unknown>
   }
 }
 
-export function isTauri(): boolean {
-  return isTauriRuntime();
-}
-
-/** Any desktop host (Electron or Tauri): native pickers instead of browser uploads. */
+/** True only for the Electron desktop host: native pickers instead of browser uploads. */
 export function isDesktop(): boolean {
-  return isElectron() || isTauri();
+  return isElectron();
 }
 
-export type BackendHost = 'electron' | 'tauri' | 'http' | 'browser';
+export type BackendHost = 'electron' | 'http' | 'browser';
 
 export interface BackendEnvironment {
   host: BackendHost;
@@ -74,7 +76,6 @@ export function backendEnvironment(): BackendEnvironment {
           + 'Browser mock data is disabled while running inside Electron.',
     };
   }
-  if (isTauri()) return { host: 'tauri', bridgeAvailable: true, unavailableReason: null };
   if (isHttpBackendConfigured()) return { host: 'http', bridgeAvailable: true, unavailableReason: null };
   return { host: 'browser', bridgeAvailable: false, unavailableReason: null };
 }
@@ -84,14 +85,20 @@ export function backendUnavailableReason(): string | null {
   return backendEnvironment().unavailableReason;
 }
 
-/** True when a desktop host (Electron/Tauri) or a runtime-configured HTTP backend is available. */
+/** True when a desktop host (Electron) or a runtime-configured HTTP backend is available. */
 export function hasBackend(): boolean {
-  return isElectron() || isTauri() || isHttpBackendConfigured();
+  return isElectron() || isHttpBackendConfigured();
+}
+
+function noBackendError(command: string): Error {
+  const configError = getBackendConfigError();
+  return new Error(configError ?? `Backend command "${command}" requires the Electron desktop app or a backend-config.json HTTP backend.`);
 }
 
 export async function stubInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
+  if (!mockBackendEnabled()) throw noBackendError(command);
   // eslint-disable-next-line no-console
-  console.debug(`[tauri-stub] invoke "${command}"`, args ?? {});
+  console.debug(`[mock-backend] invoke "${command}"`, args ?? {});
   return null;
 }
 
@@ -375,6 +382,8 @@ export interface MinecraftVersionDto {
   id: string;
   releaseTime: string;
   versionType: string;
+  /** Additive: Paper build status/support metadata when present. */
+  support?: string | null;
 }
 
 export interface LoaderChoiceDto {
@@ -584,38 +593,29 @@ export interface CurseForgeDownloadUpdate {
 
 async function invokeOrStub<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
   if (!hasBackend()) return stubInvoke<T>(command, args);
-  try {
-    if (isElectron()) return await invokeElectron<T>(command, args);
-    if (isTauri()) return await invoke<T>(command, args);
-    return await invokeHttp<T>(command, args);
-  } catch (err) {
-    if (isElectron() || !isTauri()) throw err;
-    // Command not registered yet (later phase) or backend error:
-    // retain the legacy desktop fallback for commands that are not wired yet.
-    // eslint-disable-next-line no-console
-    console.debug(`[tauri] invoke "${command}" fell back to mock`, err);
-    return null;
-  }
+  if (isElectron()) return invokeElectron<T>(command, args);
+  return invokeHttp<T>(command, args);
 }
 
-// backend-wired (Phase 2 entry fix): on the Tauri path, backend AppError
-// ({code, message}) rejects propagate to the store (toastable) instead of
-// being swallowed to null. Browser fallback still returns null so web
-// dev/build keeps the mocks.
+// Backend AppError ({code, message}) rejects propagate to the store (toastable); only the explicit
+// dev mock mode returns null, so a broken backend can never masquerade as mock data.
 async function invokeStrict<T>(command: string, args?: Record<string, unknown>): Promise<T | null> {
   if (!hasBackend()) return stubInvoke<T>(command, args);
   if (isElectron()) return invokeElectron<T>(command, args);
-  return isTauri() ? invoke<T>(command, args) : invokeHttp<T>(command, args);
+  return invokeHttp<T>(command, args);
 }
 
 /** Strict backend calls never stub or swallow failures when a backend is configured. */
 async function invokeRequired<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (!hasBackend()) {
-    const configError = getBackendConfigError();
-    throw new Error(configError ?? `Backend command "${command}" requires Electron, Tauri or backend-config.json.`);
+    if (mockBackendEnabled()) {
+      await stubInvoke(command, args);
+      return undefined as T;
+    }
+    throw noBackendError(command);
   }
   if (isElectron()) return invokeElectron<T>(command, args);
-  return isTauri() ? invoke<T>(command, args) : invokeHttp<T>(command, args);
+  return invokeHttp<T>(command, args);
 }
 
 /** Phase 0 smoke command: UI→Rust→UI round-trip (`ping` → `"pong"`). */
@@ -648,7 +648,7 @@ export const tauriServers = {
 export const tauriPlayers = {
   list: (id: string) => invokeRequired<PlayerListDto>('players_list', { id }),
   action: (id: string, action: string, name: string, value?: string) =>
-    invokeRequired<boolean>('player_action', { id, action, name, value }),
+    invokeRequired<boolean | PlayerDto>('player_action', { id, action, name, value }),
   addOffline: (id: string, name: string) =>
     invokeRequired<PlayerDto>('players_add_offline', { id, name }),
 };
@@ -697,10 +697,23 @@ export const tauriContent = {
   versions: (id: string, projectId: string) =>
     invokeRequired<ContentVersionDto[]>('content_versions', { id, projectId }),
   install: (id: string, projectId: string, versionId: string | null, title: string | null, jobId: string) =>
-    invokeRequired<{ installed: number; files: string[]; warnings: string[]; skipped?: number }>('content_install', {
+    invokeRequired<{ installed: number; files: string[]; warnings: string[]; skipped: number }>('content_install', {
       id, projectId, versionId, title, jobId,
     }),
   cancel: (jobId: string) => invokeRequired<boolean>('content_install_cancel', { jobId }),
+};
+
+/** CurseForge API-key management (D11): key material never comes back to the renderer. */
+export const tauriCurseForgeKey = {
+  status: () => invokeRequired<{ configured: boolean; source: 'safeStorage' | 'file' | null; encrypted: boolean; hint: string }>('curseforge_key_status'),
+  set: (key: string) => invokeRequired<{ source: 'safeStorage' | 'file'; encrypted: boolean }>('curseforge_key_set', { key }),
+  clear: () => invokeRequired<{ cleared: boolean }>('curseforge_key_clear'),
+};
+
+/** Diagnostics: support bundle location + recent launcher log ring (no secrets). */
+export const tauriDiagnostics = {
+  bundle: () => invokeRequired<{ path: string; bytes: number; entries: string[]; createdAt: string }>('diagnostics_bundle'),
+  recent: (limit = 200) => invokeRequired<string[]>('diagnostics_recent', { limit }),
 };
 
 export const tauriJava = {
@@ -771,7 +784,7 @@ export const tauriModpackPipeline = {
 export const tauriCurseForge = {
   openBrowser: () => {
     if (isElectron()) return invokeRequired<boolean>('curseforge_open_browser');
-    if (!isTauri()) {
+    if (mockBackendEnabled()) {
       window.open('https://www.curseforge.com/minecraft/search?class=modpacks', '_blank', 'noopener,noreferrer');
       return Promise.resolve(false);
     }
@@ -779,7 +792,7 @@ export const tauriCurseForge = {
   },
   openExternalBrowser: () => {
     if (isElectron()) return invokeRequired<void>('curseforge_open_external_browser');
-    if (!isTauri()) {
+    if (mockBackendEnabled()) {
       window.open('https://www.curseforge.com/minecraft/search?class=modpacks', '_blank', 'noopener,noreferrer');
       return Promise.resolve();
     }
@@ -844,7 +857,6 @@ export interface ServerReadinessPayload {
 
 async function listenOrNoop<T>(event: string, cb: (payload: T) => void): Promise<UnlistenFn> {
   if (isElectron()) return window.electronAPI!.on(event, (p) => cb(p as T));
-  if (isTauri()) return listen<T>(event, (e) => cb(e.payload));
   if (isHttpBackendConfigured()) return subscribeHttp<T>(event, cb);
   return () => {};
 }

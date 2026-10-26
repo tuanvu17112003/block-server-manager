@@ -7,6 +7,7 @@ import {
   formatErrorText,
   hasBackend,
   isInformativeErrorCode,
+  mockBackendEnabled,
   normalizeError,
   onServerLog,
   onServerMetrics,
@@ -180,9 +181,10 @@ function reconcileActiveId(current: string, servers: Server[]): string {
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const bridgeUnavailable = backendUnavailableReason();
-  // Browser mock mode is only valid in a real browser preview. Inside Electron without a preload
-  // bridge the app must fail closed (App shows the bridge error) instead of showing fake servers.
-  const mockMode = !hasBackend() && bridgeUnavailable === null;
+  // Browser mock mode is a dev-only explicit opt-in (VITE_MOCK_BACKEND=1). Inside Electron without
+  // a preload, and in browser builds without an HTTP backend, the app fails closed (App renders the
+  // bridge/backend-required screen) instead of showing fake servers.
+  const mockMode = !hasBackend() && bridgeUnavailable === null && mockBackendEnabled();
   const [servers, setServers] = useState<Server[]>(() => (mockMode ? initialServers : []));
   const [serversHydrated, setServersHydrated] = useState(() => mockMode);
   const [serversLoadError, setServersLoadError] = useState<string | null>(null);

@@ -3,9 +3,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import ts from 'typescript';
 import type { IpcContext } from '../ipc';
 import { handlersMap, registerRuntimeHandlers } from '../ipc';
 import { buildRuntime } from '../services/runtime';
+import { COMMAND_NAMES, MINIMAL_VALID_ARGS, validateCommandArgs } from '../services/validate-ipc';
 import { TestRun } from './harness';
 
 /** Commands invoked by src/tauri.ts (renderer). A missing handler here breaks a UI path. */
@@ -13,8 +15,10 @@ export const RENDERER_COMMANDS = [
   'backup_create', 'backup_delete', 'backup_export', 'backup_restore', 'backup_schedule_get',
   'backup_schedule_set', 'backups_list', 'content_install', 'content_install_cancel', 'content_list', 'content_remove',
   'content_search', 'content_toggle', 'content_versions', 'curseforge_cancel_download',
-  'curseforge_inspect_project', 'curseforge_inspect_zip', 'curseforge_list_zips',
+  'curseforge_inspect_project', 'curseforge_inspect_zip', 'curseforge_key_clear', 'curseforge_key_set',
+  'curseforge_key_status', 'curseforge_list_zips',
   'curseforge_open_browser', 'curseforge_open_external_browser', 'curseforge_pick_zip',
+  'diagnostics_bundle', 'diagnostics_recent',
   'java_detect', 'java_ensure', 'java_validate', 'loaders_resolve', 'logs_tail', 'metrics_get',
   'modpack_pipeline_cancel', 'modpack_pipeline_discard_preview', 'modpack_pipeline_install',
   'modpack_pipeline_pick_local_mrpack', 'modpack_pipeline_preview',
@@ -31,6 +35,43 @@ export const RENDERER_COMMANDS = [
 export interface SuiteResult {
   ok: boolean;
   report: string;
+}
+
+/**
+ * Canonical command list from `shared/contracts.ts` (WP-7.1). The Electron project cannot import
+ * that file yet because it lives outside `electron/tsconfig.json`'s rootDir (Lead build-wiring
+ * follow-up), so the COMMANDS tuple is parsed with the TypeScript compiler API — the gate then
+ * proves the shared list, the Electron runtime list, the handler map and the renderer list agree.
+ */
+function readSharedCommands(): string[] {
+  const file = path.join(__dirname, '..', '..', 'shared', 'contracts.ts');
+  const source = fs.readFileSync(file, 'utf8');
+  const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const names: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableStatement(node)) {
+      for (const declaration of node.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || declaration.name.text !== 'COMMANDS') continue;
+        let initializer: ts.Expression | undefined = declaration.initializer;
+        // `[...] as const` parses as an AsExpression (also unwrap satisfies/parentheses).
+        while (initializer
+          && (ts.isAsExpression(initializer) || ts.isSatisfiesExpression(initializer) || ts.isParenthesizedExpression(initializer))) {
+          initializer = initializer.expression;
+        }
+        if (!initializer || !ts.isArrayLiteralExpression(initializer)) {
+          throw new Error('shared/contracts.ts: COMMANDS must be an array literal');
+        }
+        for (const element of initializer.elements) {
+          if (ts.isStringLiteral(element) || ts.isNoSubstitutionTemplateLiteral(element)) names.push(element.text);
+          else throw new Error('shared/contracts.ts: COMMANDS entries must be string literals');
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
+  if (names.length === 0) throw new Error('shared/contracts.ts: COMMANDS tuple not found');
+  return names;
 }
 
 export async function runContractTests(ctx: IpcContext, filter?: string): Promise<SuiteResult> {
@@ -50,12 +91,48 @@ export async function runContractTests(ctx: IpcContext, filter?: string): Promis
   try {
     if (!filter || 'commands'.includes(filter)) {
       await run.must('all renderer commands are registered', async () => {
+        const shared = readSharedCommands();
         const missing = RENDERER_COMMANDS.filter((name) => typeof merged[name] !== 'function');
         assert.deepEqual(missing, []);
-        assert.equal(RENDERER_COMMANDS.length, 66);
+        assert.equal(RENDERER_COMMANDS.length, 71);
+        assert.equal(RENDERER_COMMANDS.length, shared.length);
       });
       await run.must('unknown command is not registered', async () => {
         assert.equal(merged['definitely_not_a_command'], undefined);
+      });
+      await run.must('shared/contracts.ts COMMANDS equals the renderer command list (WP-7.1)', async () => {
+        const shared = readSharedCommands();
+        assert.equal(shared.length, 71);
+        assert.equal(new Set(shared).size, shared.length, 'COMMANDS must not repeat a name');
+        assert.deepEqual([...shared].sort(), [...RENDERER_COMMANDS].sort());
+      });
+      await run.must('Electron runtime command list equals shared COMMANDS (WP-7.1)', async () => {
+        assert.deepEqual([...COMMAND_NAMES].sort(), [...readSharedCommands()].sort());
+      });
+      await run.must('every shared command has a registered handler', async () => {
+        const missing = readSharedCommands().filter((name) => typeof merged[name] !== 'function');
+        assert.deepEqual(missing, []);
+      });
+      await run.must('every shared command accepts its minimal valid args object (WP-7.1)', async () => {
+        const shared = readSharedCommands();
+        const unsupported = shared.filter((name) => !(name in MINIMAL_VALID_ARGS));
+        assert.deepEqual(unsupported, [], 'add MINIMAL_VALID_ARGS for new commands');
+        const failures: string[] = [];
+        for (const name of shared) {
+          const args = MINIMAL_VALID_ARGS[name as keyof typeof MINIMAL_VALID_ARGS];
+          try {
+            validateCommandArgs(name, args);
+          } catch (error) {
+            failures.push(`${name}: ${(error as Error).message}`);
+          }
+        }
+        assert.deepEqual(failures, []);
+      });
+      await run.must('IPC validator rejects unknown commands with not-found (WP-7.1)', async () => {
+        assert.throws(
+          () => validateCommandArgs('definitely_not_a_command', {}),
+          (error: unknown) => (error as { code?: string }).code === 'not-found',
+        );
       });
     }
 
