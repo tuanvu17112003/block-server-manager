@@ -1,6 +1,7 @@
 // P1 runtime handlers — java, versions/loaders, server_install, lifecycle, logs, history.
 // Registered into the ipc handler map at registerIpc time.
 import path from 'node:path';
+import fs from 'node:fs';
 import type { IpcContext, Handler } from '../ipc';
 import { appError, Store, type ServerDto, type CreateServerInput } from './store';
 import { Jobs } from './jobs';
@@ -29,8 +30,8 @@ const LOADER_MAP: Record<string, LoaderKind> = {
 
 export function buildRuntime(): {
   register: (ctx: IpcContext) => Runtime;
-  stopAll: () => Promise<void[]>;
-  shutdown: () => Promise<void[]>;
+  stopAll: (budgetMs?: number) => Promise<void[]>;
+  shutdown: (budgetMs?: number) => Promise<void[]>;
 } {
   let jobs: Jobs | null = null;
   let processes: ServerProcesses | null = null;
@@ -95,22 +96,36 @@ export function buildRuntime(): {
         try {
           j.progress(jobId, { progress: 5, stage: 'resolving Java' });
           const major = await requiredJavaMajor(input.mcVersion);
-          const rt = await ensureJava(major, path.join(ctx.dataRoot, 'runtime'), path.join(ctx.dataRoot, 'cache'));
+          // A configured Java path is validated and used as-is; only a missing runtime triggers
+          // provisioning. Start/install must not silently download a JDK over an explicit choice.
+          let javaExe: string;
+          if (input.javaPath) {
+            if (!fs.existsSync(input.javaPath)) {
+              throw appError('validation', `Java path not found: ${input.javaPath}`);
+            }
+            javaExe = input.javaPath;
+          } else {
+            const runtime = await ensureJava(major, path.join(ctx.dataRoot, 'runtime'), path.join(ctx.dataRoot, 'cache'));
+            javaExe = runtime.javapath;
+            s.setJavaPath(dto.id, javaExe);
+          }
           if (jobId && j.isCancelled(jobId)) throw appError('cancelled', 'Install cancelled.');
-          if (!input.javaPath) s.setJavaPath(dto.id, rt.javapath);
           j.progress(jobId, { progress: 25, stage: `installing ${kind}` });
-          await installLoader(kind, dir, input.mcVersion, input.loaderVersion ?? '', rt.javapath, cacheDir);
+          await installLoader(kind, dir, input.mcVersion, input.loaderVersion ?? '', javaExe, cacheDir);
           if (jobId && j.isCancelled(jobId)) throw appError('cancelled', 'Install cancelled.');
           j.progress(jobId, { progress: 80, stage: 'writing config' });
           const port = input.port && input.port > 0 ? input.port : dto.port;
           ensureServerProperties(dir, port);
           if (input.eulaAccepted) writeEula(dir);
-          const patch: Partial<ServerDto> = { javaPath: input.javaPath ?? rt.javapath, eulaAccepted: input.eulaAccepted ?? false, port };
+          const patch: Partial<ServerDto> = { javaPath: input.javaPath ?? javaExe, eulaAccepted: input.eulaAccepted ?? false, port };
           const updated = s.updateServer(dto.id, patch);
           j.progress(jobId, { progress: 100, stage: 'done' });
           return updated;
         } catch (err) {
+          // Complete-or-nothing: a failed/cancelled install must not leave a partial server tree
+          // or a visible record (B-09). The pipeline path already did this; see WP-1.1/WP-2.4.
           s.deleteServer(dto.id);
+          try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
           throw err;
         } finally {
           if (jobId) j.end(jobId);
@@ -155,15 +170,15 @@ export function buildRuntime(): {
     return { jobs, processes, handlers };
   };
 
-  const shutdown = async (): Promise<void[]> => {
+  const shutdown = async (budgetMs = 5000): Promise<void[]> => {
     backups?.stopScheduler();
     metrics?.stop();
-    return processes ? processes.stopAll() : Promise.resolve([]);
+    return processes ? processes.stopAll(budgetMs) : Promise.resolve([]);
   };
 
   return {
     register,
-    stopAll: () => (processes ? processes.stopAll() : Promise.resolve([])),
+    stopAll: (budgetMs = 5000) => (processes ? processes.stopAll(budgetMs) : Promise.resolve([])),
     shutdown,
   };
 }

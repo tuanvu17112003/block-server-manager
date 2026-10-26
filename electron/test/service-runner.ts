@@ -1,6 +1,7 @@
 // Service test runner — executes management/store suites in the Electron main process.
 import { TestRun } from './harness';
 import { runManagementSuite, runStoreSuite } from './services/management.suite';
+import { runPipelineSuite } from './services/pipeline.suite';
 
 export interface SuiteResult {
   ok: boolean;
@@ -12,6 +13,7 @@ export async function runServiceTests(filter?: string): Promise<SuiteResult> {
   const suites: { name: string; run: (target: TestRun) => Promise<void> }[] = [
     { name: 'store', run: runStoreSuite },
     { name: 'management', run: runManagementSuite },
+    { name: 'pipeline', run: runPipelineSuite },
   ];
   for (const suite of suites) {
     if (filter && !suite.name.includes(filter)) continue;

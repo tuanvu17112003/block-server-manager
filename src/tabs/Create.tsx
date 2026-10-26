@@ -1414,8 +1414,25 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
     (decision) => decision.reason === 'optionalDefaultKeep' || decision.action === 'awaitingUserChoice',
   );
   const skippedPipelineFiles = currentPipelineDecisions.filter((decision) => decision.action === 'exclude');
-  const reportOutcomeCounts = (pipelineReport?.files ?? []).reduce<Record<string, number>>((counts, file) => {
-    counts[file.outcome] = (counts[file.outcome] ?? 0) + 1;
+  // The report DTO is filled in full by the backend, but the renderer must stay defensive across the
+  // unvalidated IPC boundary: a missing field shows less detail instead of blanking the window.
+  const reportLoader = pipelineReport?.loader;
+  const reportFiles = pipelineReport?.files ?? [];
+  const reportWarnings = pipelineReport?.warnings ?? [];
+  const reportErrors = pipelineReport?.errors ?? [];
+  const reportStages = pipelineReport?.stages ?? [];
+  const reportFacts = pipelineReport
+    ? [
+        reportLoader
+          ? `Minecraft ${reportLoader.minecraftVersion || 'unknown version'} · ${reportLoader.kind || 'unknown loader'}${reportLoader.loaderVersion ? ` ${reportLoader.loaderVersion}` : ''}`
+          : '',
+        pipelineReport.serverId ? `server ${pipelineReport.serverId}` : '',
+        pipelineReport.planId ? `plan ${pipelineReport.planId}` : '',
+      ].filter((fact) => fact.length > 0)
+    : [];
+  const reportOutcomeCounts = reportFiles.reduce<Record<string, number>>((counts, file) => {
+    const outcome = file.outcome || 'unknown';
+    counts[outcome] = (counts[outcome] ?? 0) + 1;
     return counts;
   }, {});
   const pipelineChoicePageCount = Math.max(1, Math.ceil(reviewChoices.length / MAX_REPORT_DETAIL_ROWS));
@@ -2387,13 +2404,12 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 id="pipeline-install-report-heading" className="text-sm font-semibold text-zinc-100">Installation report</h4>
                 <Badge tone={pipelineReport.status === 'complete' ? 'green' : pipelineReport.status === 'cancelled' ? 'amber' : 'red'}>
-                  {pipelineReport.status}
+                  {pipelineReport.status ?? 'unknown'}
                 </Badge>
               </div>
               <p className="text-xs text-zinc-400">
-                Minecraft {pipelineReport.loader.minecraftVersion} · {pipelineReport.loader.kind}
-                {pipelineReport.loader.loaderVersion ? ` ${pipelineReport.loader.loaderVersion}` : ''}
-                {' '}· {pipelineReport.files.length} file result(s) · report {pipelineReport.planId}
+                {reportFacts.length > 0 ? `${reportFacts.join(' · ')} · ` : ''}
+                {reportFiles.length} file result(s)
               </p>
               {Object.keys(reportOutcomeCounts).length > 0 && (
                 <ul aria-label="File result counts" className="flex flex-wrap gap-2 text-xs text-zinc-300">
@@ -2402,50 +2418,50 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
                   ))}
                 </ul>
               )}
-              {pipelineReport.warnings.length > 0 && (
+              {reportWarnings.length > 0 && (
                 <div role="status" className="rounded border border-amber-900 bg-amber-950/30 p-2 text-xs text-amber-100">
                   <p className="font-medium">Warnings</p>
                   <ul className="mt-1 list-disc space-y-1 pl-5">
-                    {pipelineReport.warnings.slice(0, 20).map((warning, index) => <li key={`${index}:${warning}`}>{warning}</li>)}
+                    {reportWarnings.slice(0, 20).map((warning, index) => <li key={`${index}:${warning}`}>{warning}</li>)}
                   </ul>
-                  {pipelineReport.warnings.length > 20 && <p className="mt-1 text-amber-300">Showing 20 of {pipelineReport.warnings.length} warnings.</p>}
+                  {reportWarnings.length > 20 && <p className="mt-1 text-amber-300">Showing 20 of {reportWarnings.length} warnings.</p>}
                 </div>
               )}
-              {pipelineReport.errors.length > 0 && (
+              {reportErrors.length > 0 && (
                 <div role="alert" className="rounded border border-red-900 bg-red-950/30 p-2 text-xs text-red-200">
                   <p className="font-medium">Errors</p>
                   <ul className="mt-1 list-disc space-y-1 pl-5">
-                    {pipelineReport.errors.slice(0, 20).map((error, index) => <li key={`${index}:${error}`}>{error}</li>)}
+                    {reportErrors.slice(0, 20).map((error, index) => <li key={`${index}:${error}`}>{error}</li>)}
                   </ul>
-                  {pipelineReport.errors.length > 20 && <p className="mt-1 text-red-300">Showing 20 of {pipelineReport.errors.length} errors.</p>}
+                  {reportErrors.length > 20 && <p className="mt-1 text-red-300">Showing 20 of {reportErrors.length} errors.</p>}
                 </div>
               )}
               <details className="rounded border border-zinc-800 p-2">
-                <summary className="cursor-pointer text-xs font-medium text-zinc-300">File outcomes ({pipelineReport.files.length})</summary>
+                <summary className="cursor-pointer text-xs font-medium text-zinc-300">File outcomes ({reportFiles.length})</summary>
                 <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto text-xs text-zinc-400">
-                  {pipelineReport.files.slice(0, MAX_REPORT_DETAIL_ROWS).map((file, index) => (
+                  {reportFiles.slice(0, MAX_REPORT_DETAIL_ROWS).map((file, index) => (
                     <li key={`${file.path}:${index}`} className="border-b border-zinc-900 pb-2">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <span className="min-w-0 flex-1 break-all text-zinc-200">{file.path}</span>
-                        <Badge tone={file.outcome === 'installed' || file.outcome === 'verified' ? 'green' : file.outcome.toLowerCase().includes('failed') ? 'red' : 'zinc'}>{file.outcome}</Badge>
+                        <Badge tone={file.outcome === 'installed' || file.outcome === 'verified' ? 'green' : (file.outcome ?? '').toLowerCase().includes('failed') ? 'red' : 'zinc'}>{file.outcome ?? 'unknown'}</Badge>
                       </div>
                       {file.detail && <p className="mt-1 break-words">{file.detail}</p>}
                       {file.sizeBytes !== null && file.sizeBytes !== undefined && <p className="mt-1">{formatBytes(file.sizeBytes)}</p>}
                     </li>
                   ))}
                 </ul>
-                {pipelineReport.files.length > MAX_REPORT_DETAIL_ROWS && (
+                {reportFiles.length > MAX_REPORT_DETAIL_ROWS && (
                   <p className="mt-2 text-xs text-zinc-500">
                     Showing the first {MAX_REPORT_DETAIL_ROWS} entries. {pipelineReport.status === 'complete' ? 'The complete report is saved in install-report.json in the new server folder.' : 'All stage outcomes and errors are listed above.'}
                   </p>
                 )}
               </details>
-              {pipelineReport.stages.length > 0 && (
+              {reportStages.length > 0 && (
                 <details className="rounded border border-zinc-800 p-2">
-                  <summary className="cursor-pointer text-xs font-medium text-zinc-300">Stage outcomes ({pipelineReport.stages.length})</summary>
+                  <summary className="cursor-pointer text-xs font-medium text-zinc-300">Stage outcomes ({reportStages.length})</summary>
                   <ul className="mt-2 space-y-1 text-xs text-zinc-400">
-                    {pipelineReport.stages.slice(0, 50).map((stage, index) => (
-                      <li key={`${stage.stage}:${index}`}><span className="text-zinc-200">{stage.stage}</span> · {stage.outcome}{stage.detail ? ` · ${stage.detail}` : ''}</li>
+                    {reportStages.slice(0, 50).map((stage, index) => (
+                      <li key={`${stage.stage}:${index}`}><span className="text-zinc-200">{stage.stage ?? 'unknown'}</span> · {stage.outcome ?? 'unknown'}{stage.detail ? ` · ${stage.detail}` : ''}</li>
                     ))}
                   </ul>
                 </details>

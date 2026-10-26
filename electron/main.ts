@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import { registerIpc, registerRuntimeHandlers, runSelfTest, type IpcContext } from './ipc';
 import { buildRuntime } from './services/runtime';
 import { dataRoot } from './services/paths';
+import { detectLegacy, planImport, runImport } from './services/legacy-import';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -70,6 +71,43 @@ function wireIpc(ctx: IpcContext) {
 }
 
 const hasSingleInstanceLock = testFlag ? true : app.requestSingleInstanceLock();
+
+/**
+ * One-shot Tauri → Electron data import (D1). Auto-imports only into an empty store; when the
+ * target already has servers a plan is written next to the data file for the UI to confirm later.
+ * Never throws: a failed import must not block app startup.
+ */
+async function runLegacyStartupMigration(ctx: IpcContext): Promise<void> {
+  try {
+    const legacy = detectLegacy();
+    if (!legacy) return;
+    const plan = planImport({ dataRoot: ctx.dataRoot });
+    if (!plan.ok) {
+      console.warn(`[legacy-import] plan failed: ${plan.errors.join('; ')}`);
+      return;
+    }
+    if (plan.alreadyImported) {
+      console.log('[legacy-import] already imported; marker present.');
+      return;
+    }
+    const importable = plan.counts.servers ?? 0;
+    if (importable === 0) return;
+    try {
+      const existing = JSON.parse(fs.readFileSync(path.join(ctx.dataRoot, 'app-data.json'), 'utf8')) as { servers?: unknown[] };
+      if (Array.isArray(existing.servers) && existing.servers.length > 0) {
+        fs.writeFileSync(path.join(ctx.dataRoot, 'legacy-import-plan.json'), JSON.stringify(plan, null, 2));
+        console.log(`[legacy-import] legacy data found (${importable} servers) but target is not empty; plan written for confirmation.`);
+        return;
+      }
+    } catch {
+      // No existing store: safe to auto-import into the empty target.
+    }
+    const report = await runImport({ dataRoot: ctx.dataRoot });
+    console.log(`[legacy-import] ${report.status}: imported ${JSON.stringify(report.imported)}`);
+  } catch (error) {
+    console.warn(`[legacy-import] skipped: ${(error as Error).message}`);
+  }
+}
 
 if (!hasSingleInstanceLock) {
   // A second normal launch must not register handlers, start schedulers, or open a window.
@@ -215,7 +253,26 @@ if (!hasSingleInstanceLock) {
 
     const { appRuntime, runtime } = wireIpc(ctx);
     await runtime.processes.reapOrphans();
-    app.on('before-quit', () => { void appRuntime.shutdown(); });
+    await runLegacyStartupMigration(ctx);
+    // Quit must be synchronous-safe: Electron continues quitting immediately after this event, so
+    // we preventDefault, stop servers with a bounded budget (then tree-kill survivors), and quit.
+    let quitStarted = false;
+    app.on('before-quit', (event) => {
+      if (quitStarted) return; // second app.quit() below lets the quit proceed
+      event.preventDefault();
+      quitStarted = true;
+      let finished = false;
+      const finish = (): void => {
+        if (finished) return;
+        finished = true;
+        app.quit();
+      };
+      const hardTimer = setTimeout(finish, 8000);
+      hardTimer.unref?.();
+      void appRuntime.shutdown(5000)
+        .catch(() => undefined)
+        .finally(() => { clearTimeout(hardTimer); finish(); });
+    });
 
     createWindow();
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

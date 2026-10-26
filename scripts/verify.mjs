@@ -53,6 +53,7 @@ const node = process.execPath;
 const electron = (flag, extra = []) => [electronCli, '.', flag, ...extra];
 
 runStep('build', 'npm', ['run', 'build']);
+runStep('runtime-data', node, [path.join('scripts', 'check-runtime-data.mjs')]);
 runStep('unit', node, [path.join('scripts', 'unit.mjs')]);
 runStep('selftest', node, electron('--selftest'));
 runStep('contract', node, electron('--contracttest'));

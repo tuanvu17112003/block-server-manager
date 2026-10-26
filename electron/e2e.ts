@@ -7,7 +7,7 @@ import { Store } from './services/store';
 import { buildRuntime } from './services/runtime';
 import { installCurseforge, inspectStagedZip } from './services/installer/curseforge';
 import { searchModpacks } from './services/installer/modrinth';
-import { startWithAutoFix, writeEula } from './services/installer/core';
+import { startWithAutoFix, writeEula, ensureJava } from './services/installer/core';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -48,6 +48,29 @@ export async function runE2E(ctx: IpcContext): Promise<boolean> {
   t('vanilla-stop', store.getServer(vanilla.id)?.status === 'stopped');
   void logUnsub;
   } catch (e) { t('vanilla-install', false); results.push(`vanilla-error=${(e as Error).message.slice(0,120)}`); }
+
+  // 2b. Paper install → start → kill must end in `stopped` (WP-1.2 Paper branch, WP-1.5 kill intent)
+  try {
+    const java = await ensureJava(21, path.join(ctx.dataRoot, 'runtime'), path.join(ctx.dataRoot, 'cache'));
+    const paper = await H.server_install({
+      input: { name: 'e2e-paper', loader: 'Paper', mcVersion: '1.21.4', ramMb: 1024, eulaAccepted: true, javaPath: java.javapath },
+      jobId: 'jpaper',
+    }, ctx) as { id: string };
+    t('paper-install', !!paper?.id);
+    if (paper?.id) {
+      await H.server_start({ id: paper.id }, ctx);
+      let paperUp = false;
+      for (let i = 0; i < 90 && !paperUp; i++) { await sleep(2000); paperUp = store.getServer(paper.id)?.status === 'running'; }
+      t('paper-start-Done', paperUp);
+      await H.server_kill({ id: paper.id }, ctx);
+      let paperStopped = false;
+      for (let i = 0; i < 30 && !paperStopped; i++) { await sleep(1000); paperStopped = store.getServer(paper.id)?.status === 'stopped'; }
+      t('paper-kill-stopped', paperStopped);
+      const cleanup = new Store(ctx.dataRoot);
+      cleanup.deleteServer(paper.id);
+      fs.rmSync(path.join(ctx.dataRoot, 'servers', paper.id), { recursive: true, force: true });
+    }
+  } catch (e) { t('paper-install', false); results.push(`paper-error=${(e as Error).message.slice(0,160)}`); }
 
   // 3. Modrinth cobbleverse through the pipeline (the wizard's exact path)
   try {

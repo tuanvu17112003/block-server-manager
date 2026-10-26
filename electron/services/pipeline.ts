@@ -22,6 +22,8 @@ export interface PipelineFileDecision { path: string; side: 'server' | 'client' 
 export interface PipelinePreviewDto { previewId: string; sourceName: string; warnings: string[]; plan: { loader: { kind: string; minecraftVersion: string; loaderVersion: string | null }; fileDecisions: PipelineFileDecision[] } }
 
 interface HeldPreview {
+  planId: string;
+  sourcePin: Record<string, unknown>;
   source: PipelineSourceRequest;
   sourceName: string;
   loader: { kind: string; minecraftVersion: string; loaderVersion: string | null };
@@ -33,9 +35,79 @@ interface HeldPreview {
 
 export interface PipelineInstallChoices { files: Record<string, 'include' | 'exclude'>; approvedReplacements: string[]; autoDeleteCurseForgeZip: boolean }
 export interface PipelineCreateInput { name: string; port?: number; ramMb: number; javaPath?: string; eulaAccepted?: boolean }
-export interface PipelineInstallResult { status: 'complete' | 'failed' | 'cancelled'; server: ServerDto | null; report: { status: string; stages: { stage: string; outcome: string }[]; files: { path: string; outcome: string }[]; warnings: string[]; errors: string[] }; error: string | null }
+
+/** Install-report schema version; mirrors `PIPELINE_SCHEMA_VERSION` in the Rust reference. */
+export const PIPELINE_REPORT_SCHEMA_VERSION = 1;
+export const INSTALL_REPORT_FILE = 'install-report.json';
+
+export type PipelineInstallStatus = 'preparing' | 'complete' | 'failed' | 'cancelled';
+
+export interface PipelineLoaderPin { kind: string; minecraftVersion: string; loaderVersion: string | null }
+export interface PipelineInstallReportFile {
+  path: string;
+  outcome: string;
+  sizeBytes?: number | null;
+  hashes?: { sha1: string; sha512: string } | null;
+  sourceHost?: string | null;
+  detail?: string | null;
+}
+export interface PipelineInstallReportStage { stage: string; outcome: string; detail?: string | null }
+
+/** Full durable install report — matches `PipelineInstallReport` in src/tauri.ts. */
+export interface PipelineInstallReport {
+  schemaVersion: number;
+  planId: string;
+  serverId: string;
+  createdAt: string;
+  status: PipelineInstallStatus;
+  sourcePin: unknown;
+  loader: PipelineLoaderPin;
+  files: PipelineInstallReportFile[];
+  stages: PipelineInstallReportStage[];
+  warnings: string[];
+  errors: string[];
+}
+
+export interface PipelineInstallResult {
+  status: 'complete' | 'failed' | 'cancelled';
+  server: ServerDto | null;
+  report: PipelineInstallReport;
+  error: string | null;
+}
 
 const LOADER_DTO: Record<string, string> = { fabric: 'Fabric', forge: 'Forge', neoforge: 'NeoForge', quilt: 'Quilt', vanilla: 'Vanilla', paper: 'Paper' };
+/** Renderer `PipelineLoaderKind` uses `neoForge`; the engine uses `neoforge`. */
+const REPORT_LOADER_KIND: Record<string, string> = { neoforge: 'neoForge' };
+
+function sourcePinOf(source: PipelineSourceRequest): Record<string, unknown> {
+  switch (source.kind) {
+    case 'modrinthRemote':
+      return { source: 'modrinth', projectId: source.projectId, versionId: source.versionId };
+    case 'localMrpack':
+      return { source: 'localMrpack', sourceId: source.sourceId };
+    case 'curseForgeServerZip':
+      return { source: 'curseforge', zipName: source.zipName };
+    case 'curseforgeProject':
+      return { source: 'curseforge', projectId: Number(source.projectId) };
+    default:
+      return { source: 'unknown', request: source as unknown };
+  }
+}
+
+/** Persist the durable install report inside the server directory (best effort, temp+rename). */
+export function writeInstallReport(dir: string, report: PipelineInstallReport): boolean {
+  const target = path.join(dir, INSTALL_REPORT_FILE);
+  const tmp = `${target}.tmp`;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(tmp, JSON.stringify(report, null, 2));
+    fs.renameSync(tmp, target);
+    return true;
+  } catch {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
+    return false;
+  }
+}
 
 export class Pipeline {
   private previews = new Map<string, HeldPreview>();
@@ -54,7 +126,13 @@ export class Pipeline {
   }
 
   private async previewInner(source: PipelineSourceRequest, jobId: string): Promise<PipelinePreviewDto> {
-    const held: HeldPreview = { source, sourceName: '', loader: { kind: 'vanilla', minecraftVersion: '', loaderVersion: null } };
+    const held: HeldPreview = {
+      planId: randomUUID(),
+      sourcePin: sourcePinOf(source),
+      source,
+      sourceName: '',
+      loader: { kind: 'vanilla', minecraftVersion: '', loaderVersion: null },
+    };
     const warnings: string[] = [];
     const decisions: PipelineFileDecision[] = [];
 
@@ -120,9 +198,12 @@ export class Pipeline {
 
   private async installInner(previewId: string, input: PipelineCreateInput, choices: PipelineInstallChoices, jobId: string): Promise<PipelineInstallResult> {
     const held = this.previews.get(previewId);
-    if (!held) throw appError('not-found', `Preview ${previewId} not found.`);
+    if (!held) {
+      const message = `Preview ${previewId} not found.`;
+      return this.failOrCancel(new Store(this.ctx.dataRoot), null, '', 'failed', this.createReport(null), message);
+    }
     const store = new Store(this.ctx.dataRoot);
-    const report = { status: 'preparing', stages: [] as { stage: string; outcome: string }[], files: [] as { path: string; outcome: string }[], warnings: [] as string[], errors: [] as string[] };
+    const report = this.createReport(held);
     const cancelled = (): boolean => this.jobs.isCancelled(jobId);
 
     let dto: ServerDto | null = null;
@@ -135,6 +216,7 @@ export class Pipeline {
         modpackId: held.source.kind === 'modrinthRemote' ? held.source.projectId : held.slug ?? undefined,
         port: input.port, ramMb: input.ramMb, javaPath: input.javaPath, eulaAccepted: input.eulaAccepted,
       });
+      report.serverId = dto.id;
       dir = path.join(this.ctx.dataRoot, 'servers', dto.id);
 
       if (cancelled()) return this.failOrCancel(store, dto, dir, 'cancelled', report, null);
@@ -182,6 +264,7 @@ export class Pipeline {
       store.updateServer(dto.id, { port });
       report.stages.push({ stage: 'publish', outcome: 'complete' });
       report.status = 'complete';
+      writeInstallReport(dir, report);
       this.jobs.progress(jobId, { progress: 100, stage: 'install complete' });
       this.previews.delete(previewId);
       return { status: 'complete', server: store.getServer(dto.id), report, error: null };
@@ -190,12 +273,39 @@ export class Pipeline {
     }
   }
 
-  private failOrCancel(store: Store, dto: ServerDto | null, dir: string, status: 'failed' | 'cancelled', report: PipelineInstallResult['report'], error: string | null): PipelineInstallResult {
-    // rollback: complete-or-nothing (M-7)
-    if (dir && fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
-    if (dto) store.deleteServer(dto.id);
+  /** Full report skeleton shared by every terminal outcome (success/failure/cancel). */
+  private createReport(held: HeldPreview | null): PipelineInstallReport {
+    return {
+      schemaVersion: PIPELINE_REPORT_SCHEMA_VERSION,
+      planId: held?.planId ?? '',
+      serverId: '',
+      createdAt: new Date().toISOString(),
+      status: 'preparing',
+      sourcePin: held?.sourcePin ?? null,
+      loader: held
+        ? {
+            kind: REPORT_LOADER_KIND[held.loader.kind] ?? held.loader.kind,
+            minecraftVersion: held.loader.minecraftVersion,
+            loaderVersion: held.loader.loaderVersion,
+          }
+        : { kind: 'vanilla', minecraftVersion: '', loaderVersion: null },
+      files: [],
+      stages: [],
+      warnings: [],
+      errors: [],
+    };
+  }
+
+  private failOrCancel(store: Store, dto: ServerDto | null, dir: string, status: 'failed' | 'cancelled', report: PipelineInstallReport, error: string | null): PipelineInstallResult {
     report.status = status;
     if (error) report.errors.push(error);
+    if (dir && fs.existsSync(dir)) {
+      // Best-effort failure report while the directory still exists; rollback below still removes it
+      // (complete-or-nothing, M-7), so successful installs are the durable copy.
+      writeInstallReport(dir, report);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    if (dto) store.deleteServer(dto.id);
     log(`[pipeline] ${status}${error ? `: ${error}` : ''}`);
     return { status, server: null, report, error };
   }

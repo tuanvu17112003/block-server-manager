@@ -36,7 +36,7 @@ export async function fetchOk(url: string, opts: RequestInit = {}): Promise<Resp
   }
 }
 
-export interface DownloadOpts { sha1?: string; sha512?: string; size?: number }
+export interface DownloadOpts { sha1?: string; sha256?: string; sha512?: string; size?: number }
 export interface DownloadResult { bytes: number; sha1: string; sha256: string; sha512: string }
 // temp+rename, size+hash verify; never sends Range (www.curseforge.com /download 404s on Range).
 export async function download(url: string, dest: string, opts: DownloadOpts = {}): Promise<DownloadResult> {
@@ -56,6 +56,7 @@ export async function download(url: string, dest: string, opts: DownloadOpts = {
   const digests = { sha1: h1.digest('hex'), sha256: h256.digest('hex'), sha512: h512.digest('hex') };
   if (opts.size != null && n !== opts.size) { rmSync(tmp, { force: true }); throw new Error(`size mismatch ${url}: got ${n}, want ${opts.size}`); }
   if (opts.sha1 && digests.sha1 !== opts.sha1) { rmSync(tmp, { force: true }); throw new Error(`sha1 mismatch ${url}`); }
+  if (opts.sha256 && digests.sha256 !== opts.sha256.toLowerCase()) { rmSync(tmp, { force: true }); throw new Error(`sha256 mismatch ${url}`); }
   if (opts.sha512 && digests.sha512 !== opts.sha512) { rmSync(tmp, { force: true }); throw new Error(`sha512 mismatch ${url}`); }
   renameSync(tmp, dest);
   return { bytes: n, ...digests };
@@ -84,24 +85,30 @@ export async function listZip(zipPath: string): Promise<ZipEntry[]> {
 }
 export async function readZipEntry(zipPath: string, entryName: string): Promise<Buffer> {
   const z = await openZip(zipPath);
-  const data = await new Promise<Buffer>((res, rej) => {
-    let found = false;
-    z.on('entry', (e: yauzl.Entry) => {
-      if (found || e.fileName !== entryName) return z.readEntry();
-      found = true;
-      z.openReadStream(e, async (er, s) => {
-        if (er || !s) return rej(er ?? new Error('stream'));
-        const chunks: Buffer[] = [];
-        for await (const c of s) chunks.push(c as Buffer);
-        res(Buffer.concat(chunks));
+  try {
+    return await new Promise<Buffer>((res, rej) => {
+      let found = false;
+      z.on('entry', (e: yauzl.Entry) => {
+        if (found || e.fileName !== entryName) return z.readEntry();
+        found = true;
+        z.openReadStream(e, (er, s) => {
+          if (er || !s) return rej(er ?? new Error('stream'));
+          void (async () => {
+            try {
+              const chunks: Buffer[] = [];
+              for await (const c of s) chunks.push(c as Buffer);
+              res(Buffer.concat(chunks));
+            } catch (err) { rej(err); }
+          })();
+        });
       });
+      z.on('end', () => rej(new Error(`zip entry not found: ${entryName}`)));
+      z.on('error', rej);
+      z.readEntry();
     });
-    z.on('end', () => rej(new Error(`zip entry not found: ${entryName}`)));
-    z.on('error', rej);
-    z.readEntry();
-  });
-  z.close();
-  return data;
+  } finally {
+    z.close();
+  }
 }
 export interface ExtractResult { written: string[]; skippedExisting: string[]; excluded: string[] }
 export async function extractZip(zipPath: string, destDir: string, opts: { root?: string; skipExisting?: boolean; maxTotalBytes?: number; excludeFn?: (rel: string) => boolean } = {}): Promise<ExtractResult> {
@@ -109,35 +116,60 @@ export async function extractZip(zipPath: string, destDir: string, opts: { root?
   const z = await openZip(zipPath);
   const written: string[] = [], skippedExisting: string[] = [], excluded: string[] = [];
   let total = 0;
-  await new Promise<void>((res, rej) => {
-    let failed = false;
-    z.on('entry', (e: yauzl.Entry) => {
-      void (async () => {
-        try {
-          if (failed) return z.readEntry();
-          if (!e.fileName.startsWith(root)) return z.readEntry();
-          const rel = e.fileName.slice(root.length);
-          if (!rel || e.fileName.endsWith('/')) return z.readEntry();
-          if (excludeFn && excludeFn(rel)) { excluded.push(rel); return z.readEntry(); }
-          const target = safeTarget(destDir, rel);
-          total += e.uncompressedSize;
-          if (total > maxTotalBytes) throw new Error(`archive too large: ${zipPath}`);
-          mkdirSync(path.dirname(target), { recursive: true });
-          if (skipExisting && existsSync(target) && statSync(target).isFile()) { skippedExisting.push(rel); return z.readEntry(); }
-          z.openReadStream(e, (er, s) => {
-            if (er || !s) { failed = true; rej(er ?? new Error('stream')); return; }
-            const out = createWriteStream(target);
-            s.pipe(out);
-            void once(out, 'finish').then(() => { written.push(rel); z.readEntry(); });
-          });
-        } catch (err) { failed = true; rej(err); }
-      })();
+  let failed = false; // set on the first failure: stops pumping entries and gates the promise
+  try {
+    await new Promise<void>((res, rej) => {
+      let settled = false;
+      // M-17: every failure path (zipfile error, entry-stream error, output-stream error, throw)
+      // funnels here so the promise ALWAYS settles and the zip file descriptor is released.
+      const fail = (err: unknown): void => {
+        if (failed || settled) return;
+        failed = true;
+        settled = true;
+        try { z.close(); } catch { /* already closed */ }
+        rej(err instanceof Error ? err : new Error(String(err)));
+      };
+      z.on('entry', (e: yauzl.Entry) => {
+        void (async () => {
+          try {
+            if (failed) return;
+            if (!e.fileName.startsWith(root)) { z.readEntry(); return; }
+            const rel = e.fileName.slice(root.length);
+            if (!rel || e.fileName.endsWith('/')) { z.readEntry(); return; }
+            if (excludeFn && excludeFn(rel)) { excluded.push(rel); z.readEntry(); return; }
+            const target = safeTarget(destDir, rel);
+            total += e.uncompressedSize;
+            if (total > maxTotalBytes) throw new Error(`archive too large: ${zipPath}`);
+            mkdirSync(path.dirname(target), { recursive: true });
+            if (skipExisting && existsSync(target) && statSync(target).isFile()) { skippedExisting.push(rel); z.readEntry(); return; }
+            z.openReadStream(e, (er, s) => {
+              if (er || !s) return fail(er ?? new Error('zip entry stream unavailable'));
+              if (failed) { s.destroy(); return; }
+              const out = createWriteStream(target);
+              const removePartial = (): void => { try { rmSync(target, { force: true }); } catch { /* handle may still be open */ } };
+              // Corrupt/truncated entry: yauzl forwards zlib Z_DATA_ERROR on the read stream; without
+              // these handlers it becomes an uncaughtException and the promise hangs (probe M-17).
+              s.once('error', err => { s.destroy(); out.destroy(); removePartial(); fail(err); });
+              out.once('error', err => { s.destroy(); out.destroy(); removePartial(); fail(err); });
+              // Retry cleanup once the write handle has actually closed (Windows EBUSY on first try).
+              out.once('close', () => { if (failed) removePartial(); });
+              out.once('finish', () => {
+                if (failed) return;
+                written.push(rel);
+                z.readEntry();
+              });
+              s.pipe(out);
+            });
+          } catch (err) { fail(err); }
+        })();
+      });
+      z.on('end', () => { if (!failed && !settled) { settled = true; res(); } });
+      z.on('error', err => fail(err));
+      z.readEntry();
     });
-    z.on('end', () => res());
-    z.on('error', rej);
-    z.readEntry();
-  });
-  z.close();
+  } finally {
+    try { z.close(); } catch { /* closed by fail() */ }
+  }
   return { written, skippedExisting, excluded };
 }
 
@@ -224,8 +256,119 @@ export async function runInstaller(javaExe: string, installerJar: string, args: 
     await sleep(5000);
   }
 }
+// ---------- paper (Fill v3) ----------
+// Live shape (verified against https://fill.papermc.io/v3/projects/paper/versions/1.21.4/builds):
+//   [ { id: 232, time: "...", channel: "STABLE"|"BETA"|"ALPHA",
+//       downloads: { "server:default": { name, url, size, checksums: { sha256 } } } }, ... ]  (newest first)
+// `selectPaperBuild`/`paperServerArtifact` are pure so build choice is unit-testable without network.
+export const PAPER_SERVER_DOWNLOAD = 'server:default';
+
+export interface FillBuildDownload {
+  name?: string;
+  url?: string;
+  size?: number;
+  checksums?: Record<string, string | undefined>;
+}
+export interface FillBuild {
+  id?: number | string;
+  time?: string;
+  channel?: string;
+  downloads?: Record<string, FillBuildDownload | null | undefined>;
+}
+export interface PaperServerArtifact {
+  buildId: number; // -1 when the payload has no usable id
+  channel: string;
+  url: string;
+  size: number;
+  sha256: string; // lowercase hex
+  name: string;
+}
+
+function fillBuildId(build: FillBuild | null | undefined): number {
+  const raw = build?.id;
+  const id = typeof raw === 'number' ? raw : typeof raw === 'string' && /^\d+$/.test(raw.trim()) ? Number(raw) : NaN;
+  return Number.isSafeInteger(id) && id > 0 ? id : -1;
+}
+function fileBaseName(url: string): string {
+  try { return path.basename(new URL(url).pathname) || 'paper.jar'; } catch { return 'paper.jar'; }
+}
+/** Latest-first ordering: Fill is newest-first already, but never trust payload order (id, then time). */
+function fillBuildsNewestFirst(builds: FillBuild[]): FillBuild[] {
+  const rank = (build: FillBuild): { id: number; time: number } => {
+    const parsed = typeof build?.time === 'string' ? Date.parse(build.time) : NaN;
+    return { id: fillBuildId(build), time: Number.isFinite(parsed) ? parsed : -Infinity };
+  };
+  return builds
+    .map((build, index) => ({ build, index, rank: rank(build) }))
+    .sort((a, b) => (b.rank.id - a.rank.id) || (b.rank.time - a.rank.time) || (a.index - b.index))
+    .map((entry) => entry.build);
+}
+/** Validate one Fill build and return its `server:default` artifact; null when absent or incomplete. */
+export function paperServerArtifact(build: FillBuild | null | undefined): PaperServerArtifact | null {
+  if (!build || typeof build !== 'object') return null;
+  const download = build.downloads?.[PAPER_SERVER_DOWNLOAD] ?? null;
+  if (!download || typeof download !== 'object') return null;
+  const url = typeof download.url === 'string' ? download.url.trim() : '';
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' || !parsed.hostname) return null;
+  } catch { return null; }
+  const size = typeof download.size === 'number' && Number.isSafeInteger(download.size) && download.size > 0 ? download.size : 0;
+  if (!size) return null;
+  const sha256 = typeof download.checksums?.sha256 === 'string' ? download.checksums.sha256.trim().toLowerCase() : '';
+  if (!/^[0-9a-f]{64}$/.test(sha256)) return null;
+  return {
+    buildId: fillBuildId(build),
+    channel: String(build.channel ?? '').toUpperCase(),
+    url,
+    size,
+    sha256,
+    name: typeof download.name === 'string' && download.name.trim() ? download.name.trim() : fileBaseName(url),
+  };
+}
+/** Latest STABLE build that carries a complete `server:default` artifact. Throws when none exists. */
+export function selectPaperBuild(builds: FillBuild[]): PaperServerArtifact {
+  if (!Array.isArray(builds)) throw new Error('Fill API response is not a build array');
+  const channels = [...new Set(builds.map(build => String(build?.channel ?? '?').toUpperCase()))];
+  for (const build of fillBuildsNewestFirst(builds)) {
+    if (String(build?.channel ?? '').toUpperCase() !== 'STABLE') continue;
+    const artifact = paperServerArtifact(build);
+    if (artifact) return artifact;
+  }
+  throw new Error(`no STABLE Paper build with a complete ${PAPER_SERVER_DOWNLOAD} download (${builds.length} build(s); channels: ${channels.join(', ') || 'none'})`);
+}
+/** Explicit build-id pin (channel may be BETA/ALPHA): requires a complete `server:default` artifact. */
+export function selectPaperBuildById(builds: FillBuild[], buildId: number): PaperServerArtifact {
+  if (!Array.isArray(builds)) throw new Error('Fill API response is not a build array');
+  const build = builds.find(candidate => fillBuildId(candidate) === buildId);
+  if (!build) throw new Error(`Paper build ${buildId} not found for this Minecraft version`);
+  const artifact = paperServerArtifact(build);
+  if (!artifact) throw new Error(`Paper build ${buildId} is not artifact-complete (${PAPER_SERVER_DOWNLOAD} needs url + size + sha256)`);
+  return artifact;
+}
 export async function installLoader(kind: LoaderKind, dir: string, mc: string, ver: string, javaExe: string, cacheDir: string): Promise<void> {
   mkdirSync(dir, { recursive: true });
+  if (kind === 'paper') {
+    const buildsUrl = `https://fill.papermc.io/v3/projects/paper/versions/${encodeURIComponent(mc)}/builds`;
+    const res = await fetchOk(buildsUrl);
+    if (res.status === 404) throw new Error(`Paper has no builds for Minecraft ${mc}`);
+    if (!res.ok) throw new Error(`Fill API HTTP ${res.status} for ${buildsUrl}`);
+    let payload: unknown;
+    try { payload = await res.json(); } catch (e) { throw new Error(`Fill API returned invalid JSON for Paper ${mc}: ${(e as Error).message}`); }
+    if (!Array.isArray(payload)) throw new Error(`unexpected Fill API payload for Paper ${mc}: expected a build array`);
+    // loaderVersion may be a numeric build pin; the wizard currently sends the MC version (ignored -> latest STABLE).
+    const pinned = /^\d+$/.test(ver.trim()) ? Number(ver.trim()) : null;
+    let artifact: PaperServerArtifact;
+    try {
+      artifact = pinned !== null ? selectPaperBuildById(payload as FillBuild[], pinned) : selectPaperBuild(payload as FillBuild[]);
+    } catch (e) {
+      throw new Error(`Paper ${mc}: ${(e as Error).message}`);
+    }
+    log(`[paper] ${mc}: installing build ${artifact.buildId === -1 ? '?' : artifact.buildId} (${artifact.channel || 'unknown channel'}) ${artifact.name}`);
+    await download(artifact.url, path.join(dir, 'server.jar'), { size: artifact.size, sha256: artifact.sha256 });
+    log(`[paper] ${mc}: server.jar verified (${artifact.size} bytes, sha256 ${artifact.sha256.slice(0, 12)}…)`);
+    return;
+  }
   if (kind === 'vanilla') {
     const manifest = await (await fetchOk('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')).json() as { versions: { id: string; url: string }[] };
     const entry = manifest.versions.find(v => v.id === mc);

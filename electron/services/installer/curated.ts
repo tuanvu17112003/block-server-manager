@@ -19,11 +19,15 @@ export interface CuratedResolver {
   readonly protectBasenames: Set<string>;
 }
 
-export function makeCuratedResolver(opts: { platform: 'modrinth' | 'curseforge'; packSlug?: string | null; presentPaths: string[] }): CuratedResolver {
+export function makeCuratedResolver(opts: { platform: 'modrinth' | 'curseforge'; packSlug?: string | null; presentPaths: string[]; learnedFile?: string }): CuratedResolver {
   const dataDir = path.join(__dirname, 'data');
   const itzg = (loadJsonIfExists(path.join(dataDir, opts.platform === 'curseforge' ? 'itzg-cf-exclude-include.json' : 'itzg-modrinth-exclude-include.json')) ?? {}) as ItzgFile;
   const hand = ((loadJsonIfExists(path.join(dataDir, 'env-overrides.json')) as { serverOverrides?: OverrideEntry[] })?.serverOverrides ?? []);
-  const learned = ((loadJsonIfExists(path.join(dataDir, 'env-overrides-learned.json')) as { serverOverrides?: OverrideEntry[] })?.serverOverrides ?? []);
+  const bundledLearned = ((loadJsonIfExists(path.join(dataDir, 'env-overrides-learned.json')) as { serverOverrides?: OverrideEntry[] })?.serverOverrides ?? []);
+  const runtimeLearned = (opts.learnedFile
+    ? ((loadJsonIfExists(opts.learnedFile) as { serverOverrides?: OverrideEntry[] })?.serverOverrides ?? [])
+    : []);
+  const learned = [...bundledLearned, ...runtimeLearned];
   const present = new Set(opts.presentPaths.map(norm));
 
   const entryTest = (entry: unknown, p: string): boolean => {
@@ -56,9 +60,12 @@ export function makeCuratedResolver(opts: { platform: 'modrinth' | 'curseforge';
   return { resolve, protectBasenames };
 }
 
-export function appendLearned(entries: { match: string; why: string }[]): void {
+export function appendLearned(entries: { match: string; why: string }[], learnedFile?: string): void {
   if (!entries.length) return;
-  const p = path.join(__dirname, 'data', 'env-overrides-learned.json');
+  // Runtime learning must never write into the (possibly read-only) app directory: the server
+  // process passes a data-root path; the bundled path is only used by tooling/tests.
+  const p = learnedFile ?? path.join(__dirname, 'data', 'env-overrides-learned.json');
+  fs.mkdirSync(path.dirname(p), { recursive: true });
   const cur = (loadJsonIfExists(p) as { serverOverrides?: OverrideEntry[] }) ?? { comment: 'AUTO-APPENDED by the auto-fix loop.', serverOverrides: [] };
   cur.serverOverrides = cur.serverOverrides ?? [];
   const seen = new Set(cur.serverOverrides.map(o => o.match));
