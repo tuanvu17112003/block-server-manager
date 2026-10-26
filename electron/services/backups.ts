@@ -225,7 +225,11 @@ export class Backups {
       }
 
       progress(8, 'collecting files');
-      const inputs = await collectInputs(dir, backupNames(dir));
+      const inputs = (await collectInputs(dir, backupNames(dir)))
+        // `session.lock` is held open by a running JVM (RandomAccessFile) on Windows: reading it
+        // yields EBUSY and it must not be restored anyway (Minecraft recreates it). Phase 8 soak
+        // finding: every live backup failed on this file until it was excluded.
+        .filter((input) => !/(^|\/)session\.lock$/i.test(input.name));
       if (inputs.length === 0) throw appError('backup-failed', 'There are no world or config files to archive yet.');
       const destDir = this.backupsDir();
       fs.mkdirSync(destDir, { recursive: true });

@@ -61,11 +61,31 @@ interface PreparedEntry {
   nameBytes: Buffer;
 }
 
+/**
+ * Running Minecraft servers keep `session.lock`/autosave files briefly locked on Windows; a backup
+ * that snapshots live files can hit EBUSY/EPERM for a few milliseconds. Retry those codes with a
+ * short bounded backoff instead of failing the whole archive (Phase 8 soak finding).
+ */
+const RETRYABLE_READ_CODES = new Set(['EBUSY', 'EPERM', 'EACCES', 'EMFILE', 'ENFILE']);
+async function withReadRetry<T>(operation: () => Promise<T>, attempts = 10): Promise<T> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try { return await operation(); }
+    catch (error) {
+      lastError = error;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === undefined || !RETRYABLE_READ_CODES.has(code) || attempt === attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100 + attempt * 40));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 /** Stat every input and enforce the classic-ZIP budget before reading any file body. */
 async function prepareInputs(inputs: readonly ZipInput[], limit: number): Promise<PreparedEntry[]> {
   const prepared: PreparedEntry[] = [];
   for (const input of inputs) {
-    const stats = await fsp.stat(input.path);
+    const stats = await withReadRetry(() => fsp.stat(input.path));
     if (!stats.isFile()) throw appError('backup-failed', `not a regular file while archiving: ${input.name}`);
     prepared.push({ input, size: stats.size, mtimeMs: stats.mtimeMs, nameBytes: Buffer.from(input.name, 'utf8') });
   }
@@ -86,7 +106,7 @@ export async function writeZip(dest: string, inputs: ZipInput[], opts: { limit?:
     let offset = 0;
 
     for (const entry of prepared) {
-      const body = await fsp.readFile(entry.input.path);
+      const body = await withReadRetry(() => fsp.readFile(entry.input.path));
       if (body.length !== entry.size) {
         throw appError('backup-failed', `file changed while archiving: ${entry.input.name}`);
       }

@@ -109,6 +109,8 @@ export async function runBackupsSuite(run: TestRun): Promise<void> {
     });
 
     await run.must('backup create: archive entries, deflate, DOS mtimes and job progress event', async () => {
+      // A running JVM keeps session.lock open; the archive must exclude it (Phase 8 soak finding).
+      fs.writeFileSync(path.join(h.dataRoot, 'servers', created.id, 'world', 'session.lock'), 'lock');
       const backup = await h.invoke<{ id: string; path: string; note: string }>('backup_create', {
         id: created.id, name: 'archive-check', jobId: 'job-backup-archive',
       });
@@ -118,6 +120,7 @@ export async function runBackupsSuite(run: TestRun): Promise<void> {
       const entries = await zipEntries(backup.path);
       assert.ok(entries.some((entry) => entry.name === 'world/level.dat'));
       assert.ok(entries.some((entry) => entry.name === 'server.properties'));
+      assert.ok(!entries.some((entry) => /(^|\/)session\.lock$/i.test(entry.name)), 'session.lock must be excluded');
       for (const entry of entries) {
         assert.equal(entry.method, 8, `${entry.name} is not deflated`);
         assert.ok(entry.date.getFullYear() >= 2020, `${entry.name} lost its mtime (year ${entry.date.getFullYear()})`);
