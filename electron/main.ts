@@ -15,6 +15,7 @@ let mainWindow: BrowserWindow | null = null;
 const TEST_FLAGS = [
   '--selftest', '--mgmttest', '--ipctest', '--e2e',
   '--servicestest', '--contracttest', '--uitest', '--lifetest',
+  '--soak', '--quitsmoke',
 ];
 const testFlag = process.argv.find((arg) => TEST_FLAGS.includes(arg));
 
@@ -115,6 +116,33 @@ function wireIpc(ctx: IpcContext) {
   return { appRuntime, runtime };
 }
 
+/**
+ * Production quit policy (D7): preventDefault, stop servers within a bounded budget (then tree-kill
+ * survivors), and quit again. Shared by the normal lifecycle and the --quitsmoke live proof so both
+ * exercise identical shutdown semantics.
+ */
+function installBoundedQuit(appRuntime: { shutdown: (budgetMs?: number) => Promise<unknown> }): void {
+  let quitStarted = false;
+  app.on('before-quit', (event) => {
+    if (quitStarted) return; // second app.quit() below lets the quit proceed
+    event.preventDefault();
+    quitStarted = true;
+    recordTimeline({ kind: 'app', action: 'quit' });
+    getDiagnostics()?.logger.info('shutdown requested');
+    let finished = false;
+    const finish = (): void => {
+      if (finished) return;
+      finished = true;
+      app.quit();
+    };
+    const hardTimer = setTimeout(finish, 8000);
+    hardTimer.unref?.();
+    void appRuntime.shutdown(5000)
+      .catch(() => undefined)
+      .finally(() => { clearTimeout(hardTimer); finish(); });
+  });
+}
+
 const hasSingleInstanceLock = testFlag ? true : app.requestSingleInstanceLock();
 
 /**
@@ -165,6 +193,55 @@ if (!hasSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     const ctx: IpcContext = { dataRoot: dataRoot(), send: broadcast, getWindow: () => mainWindow };
+
+    if (process.argv.includes('--soak')) {
+      // Phase 8 soak: long-lived real server + churn, persistent evidence root under .app-data.
+      const hours = Number(argValue('--soak-hours') ?? '24');
+      const soakRoot = path.resolve(process.cwd(), '.app-data', `soak-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+      const { runSoak } = await import('./test/soak-runner');
+      const summary = await runSoak({
+        dataRoot: soakRoot,
+        hours: Number.isFinite(hours) && hours > 0 ? hours : 24,
+        appMetrics: () => app.getAppMetrics().map((metric) => ({
+          type: metric.type, pid: metric.pid, workingSetSize: metric.memory.workingSetSize,
+        })),
+      });
+      // eslint-disable-next-line no-console
+      console.log(`SOAK ${summary.ok ? 'PASS' : 'FAIL'} cycles=${summary.cycles} final=${summary.finalStatus} errors=${summary.errors.length} evidence=${summary.evidencePath}`);
+      if (!summary.ok) for (const error of summary.errors.slice(0, 5)) console.log(`SOAK ERROR: ${error}`);
+      app.exit(summary.ok ? 0 : 1);
+      return;
+    }
+
+    if (process.argv.includes('--quitsmoke')) {
+      // Phase 8 WP-8.1: start a real server, then exercise the production quit path and prove the
+      // JVM tree stops (the external wrapper checks for surviving identity markers). Uses its own
+      // data root so it never collides with a concurrently running soak/e2e instance.
+      const quitRoot = path.resolve(process.cwd(), '.app-data', `quitsmoke-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+      const quitCtx: IpcContext = { ...ctx, dataRoot: quitRoot };
+      const { appRuntime } = wireIpc(quitCtx);
+      const { prepareQuitSmoke } = await import('./test/quitsmoke-runner');
+      const prepared = await prepareQuitSmoke(quitCtx);
+      // eslint-disable-next-line no-console
+      console.log(`QUITSMOKE-READY serverId=${prepared.serverId ?? ''} ok=${prepared.ok} detail=${prepared.detail}`);
+      if (!prepared.ok) {
+        try { await appRuntime.shutdown(5000); } catch { /* best effort */ }
+        app.exit(1);
+        return;
+      }
+      installBoundedQuit(appRuntime);
+      const quitFinished = await new Promise<boolean>((resolve) => {
+        let done = false;
+        const finish = (value: boolean): void => { if (!done) { done = true; resolve(value); } };
+        app.once('will-quit', () => finish(true));
+        setTimeout(() => finish(false), 20_000).unref?.();
+        app.quit();
+      });
+      // eslint-disable-next-line no-console
+      console.log(quitFinished ? 'QUITSMOKE PASS' : 'QUITSMOKE FAIL (quit did not complete in 20s)');
+      app.exit(quitFinished ? 0 : 1);
+      return;
+    }
 
     if (process.argv.includes('--mgmttest')) {
       const root = createTempRoot('msm-mgmt');
@@ -334,25 +411,7 @@ if (!hasSingleInstanceLock) {
     recordTimeline({ kind: 'app', action: 'legacy-import-check' });
     // Quit must be synchronous-safe: Electron continues quitting immediately after this event, so
     // we preventDefault, stop servers with a bounded budget (then tree-kill survivors), and quit.
-    let quitStarted = false;
-    app.on('before-quit', (event) => {
-      if (quitStarted) return; // second app.quit() below lets the quit proceed
-      event.preventDefault();
-      quitStarted = true;
-      recordTimeline({ kind: 'app', action: 'quit' });
-      getDiagnostics()?.logger.info('shutdown requested');
-      let finished = false;
-      const finish = (): void => {
-        if (finished) return;
-        finished = true;
-        app.quit();
-      };
-      const hardTimer = setTimeout(finish, 8000);
-      hardTimer.unref?.();
-      void appRuntime.shutdown(5000)
-        .catch(() => undefined)
-        .finally(() => { clearTimeout(hardTimer); finish(); });
-    });
+    installBoundedQuit(appRuntime);
 
     createWindow();
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
