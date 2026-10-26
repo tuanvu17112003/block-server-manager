@@ -1,0 +1,240 @@
+// CurseForge import state/effects for the Create wizard (extracted from Create.tsx, WP-6.5).
+import { useEffect, useRef, useState } from 'react';
+import type { CurseForgeArchiveInspection, CurseForgeDownloadUpdate, CurseForgeProjectMetaDto, CurseForgeStagedZip } from '../../tauri';
+import { hasBackend, isDesktop, onCurseForgeDownload, tauriCurseForge } from '../../tauri';
+import { cfInstallable, curseforgeProjectInputError, errorText } from './helpers';
+
+interface Options {
+  kind: 'vanilla' | 'curseforge' | 'modrinth';
+  clearPipelineReview: () => void;
+  pushToast: (message: string, tone: 'ok' | 'err' | 'info') => void;
+}
+
+export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Options) {
+  const [curseforgeZips, setCurseforgeZips] = useState<CurseForgeStagedZip[]>([]);
+  const [curseforgeSelectedName, setCurseforgeSelectedName] = useState('');
+  const [curseforgeInspection, setCurseforgeInspection] = useState<CurseForgeArchiveInspection | null>(null);
+  const curseforgeInspectionRequestId = useRef(0);
+  const curseforgeSelectedNameRef = useRef('');
+  const [curseforgeLoading, setCurseforgeLoading] = useState(false);
+  const [curseforgeInspecting, setCurseforgeInspecting] = useState(false);
+  const [curseforgeError, setCurseforgeError] = useState('');
+  const [curseforgeBrowserMessage, setCurseforgeBrowserMessage] = useState('');
+  const [curseforgeDownloads, setCurseforgeDownloads] = useState<CurseForgeDownloadUpdate[]>([]);
+  const [cfProjectInput, setCfProjectInput] = useState('');
+  const [cfProjectId, setCfProjectId] = useState<number | null>(null);
+  const [cfProjectMeta, setCfProjectMeta] = useState<CurseForgeProjectMetaDto | null>(null);
+  const [cfProjectBusy, setCfProjectBusy] = useState(false);
+  const [cfProjectError, setCfProjectError] = useState('');
+
+  const selectCurseforgeZip = (name: string): void => {
+    if (cfProjectId !== null) {
+      setCfProjectId(null);
+      setCfProjectMeta(null);
+      setCfProjectError('');
+    }
+    if (curseforgeSelectedNameRef.current !== name) {
+      clearPipelineReview();
+      curseforgeInspectionRequestId.current += 1;
+      curseforgeSelectedNameRef.current = name;
+      setCurseforgeInspection(null);
+      setCurseforgeInspecting(false);
+    }
+    setCurseforgeSelectedName(name);
+    setCurseforgeError('');
+  };
+
+  const refreshCurseforgeZips = async (preferredName?: string): Promise<void> => {
+    if (!hasBackend()) return;
+    setCurseforgeLoading(true);
+    setCurseforgeError('');
+    try {
+      const files = await tauriCurseForge.listZips();
+      setCurseforgeZips(files);
+      const currentSelectedName = curseforgeSelectedNameRef.current;
+      const nextName = preferredName && files.some((file) => file.name === preferredName)
+        ? preferredName
+        : files.some((file) => file.name === currentSelectedName)
+          ? currentSelectedName
+          : files[0]?.name ?? '';
+      selectCurseforgeZip(nextName);
+    } catch (error) {
+      setCurseforgeError(errorText(error, 'Could not scan CurseForge ZIP staging.'));
+    } finally {
+      setCurseforgeLoading(false);
+    }
+  };
+
+  const openCurseforgeBrowser = async (): Promise<void> => {
+    setCurseforgeBrowserMessage('');
+    try {
+      const embedded = await tauriCurseForge.openBrowser();
+      setCurseforgeBrowserMessage(embedded
+        ? 'CurseForge is open in the embedded browser. Managed ZIP downloads appear here with progress and cancel controls.'
+        : 'This platform uses the external browser. After downloading a SERVER ZIP, return here and choose Browse for ZIP.');
+    } catch (error) {
+      const message = errorText(error, 'Could not open the CurseForge browser.');
+      setCurseforgeBrowserMessage(message);
+      pushToast(message, 'err');
+    }
+  };
+
+  const openCurseforgeExternal = async (): Promise<void> => {
+    try {
+      await tauriCurseForge.openExternalBrowser();
+      setCurseforgeBrowserMessage('CurseForge opened in your external browser. Use Browse for ZIP after downloading the SERVER pack.');
+    } catch (error) {
+      const message = errorText(error, 'Could not open CurseForge in the external browser.');
+      setCurseforgeBrowserMessage(message);
+      pushToast(message, 'err');
+    }
+  };
+
+  /** Official API key mode: project URL/slug/id → latest file → serverPackFileId. */
+  const resolveCurseforgeProject = async (): Promise<void> => {
+    const invalid = curseforgeProjectInputError(cfProjectInput);
+    if (invalid) {
+      setCfProjectError(invalid);
+      return;
+    }
+    const raw = cfProjectInput.trim();
+    setCfProjectBusy(true);
+    setCfProjectError('');
+    try {
+      const meta = await tauriCurseForge.inspectProject(raw);
+      clearPipelineReview();
+      setCfProjectId(meta.projectId);
+      setCfProjectMeta(meta);
+      setCurseforgeBrowserMessage(
+        `${meta.name}: Minecraft ${meta.minecraftVersion ?? '?'} · ${meta.loader ?? '?'} · ${meta.hasServerPack ? 'server pack available (one-click)' : 'no server pack; client manifest install'}`,
+      );
+    } catch (error) {
+      setCfProjectId(null);
+      setCfProjectMeta(null);
+      setCfProjectError(errorText(error, 'Could not resolve the CurseForge project.'));
+    } finally {
+      setCfProjectBusy(false);
+    }
+  };
+
+  const browseCurseforgeZip = async (file?: File): Promise<void> => {
+    setCurseforgeError('');
+    try {
+      const copied = isDesktop()
+        ? await tauriCurseForge.pickZip()
+        : file
+          ? await tauriCurseForge.uploadZip(file)
+          : null;
+      if (copied) await refreshCurseforgeZips(copied.name);
+    } catch (error) {
+      setCurseforgeError(errorText(error, 'Could not copy the selected ZIP into managed staging.'));
+    }
+  };
+
+  const inspectCurseforgeZip = async (): Promise<void> => {
+    const selectedName = curseforgeSelectedNameRef.current;
+    if (!selectedName || selectedName !== curseforgeSelectedName) return;
+    const requestId = ++curseforgeInspectionRequestId.current;
+    const isCurrentRequest = (): boolean => requestId === curseforgeInspectionRequestId.current
+      && selectedName === curseforgeSelectedNameRef.current;
+    setCurseforgeInspecting(true);
+    setCurseforgeError('');
+    setCurseforgeInspection(null);
+    try {
+      const inspection = await tauriCurseForge.inspectZip(selectedName);
+      if (!isCurrentRequest()) return;
+      setCurseforgeInspection(inspection);
+    } catch (error) {
+      if (!isCurrentRequest()) return;
+      setCurseforgeError(errorText(error, 'Could not inspect the selected ZIP.'));
+    } finally {
+      if (isCurrentRequest()) setCurseforgeInspecting(false);
+    }
+  };
+
+  const continueToCurseforgeZipSelection = async (): Promise<void> => {
+    await refreshCurseforgeZips();
+  };
+
+  useEffect(() => {
+    if (!hasBackend()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void onCurseForgeDownload((update) => {
+      setCurseforgeDownloads((previous) => [
+        update,
+        ...previous.filter((item) => item.id !== update.id),
+      ].slice(0, 5));
+      if (update.status === 'completed') {
+        void tauriCurseForge.listZips().then(setCurseforgeZips).catch(() => {});
+      }
+    }).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  const cfProjectInspection: CurseForgeArchiveInspection | null = cfProjectId !== null && cfProjectMeta
+    ? {
+        name: cfProjectMeta.name,
+        classification: 'supportedServerPack',
+        reason: cfProjectMeta.hasServerPack
+          ? 'Official API key mode: the latest server pack (serverPackFileId) will be installed.'
+          : 'Official API key mode: no server pack on the latest file; the client pack is resolved from manifest.json.',
+        minecraftVersion: cfProjectMeta.minecraftVersion,
+        loader: cfProjectMeta.loader,
+        loaderVersion: cfProjectMeta.loaderVersion,
+      }
+    : null;
+  const curseforgeInspectionMatchesSelection = Boolean(
+    cfProjectId !== null ? cfProjectMeta !== null : curseforgeInspection && curseforgeInspection.name === curseforgeSelectedName,
+  );
+  const selectedCurseforgeInspection = cfProjectId !== null
+    ? cfProjectInspection
+    : (curseforgeInspectionMatchesSelection ? curseforgeInspection : null);
+
+  const cancelDownload = (downloadId: string): void => {
+    void tauriCurseForge.cancelDownload(downloadId).then((accepted) => {
+      if (!accepted) pushToast('This download is no longer active.', 'info');
+    }).catch((error: unknown) => pushToast(errorText(error, 'Could not cancel the download.'), 'err'));
+  };
+
+  return {
+    kind,
+    curseforgeZips,
+    curseforgeSelectedName,
+    curseforgeInspection,
+    curseforgeLoading,
+    curseforgeInspecting,
+    curseforgeError,
+    curseforgeBrowserMessage,
+    curseforgeDownloads,
+    cfProjectInput,
+    setCfProjectInput,
+    cfProjectId,
+    cfProjectMeta,
+    cfProjectBusy,
+    cfProjectError,
+    cfProjectInspection,
+    curseforgeInspectionMatchesSelection,
+    selectedCurseforgeInspection,
+    selectCurseforgeZip,
+    refreshCurseforgeZips,
+    continueToCurseforgeZipSelection,
+    openCurseforgeBrowser,
+    openCurseforgeExternal,
+    resolveCurseforgeProject,
+    browseCurseforgeZip,
+    inspectCurseforgeZip,
+    cancelDownload,
+    clearCfProjectError: () => setCfProjectError(''),
+    resetForSourceChange: () => { setCfProjectId(null); setCfProjectMeta(null); setCfProjectError(''); },
+    cfInstallable,
+  };
+}
+
+export type CurseForgeImportState = ReturnType<typeof useCurseForgeImport>;

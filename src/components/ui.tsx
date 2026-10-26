@@ -109,6 +109,40 @@ export function ProgressBar({ value, tone = 'bg-emerald-500' }: { value: number;
   );
 }
 
+/** Focus trap + Escape + focus restoration for the dialog components (F-22). */
+function useDialogA11y(open: boolean, onClose: () => void) {
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const titleId = React.useId();
+  React.useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const focusables = (): HTMLElement[] => {
+      const root = panelRef.current;
+      if (!root) return [];
+      return Array.from(root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ));
+    };
+    focusables()[0]?.focus();
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') { event.stopPropagation(); onClose(); return; }
+      if (event.key !== 'Tab') return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      previous?.focus?.();
+    };
+  }, [open, onClose]);
+  return { panelRef, titleId };
+}
+
 export function Confirm({
   open,
   title,
@@ -124,11 +158,19 @@ export function Confirm({
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  const { panelRef, titleId } = useDialogA11y(open, onClose);
   if (!open) return null;
   return (
     <div className="mc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="mc-modal w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
-        <h3 className="mc-modal-title">{title}</h3>
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="mc-modal w-full max-w-md p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 id={titleId} className="mc-modal-title">{title}</h3>
         <div className="mt-2 text-sm text-zinc-400">{message}</div>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -158,13 +200,21 @@ export function Modal({
   children: React.ReactNode;
   onClose: () => void;
 }) {
+  const { panelRef, titleId } = useDialogA11y(open, onClose);
   if (!open) return null;
   return (
     <div className="mc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="mc-modal thin-scroll max-h-[85vh] w-full max-w-lg overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="mc-modal thin-scroll max-h-[85vh] w-full max-w-lg overflow-y-auto p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="mc-modal-title">{title}</h3>
-          <button onClick={onClose} className="rounded px-2 py-0.5 text-zinc-400 hover:bg-zinc-800">✕</button>
+          <h3 id={titleId} className="mc-modal-title">{title}</h3>
+          <button onClick={onClose} aria-label="Close dialog" className="rounded px-2 py-0.5 text-zinc-400 hover:bg-zinc-800">✕</button>
         </div>
         {children}
       </div>

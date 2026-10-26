@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { metricsMock } from '../mocks/data';
 import { useStore, formatUptime } from '../store';
-import { Badge, Button, Card, CardTitle, Empty } from '../components/ui';
+import { Badge, Button, Card, CardTitle, Empty, ProgressBar } from '../components/ui';
 import { hasBackend, tauriMetrics } from '../tauri';
 import type { MetricsHistoryDto } from '../tauri';
 
@@ -29,6 +29,12 @@ const RANGES = [
 function gb(bytes: number): string {
   if (bytes <= 0) return '—';
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+}
+
+/** Missing samples render as an em dash instead of "undefined"/"NaN". */
+function value(input: number | null | undefined, digits = 1): string {
+  if (input === null || input === undefined || !Number.isFinite(input)) return '—';
+  return input.toFixed(digits);
 }
 
 export default function Metrics() {
@@ -82,41 +88,50 @@ export default function Metrics() {
   }, [backend, history, range.n]);
 
   if (!running) {
-    return <Empty title="Metrics are empty while the server is stopped." body="Start the server to collect live CPU / RAM / player / TPS series. History is kept for 7 days." />;
+    return <Empty title="Metrics are empty while the server is stopped." body="Start the server to collect live CPU / RAM / player / TPS series. History is kept for up to 7 days." />;
   }
 
-  const needsRcon = active.tps === null;
   const disk = history?.disk;
   const memoryMb = active.memoryMb;
+  const tpsMissing = active.tps === null && active.mspt === null;
+  const diskUsedPct = disk && disk.totalBytes > 0 ? ((disk.totalBytes - disk.freeBytes) / disk.totalBytes) * 100 : 0;
 
   return (
     <div className="space-y-3">
       <div className="mc-header-strip" />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {[
-          { l: 'CPU', v: `${Math.round(active.cpuPct)}%` },
-          { l: 'RAM', v: memoryMb ? `${memoryMb} MB · ${Math.round(active.ramPct)}% of ${active.ramMb} MB` : `${Math.round(active.ramPct)}% of ${active.ramMb} MB` },
-          { l: 'Players', v: `${active.playersOnline}/${active.maxPlayers}` },
-          { l: 'Uptime', v: formatUptime(active.uptimeSec) },
-          { l: 'TPS / MSPT', v: needsRcon ? '—' : `${active.tps?.toFixed(1)} / ${active.mspt?.toFixed(1)}` },
-        ].map((s) => (
-          <Card key={s.l}><p className="text-xs uppercase text-zinc-500">{s.l}</p><p className="text-lg font-semibold">{s.v}</p></Card>
+          { l: 'CPU (total)', v: `${Math.round(active.cpuPct)}%`, title: 'Percent of total CPU capacity, normalized by logical core count (Task Manager semantics)' },
+          { l: 'RAM', v: memoryMb ? `${memoryMb} MB · ${Math.round(active.ramPct)}% of ${active.ramMb} MB` : `${Math.round(active.ramPct)}% of ${active.ramMb} MB`, title: 'Working set vs the -Xmx heap limit' },
+          { l: 'Players', v: `${active.playersOnline}/${active.maxPlayers}`, title: 'Live players from the server list command' },
+          { l: 'Uptime', v: formatUptime(active.uptimeSec), title: 'Time since the current process started' },
+          { l: 'TPS / MSPT', v: `${value(active.tps)} / ${value(active.mspt)}`, title: 'Only reported by servers that print Paper/spark tick statistics' },
+        ].map((stat) => (
+          <Card key={stat.l}>
+            <p className="text-xs uppercase text-zinc-500" title={stat.title}>{stat.l}</p>
+            <p className="text-lg font-semibold">{stat.v}</p>
+          </Card>
         ))}
       </div>
 
-      {needsRcon && (
+      {tpsMissing && (
         <p className="rounded border border-amber-800 bg-amber-950/50 px-3 py-2 text-xs text-amber-200">
-          TPS/MSPT need RCON (127.0.0.1 only) — showing “—” until the backend connects.
-          <span className="ml-1 text-amber-200/70">Disk: {disk ? `${gb(disk.freeBytes)} free of ${gb(disk.totalBytes)}` : '—'}.</span>
+          This server has not reported TPS/MSPT yet. They are scraped from Paper/spark tick output over the attached stdin;
+          RCON is intentionally deferred (ADR-0011), so vanilla/Forge/Fabric servers stay at “—”.
         </p>
       )}
 
       <div className="flex flex-wrap items-center gap-1.5">
         {RANGES.map((r) => (
-          <button key={r.k} onClick={() => setRange(r)} className={`rounded px-2.5 py-1 text-xs ${range.k === r.k ? 'bg-emerald-700 text-white' : 'bg-zinc-800 text-zinc-300'}`}>{r.k}</button>
+          <button
+            key={r.k}
+            onClick={() => setRange(r)}
+            aria-pressed={range.k === r.k}
+            className={`rounded px-2.5 py-1 text-xs ${range.k === r.k ? 'bg-emerald-700 text-white' : 'bg-zinc-800 text-zinc-300'}`}
+          >{r.k}</button>
         ))}
         <span className="ml-2 self-center text-xs text-zinc-500">
-          {loading ? 'Refreshing history…' : backend ? `1-minute samples · ${history?.samples.length ?? 0} points · 7-day retention` : 'Shift-zoom on graphs arrives with the backend (mock note).'}
+          {loading ? 'Refreshing history…' : backend ? `1-minute samples · ${history?.samples.length ?? 0} points · up to 7 days retained` : 'Browser preview uses mock data.'}
         </span>
         <Button size="sm" variant="ghost" className="ml-auto" onClick={() => void load()} disabled={loading}>↻ Refresh</Button>
       </div>
@@ -129,10 +144,20 @@ export default function Metrics() {
       </div>
 
       <Card>
-        <div className="flex items-center gap-2">
-          <CardTitle>Alert opt-in (deferred)</CardTitle><Badge>later</Badge>
+        <CardTitle>Disk</CardTitle>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+          <span>{disk ? `${gb(disk.freeBytes)} free` : '—'}</span>
+          <span className="text-xs text-zinc-500">{disk ? `of ${gb(disk.totalBytes)} total` : 'disk probe unavailable'}</span>
         </div>
-        <p className="text-xs text-zinc-500">Crash / offline / high-RAM alerts are deferred to the notification milestone. <Button size="sm" variant="ghost" onClick={() => undefined}>Notify me (mock)</Button></p>
+        <div className="mt-2"><ProgressBar value={diskUsedPct} tone="bg-blue-500" /></div>
+        <p className="mt-1 text-xs text-zinc-500">{disk ? `${gb(disk.totalBytes - disk.freeBytes)} used on the app-data volume` : 'Disk usage is unavailable for this volume.'}</p>
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-2">
+          <CardTitle>Alerts</CardTitle><Badge>deferred</Badge>
+        </div>
+        <p className="text-xs text-zinc-500">Crash / offline / high-RAM notifications are deferred to the notification milestone; no opt-in control is wired yet.</p>
       </Card>
     </div>
   );

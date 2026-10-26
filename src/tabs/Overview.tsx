@@ -1,10 +1,25 @@
+import { useState } from 'react';
 import type { TabId } from '../types';
 import { formatUptime, useStore } from '../store';
-import { Badge, Button, Card, CardTitle, ProgressBar } from '../components/ui';
+import { Badge, Button, Card, CardTitle, Confirm, Empty, ProgressBar } from '../components/ui';
 import { hasBackend, tauriServers } from '../tauri';
 
 export default function Overview({ go, onCreate }: { go: (t: TabId) => void; onCreate: () => void }) {
-  const { active, logs, start, stop, restart, pushToast } = useStore();
+  const { active, servers, logs, start, stop, restart, kill, pushToast, startingPhase } = useStore();
+  const [killOpen, setKillOpen] = useState(false);
+  const running = active.status === 'running';
+  const busy = active.status === 'starting' || active.status === 'stopping';
+  const phaseText = startingPhase?.message
+    ?? (active.status === 'starting'
+      ? (startingPhase ? `Starting (${startingPhase.phase})…` : 'Starting… waiting for the server to report Done().')
+      : active.status === 'stopping'
+        ? 'Stopping… waiting for the process to exit.'
+        : '');
+  const portClash = servers.find((server) => server.id !== active.id && server.port === active.port);
+  const tail = (logs[active.id] ?? []).slice(-3);
+  const ramGb = (active.ramMb / 1024).toFixed(active.ramMb % 1024 ? 1 : 0);
+  const playersPct = active.maxPlayers > 0 ? Math.min(100, (active.playersOnline / active.maxPlayers) * 100) : 0;
+
   const openFolder = () => {
     if (!hasBackend()) {
       go('worlds');
@@ -13,26 +28,55 @@ export default function Overview({ go, onCreate }: { go: (t: TabId) => void; onC
     void tauriServers.openFolder(active.id)
       .catch((err: unknown) => pushToast(err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : 'Could not open the server folder.', 'err'));
   };
-  const tail = (logs[active.id] ?? []).slice(-3);
-  const ramGb = (active.ramMb / 1024).toFixed(active.ramMb % 1024 ? 1 : 0);
 
-  if (active.status === 'crashed') {
-    // crash banner stays visible until user acts
+  const copyIp = async () => {
+    const text = `${active.address}:${active.port}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      pushToast(`Copied ${text}`, 'ok');
+    } catch {
+      pushToast(text, 'info');
+    }
+  };
+
+  if (servers.length === 0) {
+    return (
+      <Empty
+        title="No servers yet."
+        body="Create your first Minecraft server to see status, players, resource usage and the live log tail here."
+        action={<Button onClick={onCreate}>+ Create server</Button>}
+      />
+    );
   }
 
   return (
     <div className="space-y-3">
       <div className="mc-header-strip" />
-      {active.status === 'crashed' && (
-        <div className="rounded-md border border-red-800 bg-red-950/60 px-3 py-2 text-sm">
-          <span className="font-semibold text-red-300">Server crashed. </span>
-          <span className="text-red-200/80">Check the Console tail below, then Start again. Consider raising RAM if OutOfMemoryError repeats.</span>
-        </div>
-      )}
-      {!active.eulaAccepted && (
-        <div className="rounded-md border border-amber-800 bg-amber-950/60 px-3 py-2 text-sm text-amber-200">
-          Start is blocked until you accept the Minecraft EULA.{' '}
-          <button className="underline" onClick={() => go('settings')}>Go to Settings →</button>
+
+      {(active.status === 'crashed' || !active.eulaAccepted || portClash !== undefined || busy) && (
+        <div className="space-y-2" aria-live="polite">
+          {active.status === 'crashed' && (
+            <p role="alert" className="rounded-md border border-red-800 bg-red-950/60 px-3 py-2 text-sm">
+              <span className="font-semibold text-red-300">Server crashed. </span>
+              <span className="text-red-200/80">Check the Console tail below, then Start again. Consider raising RAM if OutOfMemoryError repeats.</span>
+            </p>
+          )}
+          {!active.eulaAccepted && (
+            <p role="alert" className="rounded-md border border-amber-800 bg-amber-950/60 px-3 py-2 text-sm text-amber-200">
+              Start is blocked until the Minecraft EULA is accepted.{' '}
+              <button className="underline" onClick={() => go('settings')}>Review EULA in Settings →</button>
+            </p>
+          )}
+          {portClash && (
+            <p role="alert" className="rounded-md border border-amber-800 bg-amber-950/60 px-3 py-2 text-sm text-amber-200">
+              Port {active.port} is also assigned to “{portClash.name}”. Start fails closed on an occupied port — change one server’s port in Settings.
+            </p>
+          )}
+          {busy && (
+            <p role="status" className="rounded-md border border-amber-800 bg-amber-950/60 px-3 py-2 text-sm text-amber-200">
+              {phaseText}
+            </p>
+          )}
         </div>
       )}
 
@@ -40,33 +84,49 @@ export default function Overview({ go, onCreate }: { go: (t: TabId) => void; onC
         <Card className="min-w-0">
           <CardTitle>Status</CardTitle>
           <p className="text-lg font-semibold capitalize">{active.status}</p>
-          <p className="text-xs text-zinc-500">Uptime {formatUptime(active.uptimeSec)} · TPS {active.tps ?? '— (needs RCON)'}</p>
+          <p className="text-xs text-zinc-500">
+            Uptime {formatUptime(active.uptimeSec)}
+            {' · '}
+            {running ? `TPS ${active.tps === null ? '—' : active.tps.toFixed(1)}` : 'TPS — start the server'}
+          </p>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {active.status !== 'running' ? (
-              <Button size="sm" onClick={() => start(active.id)} title={active.eulaAccepted ? 'Start' : 'Blocked: accept EULA first'}>▶ Start</Button>
-            ) : (
-              <Button size="sm" variant="secondary" onClick={() => go('console')}>Open Console</Button>
+            {!running && (
+              <Button size="sm" disabled={busy} onClick={() => start(active.id)} title={active.eulaAccepted ? 'Start server' : 'Blocked: accept the Minecraft EULA first'}>▶ Start</Button>
             )}
-            <Button size="sm" variant="secondary" disabled={active.status !== 'running'} onClick={() => stop(active.id)} title="Stop server">⏹ Stop</Button>
-            <Button size="sm" variant="secondary" disabled={active.status !== 'running'} onClick={() => restart(active.id)} title="Restart server">↻ Restart</Button>
+            {running && <Button size="sm" variant="secondary" onClick={() => go('console')}>Open Console</Button>}
+            <Button size="sm" variant="secondary" disabled={!running} onClick={() => stop(active.id)} title={running ? 'Graceful stop' : 'Stop needs a running server'}>⏹ Stop</Button>
+            <Button size="sm" variant="secondary" disabled={!running} onClick={() => restart(active.id)} title={running ? 'Restart server' : 'Restart needs a running server'}>↻ Restart</Button>
+            <Button size="sm" variant="outline" disabled={!running && !busy} onClick={() => setKillOpen(true)} title="Force-kill the process (asks for confirmation)">Kill</Button>
+            <Button size="sm" variant="outline" onClick={copyIp} title="Copy server address">Copy IP</Button>
             <Button size="sm" variant="outline" onClick={onCreate}>+ New</Button>
           </div>
+          <Confirm
+            open={killOpen}
+            title="Force-kill server process?"
+            message={<p>Unsaved world data may be lost. Prefer Stop; use Kill only when the server is frozen.</p>}
+            confirmLabel="Kill process"
+            onConfirm={() => kill(active.id)}
+            onClose={() => setKillOpen(false)}
+          />
         </Card>
+
         <Card className="min-w-0">
           <CardTitle>Players {active.playersOnline}/{active.maxPlayers}</CardTitle>
-          <div className="mb-1 flex justify-between text-xs text-zinc-500"><span>slots used</span><span>{Math.round((active.playersOnline / active.maxPlayers) * 100)}%</span></div>
-          <ProgressBar value={(active.playersOnline / active.maxPlayers) * 100} tone="bg-blue-500" />
+          <div className="mb-1 flex justify-between text-xs text-zinc-500"><span>slots used</span><span>{Math.round(playersPct)}%</span></div>
+          <ProgressBar value={playersPct} tone="bg-blue-500" />
+          <p className="mt-2 text-xs text-zinc-500">{running ? 'Live count from the server list command.' : 'No live count while the server is stopped.'}</p>
           <div className="mt-3">
             <Button size="sm" variant="secondary" onClick={() => go('players')}>Manage players</Button>
           </div>
         </Card>
+
         <Card className="min-w-0">
           <CardTitle>
             CPU {Math.round(active.cpuPct)}% · RAM {Math.round(active.ramPct)}% <Badge tone="blue">{ramGb} GB</Badge>
           </CardTitle>
-          <div className="mb-1 text-xs text-zinc-500">CPU</div>
+          <div className="mb-1 text-xs text-zinc-500" title="Percent of total CPU capacity, normalized by logical core count (Task Manager semantics)">CPU (total capacity)</div>
           <ProgressBar value={active.cpuPct} tone="bg-amber-500" />
-          <div className="mb-1 mt-2 text-xs text-zinc-500">RAM vs limit</div>
+          <div className="mb-1 mt-2 text-xs text-zinc-500">RAM vs -Xmx limit{active.memoryMb ? ` · ${active.memoryMb} MB working set` : ''}</div>
           <ProgressBar value={active.ramPct} />
           <div className="mt-3">
             <Button size="sm" variant="secondary" onClick={() => go('metrics')}>View metrics</Button>
@@ -85,13 +145,14 @@ export default function Overview({ go, onCreate }: { go: (t: TabId) => void; onC
           </dl>
           <div className="mt-3 flex flex-wrap gap-1.5">
             <Button size="sm" variant="outline" onClick={openFolder}>Open Folder</Button>
+            <Button size="sm" variant="outline" onClick={copyIp}>Copy IP</Button>
             <Button size="sm" variant="outline" onClick={() => go('settings')}>Settings</Button>
           </div>
         </Card>
         <Card className="min-w-0">
           <CardTitle>Log tail</CardTitle>
           {tail.length === 0 ? (
-            <p className="text-xs text-zinc-500">No log lines yet.</p>
+            <p className="text-xs text-zinc-500">{running ? 'Waiting for the first log lines…' : 'No log lines yet — start the server to stream output.'}</p>
           ) : (
             <pre className="mc-console overflow-x-auto p-2">
               {tail.map((l) => (

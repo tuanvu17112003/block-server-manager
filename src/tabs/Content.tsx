@@ -38,6 +38,7 @@ export default function Content({ go }: { go: (tab: TabId) => void }) {
   const [installing, setInstalling] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [progressStage, setProgressStage] = useState('');
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<ContentItemDto | null>(null);
 
   const stopped = active.status === 'stopped' || active.status === 'crashed';
@@ -98,6 +99,7 @@ export default function Content({ go }: { go: (tab: TabId) => void }) {
     if (!backend || !stopped) return;
     const jobId = `content-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setInstalling(hit.id);
+    setActiveJobId(jobId);
     setProgress(0);
     setProgressStage('queued');
     const off = await onJobProgress(jobId, (payload) => {
@@ -107,6 +109,9 @@ export default function Content({ go }: { go: (tab: TabId) => void }) {
     try {
       const result = await tauriContent.install(active.id, hit.id, version?.id ?? null, hit.name, jobId);
       pushToast(`Installed ${result.installed} file${result.installed === 1 ? '' : 's'} from ${hit.name}. Restart the server to load it.`, 'ok');
+      if (typeof result.skipped === 'number' && result.skipped > 0) {
+        pushToast(`Skipped ${result.skipped} file${result.skipped === 1 ? '' : 's'} (already present, client-only, or no compatible build).`, 'info');
+      }
       for (const warning of result.warnings.slice(0, 3)) pushToast(warning, 'err');
       setSelected(null);
       await load();
@@ -115,13 +120,28 @@ export default function Content({ go }: { go: (tab: TabId) => void }) {
     } finally {
       off();
       setInstalling(null);
+      setActiveJobId(null);
       setProgress(null);
       setProgressStage('');
     }
   };
 
+  const cancelInstall = async (): Promise<void> => {
+    if (!activeJobId) return;
+    try {
+      const cancelled = await tauriContent.cancel(activeJobId);
+      pushToast(cancelled ? 'Cancelling content install…' : 'The install already finished.', cancelled ? 'info' : 'err');
+    } catch (err) {
+      pushToast(errorText(err, 'Could not cancel the install.'), 'err');
+    }
+  };
+
   const toggle = (item: ContentItemDto) => {
     if (!backend) return;
+    if (!stopped) {
+      pushToast('Stop the server before changing mod/plugin files.', 'err');
+      return;
+    }
     void tauriContent.toggle(active.id, item.fileName, !item.enabled)
       .then((rows) => {
         setItems(rows);
@@ -166,15 +186,27 @@ export default function Content({ go }: { go: (tab: TabId) => void }) {
           </div>
         </div>
         <p className="mt-2 text-xs text-zinc-500">
-          Enable/disable renames the jar into <code>{folder}-disabled/</code>; removal is permanent and requires a stopped server.
-          {!stopped && <span className="ml-1 text-amber-300">Stop the server to install or remove files.</span>}
+          Enable/disable renames the jar into <code>{folder}-disabled/</code>; removal is permanent. Every file change requires a stopped server
+          and applies on the next start. {!stopped && <span className="ml-1 text-amber-300">Stop the server to enable, disable, install or remove files.</span>}
         </p>
       </Card>
 
       {progress !== null && (
         <Card>
-          <ProgressBar value={progress} />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-[200px] flex-1"><ProgressBar value={progress} /></div>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!activeJobId}
+              onClick={() => { void cancelInstall(); }}
+              title={activeJobId ? 'Cancel the running content install' : 'No install is running'}
+            >
+              Cancel
+            </Button>
+          </div>
           <p className="mt-1 text-xs text-zinc-400">{progress}% · {progressStage}</p>
+          <p className="mt-1 text-xs text-zinc-500">Cancel aborts downloads/publishing and leaves the previously installed version untouched.</p>
         </Card>
       )}
 
@@ -240,7 +272,7 @@ export default function Content({ go }: { go: (tab: TabId) => void }) {
                 <td className="px-3 py-2">{item.enabled ? <Badge tone="green">enabled</Badge> : <Badge tone="amber">disabled</Badge>}</td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
-                    <Button size="sm" variant="outline" onClick={() => toggle(item)}>{item.enabled ? 'Disable' : 'Enable'}</Button>
+                    <Button size="sm" variant="outline" disabled={!stopped} title={stopped ? 'Rename between the active and -disabled folder' : 'Stop the server before changing files'} onClick={() => toggle(item)}>{item.enabled ? 'Disable' : 'Enable'}</Button>
                     <Button size="sm" variant="outline" disabled={!stopped} title={stopped ? 'Remove the file' : 'Stop the server first'} onClick={() => setRemoveTarget(item)}>Remove</Button>
                   </div>
                 </td>
@@ -257,6 +289,10 @@ export default function Content({ go }: { go: (tab: TabId) => void }) {
       </Card>
 
       <Modal open={!!selected} title={`${selected?.name ?? 'Project'} — versions`} onClose={() => setSelected(null)}>
+        <p className="mb-2 text-xs text-zinc-500">
+          Installing a project that is already present replaces its previous file (transactional, old file kept in the pre-update backup).
+          Required dependencies are installed automatically; already-present/client-only/incompatible files are skipped and reported.
+        </p>
         {versionsLoading && <p className="text-xs text-zinc-500">Loading compatible versions…</p>}
         {versionsError && <p role="alert" className="text-xs text-red-300">{versionsError}</p>}
         {!versionsLoading && !versionsError && versions.length === 0 && (
@@ -273,9 +309,14 @@ export default function Content({ go }: { go: (tab: TabId) => void }) {
                     <p className="text-xs text-zinc-500">{version.dependencies.filter((dep) => dep.type === 'required').length} required dependencies will be installed.</p>
                   )}
                 </div>
-                <Button size="sm" disabled={!stopped || installing !== null} onClick={() => { if (selected) void install(selected, version); }}>
-                  {installing === selected?.id ? 'Installing…' : 'Install'}
-                </Button>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] text-zinc-500">
+                    {version.loaders.length > 0 ? `loaders: ${version.loaders.slice(0, 6).join(', ')}` : 'loader metadata unavailable'}
+                  </span>
+                  <Button size="sm" disabled={!stopped || installing !== null} title={stopped ? 'Install this version (replaces any existing file for the project)' : 'Stop the server first'} onClick={() => { if (selected) void install(selected, version); }}>
+                    {installing === selected?.id ? 'Installing…' : 'Install'}
+                  </Button>
+                </div>
               </div>
             </div>
           ))}

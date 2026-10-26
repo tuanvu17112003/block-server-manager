@@ -236,9 +236,14 @@ export default function Settings() {
   };
 
   const dirty =
-    name !== active.name || motd !== active.motd || maxP !== active.maxPlayers ||
-    diff !== active.difficulty || gm !== active.gamemode || port !== active.port ||
-    ram !== active.ramMb || online !== active.onlineMode || eula !== active.eulaAccepted;
+    name !== active.name || motd !== (settings?.values['motd'] ?? active.motd) ||
+    maxP !== (settings?.values['max-players'] !== undefined ? Number(settings.values['max-players']) : active.maxPlayers) ||
+    diff !== (settings?.values['difficulty'] ? settings.values['difficulty'][0]!.toUpperCase() + settings.values['difficulty'].slice(1) : active.difficulty) ||
+    gm !== (settings?.values['gamemode'] ? settings.values['gamemode'][0]!.toUpperCase() + settings.values['gamemode'].slice(1) : active.gamemode) ||
+    port !== (settings?.values['server-port'] !== undefined ? Number(settings.values['server-port']) : active.port) ||
+    ram !== active.ramMb ||
+    online !== (settings?.values['online-mode'] !== undefined ? settings.values['online-mode'] === 'true' : active.onlineMode) ||
+    eula !== (settings?.eulaAccepted ?? active.eulaAccepted);
 
   useEffect(() => {
     if (!hasBackend() || !Number.isInteger(port) || port < 1 || port > 65535) {
@@ -279,13 +284,28 @@ export default function Settings() {
       if (diff !== active.difficulty || gm !== active.gamemode || ram !== active.ramMb || port !== active.port) setNeedsRestart(true);
       return;
     }
+    // Only send the persisted extras that actually changed. A boolean eulaAccepted is treated by the
+    // backend as an explicit accept/revoke (it may stop the server), so an unchanged checkbox is omitted.
+    const loadedEula = settings?.eulaAccepted ?? active.eulaAccepted;
+    const extra: { name?: string; ramMb?: number; eulaAccepted?: boolean } = {};
+    if (name.trim() !== '' && name !== active.name) extra.name = name.trim();
+    if (ram !== active.ramMb) extra.ramMb = ram;
+    if (eula !== loadedEula) extra.eulaAccepted = eula;
+    const restartFieldsChanged =
+      diff !== active.difficulty || gm !== active.gamemode || port !== active.port ||
+      ram !== active.ramMb || online !== active.onlineMode || maxP !== active.maxPlayers;
     setSaving(true);
     setSettingsError('');
-    void tauriServers.settingsUpdate(active.id, values, { name, ramMb: ram, eulaAccepted: eula })
+    void tauriServers.settingsUpdate(active.id, values, extra)
       .then(() => {
-        pushToast(eula ? 'Settings saved to server.properties.' : 'Settings saved — Start still blocked until EULA is accepted.', eula ? 'ok' : 'err');
-        setNeedsRestart(true);
+        pushToast(eula ? 'Settings saved to server.properties.' : 'Settings saved — Start is blocked until the EULA is accepted.', eula ? 'ok' : 'err');
+        setNeedsRestart(restartFieldsChanged);
+        setSettings((current) => (current ? { ...current, eulaAccepted: eula, values: { ...current.values, ...values } } : current));
         void reloadServers();
+        void tauriServers.settingsGet(active.id).then(setSettings).catch(() => undefined);
+        if (extra.eulaAccepted !== undefined && (active.status === 'running' || active.status === 'starting')) {
+          pushToast('EULA changed — the server was stopped so the new consent state applies.', 'info');
+        }
       })
       .catch((err: unknown) => {
         const message = err && typeof err === 'object' && 'message' in err
@@ -301,7 +321,7 @@ export default function Settings() {
     <div className="mx-auto max-w-3xl space-y-3">
       {needsRestart && (
         <div className="rounded-md border border-amber-800 bg-amber-950/60 px-3 py-2 text-sm text-amber-200">
-          Restart required to apply difficulty / gamemode / RAM / port changes.{' '}
+          Restart required to apply difficulty / gamemode / RAM / port / online-mode / max-players changes.{' '}
           <button className="underline" onClick={() => restart(active.id)}>Restart now</button>
         </div>
       )}
@@ -353,6 +373,16 @@ export default function Settings() {
           }}>
             Open server.properties
           </button>
+          <button className="text-xs text-zinc-500 underline" title="Advanced: open the whole server folder (worlds, logs, configs, mods)" onClick={() => {
+            if (!hasBackend()) {
+              pushToast('The server folder is available in the desktop app.', 'info');
+              return;
+            }
+            void tauriServers.openFolder(active.id)
+              .catch((err: unknown) => pushToast(err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : 'Could not open the server folder.', 'err'));
+          }}>
+            Show advanced files
+          </button>
         </div>
       </Card>
 
@@ -361,7 +391,7 @@ export default function Settings() {
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" checked={eula} onChange={(e) => setEula(e.target.checked)} className="mt-1" />
           <span>I accept the <a className="underline" href="https://aka.ms/MinecraftEULA" target="_blank" rel="noreferrer">Minecraft EULA</a>
-            <span className="block text-xs text-zinc-500">Start is blocked until this is checked and saved. Never auto-accepted.</span>
+            <span className="block text-xs text-zinc-500">Start is blocked until this is checked and saved. Never auto-accepted; the backend reads the acceptance from <code>eula.txt</code> (a file containing <code>eula=false</code> does not count).</span>
           </span>
         </label>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -375,9 +405,11 @@ export default function Settings() {
               ) : (
                 <div className="space-y-2 rounded border border-zinc-800 bg-zinc-950 p-2.5">
                   <p className="text-sm text-zinc-200">
-                    {javaLoading ? 'Checking installed Java…' : javaSelected
-                      ? `Java ${javaSelected.major} · ${javaSelected.source}${active.javaPath ? ' · selected' : ' · auto'}`
-                      : javaDetection ? `No compatible Java ${javaDetection.requiredMajor}+ runtime found.` : 'Java requirement unavailable.'}
+                    {javaLoading
+                      ? 'Checking installed Java… (Java requirement unavailable until the check finishes)'
+                      : javaSelected
+                        ? `Java ${javaSelected.major} · ${javaSelected.architectureBits}-bit · ${javaSelected.source}${active.javaPath ? ' · selected' : ' · auto'}`
+                        : javaDetection ? `No compatible Java ${javaDetection.requiredMajor}+ runtime found.` : 'Java requirement unavailable.'}
                   </p>
                   {javaSelected && <p className="break-all text-xs text-zinc-500">{javaSelected.path}</p>}
                   {javaOverride && (

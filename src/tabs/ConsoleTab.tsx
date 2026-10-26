@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { Badge, Button, Confirm } from '../components/ui';
+import { hasBackend, tauriServers } from '../tauri';
 import { CONSOLE_LOG_OVERSCAN, CONSOLE_LOG_ROW_HEIGHT, MAX_RETAINED_LOG_LINES } from '../logs';
 
 const QUICK = ['save-all', 'say Server restart in 5 min!', 'time set day', 'weather clear'];
@@ -32,7 +33,8 @@ export default function ConsoleTab() {
     );
   }, []);
   const running = active.status === 'running';
-  const attached = running; // mock: attached whenever running
+  // Attached = the launcher owns a live stdin handle, which is exactly while the tracked process runs.
+  const attached = running;
 
   useEffect(() => {
     measureViewport();
@@ -90,21 +92,34 @@ export default function ConsoleTab() {
     }
   };
 
-  const exportLog = () => {
-    const text = serverLogs.map((l) => `${l.ts} [${l.level}] [${l.source}] ${l.msg}`).join('\n');
+  const exportLog = async () => {
+    let text = serverLogs.map((l) => `${l.ts} [${l.level}] [${l.source}] ${l.msg}`).join('\n');
+    if (hasBackend()) {
+      // Prefer the backend-served, rotation-tolerant history so the export can include lines that
+      // have already rolled out of the renderer's retained buffer.
+      try {
+        const raw = await tauriServers.logsTail(active.id, 10_000);
+        if (raw.length > 0) text = raw.join('\n');
+      } catch {
+        // Fall back to the retained renderer buffer; never block the export on log history.
+      }
+    }
     const blob = new Blob([text], { type: 'text/plain' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `${active.name.replace(/\s+/g, '-').toLowerCase()}-console.log`;
     a.click();
     URL.revokeObjectURL(a.href);
-    pushToast('Console exported as .log (mock).', 'ok');
+    pushToast(hasBackend() ? 'Console exported as .log' : 'Console exported as .log (mock)', 'ok');
   };
 
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={attached ? 'green' : 'zinc'}>{attached ? '● attached' : '○ detached'}</Badge>
+        <span className="text-[11px] text-zinc-500" title={attached ? 'Commands are written to the tracked process stdin' : 'Commands are unavailable while the server is not running'}>
+          {attached ? 'stdin attached' : 'stdin detached'}
+        </span>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search / filter…" className="w-48 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs outline-none focus:border-emerald-500" />
         <select value={level} onChange={(e) => setLevel(e.target.value)} className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs">
           {['All', 'INFO', 'WARN', 'ERROR', 'CMD'].map((l) => <option key={l}>{l}</option>)}

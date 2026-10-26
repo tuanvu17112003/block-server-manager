@@ -654,6 +654,8 @@ export class Content {
         String(a.jobId ?? ''),
         a.title ? String(a.title) : null,
       ),
+      /** Cancel a running content install (cancellation is threaded through the content job). */
+      content_install_cancel: (a) => this.jobs.cancel(String(a.jobId ?? '')),
     };
   }
 }

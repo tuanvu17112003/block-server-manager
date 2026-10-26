@@ -11,7 +11,7 @@ import { TestRun } from './harness';
 /** Commands invoked by src/tauri.ts (renderer). A missing handler here breaks a UI path. */
 export const RENDERER_COMMANDS = [
   'backup_create', 'backup_delete', 'backup_export', 'backup_restore', 'backup_schedule_get',
-  'backup_schedule_set', 'backups_list', 'content_install', 'content_list', 'content_remove',
+  'backup_schedule_set', 'backups_list', 'content_install', 'content_install_cancel', 'content_list', 'content_remove',
   'content_search', 'content_toggle', 'content_versions', 'curseforge_cancel_download',
   'curseforge_inspect_project', 'curseforge_inspect_zip', 'curseforge_list_zips',
   'curseforge_open_browser', 'curseforge_open_external_browser', 'curseforge_pick_zip',
@@ -52,7 +52,7 @@ export async function runContractTests(ctx: IpcContext, filter?: string): Promis
       await run.must('all renderer commands are registered', async () => {
         const missing = RENDERER_COMMANDS.filter((name) => typeof merged[name] !== 'function');
         assert.deepEqual(missing, []);
-        assert.equal(RENDERER_COMMANDS.length, 65);
+        assert.equal(RENDERER_COMMANDS.length, 66);
       });
       await run.must('unknown command is not registered', async () => {
         assert.equal(merged['definitely_not_a_command'], undefined);

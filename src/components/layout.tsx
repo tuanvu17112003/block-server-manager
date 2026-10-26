@@ -65,8 +65,18 @@ export function Sidebar({
   );
 }
 
+const READINESS_LABEL: Record<string, string> = {
+  preparing: 'Preparing…',
+  spawning: 'Spawning…',
+  spawned: 'Starting…',
+  retrying: 'Retrying boot…',
+  ready: 'Ready',
+  stopped: 'Stopped',
+  failed: 'Start failed',
+};
+
 export function Header({ goConsole }: { goConsole: () => void }) {
-  const { active, start, stop, restart, kill, pushToast } = useStore();
+  const { active, start, stop, restart, kill, pushToast, isBusy, startingPhase } = useStore();
   const [killOpen, setKillOpen] = useState(false);
   const [startingPulse, setStartingPulse] = useState(false);
 
@@ -91,7 +101,11 @@ export function Header({ goConsole }: { goConsole: () => void }) {
   };
 
   const running = active.status === 'running';
-  const busy = active.status === 'starting' || active.status === 'stopping';
+  const starting = active.status === 'starting';
+  const busy = isBusy(active.id) || active.status === 'starting' || active.status === 'stopping';
+  const phase = startingPhase && startingPhase.phase !== 'ready' && startingPhase.phase !== 'stopped'
+    ? READINESS_LABEL[startingPhase.phase] ?? startingPhase.phase
+    : null;
 
   return (
     <header className="mc-header flex flex-wrap items-center gap-2 px-4 py-2.5">
@@ -100,6 +114,12 @@ export function Header({ goConsole }: { goConsole: () => void }) {
       <span className="text-xs text-zinc-500">
         {active.version} · {active.playersOnline}/{active.maxPlayers} players · up {formatUptime(active.uptimeSec)}
       </span>
+      {phase && (
+        <span role="status" className="text-xs text-amber-300" title={startingPhase?.message ?? ''}>
+          {phase}{startingPhase?.attempt && startingPhase.phase === 'retrying' ? ` #${startingPhase.attempt}` : ''}
+          {startingPhase?.message && startingPhase.phase === 'failed' ? ` — ${startingPhase.message}` : ''}
+        </span>
+      )}
       {!active.eulaAccepted && <span className="mc-eula">EULA not accepted — Start blocked</span>}
       <div className="ml-auto flex flex-wrap items-center gap-1.5">
         {!running ? (
@@ -110,16 +130,21 @@ export function Header({ goConsole }: { goConsole: () => void }) {
             pulse={startingPulse}
             title={active.eulaAccepted ? 'Start server' : 'Blocked: accept the Minecraft EULA first'}
           >
-            ▶ Start
+            {starting ? 'Starting…' : '▶ Start'}
           </Button>
         ) : (
           <>
-            <Button size="sm" variant="secondary" onClick={() => stop(active.id)}>⏹ Stop</Button>
-            <Button size="sm" variant="secondary" onClick={() => restart(active.id)}>↻ Restart</Button>
+            <Button size="sm" variant="secondary" onClick={() => stop(active.id)} disabled={busy}>⏹ Stop</Button>
+            <Button size="sm" variant="secondary" onClick={() => restart(active.id)} disabled={busy}>↻ Restart</Button>
             <Button size="sm" variant="outline" onClick={() => setKillOpen(true)} title="Force-kill the process (asks for confirmation)">
               Kill
             </Button>
           </>
+        )}
+        {starting && (
+          <Button size="sm" variant="secondary" onClick={() => stop(active.id)} title="Cancel the boot and stop the server">
+            ⏹ Stop
+          </Button>
         )}
         <button
           onClick={copyIp}
@@ -175,9 +200,9 @@ export function ToastHost() {
   const { toasts } = useStore();
   const color = { ok: 'mc-toast-ok', err: 'mc-toast-err', info: 'mc-toast-info' };
   return (
-    <div className="fixed bottom-4 right-4 z-[60] flex w-80 flex-col gap-2">
+    <div role="status" aria-live="polite" aria-atomic="false" className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-80 flex-col gap-2">
       {toasts.map((t) => (
-        <div key={t.id} className={`mc-toast ${color[t.kind]}`}>
+        <div key={t.id} role={t.kind === 'err' ? 'alert' : 'status'} className={`mc-toast ${color[t.kind]}`}>
           {t.msg}
         </div>
       ))}

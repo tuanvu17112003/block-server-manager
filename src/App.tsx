@@ -2,7 +2,7 @@ import { Component, useEffect, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import type { TabId } from './types';
 import { StoreProvider, useStore } from './store';
-import { hasBackend } from './tauri';
+import { backendUnavailableReason, hasBackend } from './tauri';
 import { CreateHeader, Header, Sidebar, TabBar, ToastHost } from './components/layout';
 import Overview from './tabs/Overview';
 import Create from './tabs/Create';
@@ -68,21 +68,60 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
   }
 }
 
+/**
+ * Fail-closed screen for a desktop host without its preload bridge (F-11). Showing browser mock
+ * servers here would make real actions look successful, so the shell refuses to mount instead.
+ */
+function BackendBridgeUnavailable({ reason }: { reason: string }) {
+  const reload = (): void => window.location.reload();
+  return (
+    <div className="mc-app-shell flex h-screen min-h-0 min-w-0 w-full overflow-hidden">
+      <div className="mc-app-main flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="mc-header flex flex-wrap items-center gap-2 px-4 py-2.5">
+          <h1 className="mc-header-title">Backend bridge unavailable</h1>
+        </header>
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-zinc-950 p-4 thin-scroll">
+          <div className="mc-empty" role="alert">
+            <p className="text-sm font-medium text-red-300">This window cannot reach the server backend.</p>
+            <p className="mt-2 max-w-2xl text-xs text-zinc-400">{reason}</p>
+            <p className="mt-2 max-w-2xl text-xs text-zinc-500">
+              Mock data is intentionally disabled in the desktop app: no servers, logs, or settings were loaded or changed.
+            </p>
+            <button type="button" onClick={reload} className="mc-btn mc-btn-default mt-4">
+              Reload window
+            </button>
+          </div>
+        </main>
+        <footer className="mc-footer">
+          NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 function Shell() {
   const [tab, setTab] = useState<TabId>('overview');
   const [creating, setCreating] = useState(false);
   const [createSession, setCreateSession] = useState(0);
   const [firstRunCreate, setFirstRunCreate] = useState(false);
   const [returnTab, setReturnTab] = useState<TabId>('overview');
-  const { servers, serversHydrated, serversLoadError, reloadServers, select } = useStore();
-  const freshEmptyBackend = hasBackend() && serversHydrated && servers.length === 0;
-  const serverListFailed = hasBackend() && !serversHydrated && serversLoadError !== null;
-  const loadingServers = hasBackend() && !serversHydrated && !serverListFailed;
+  const { servers, serversHydrated, serversLoadError, retryServers, select } = useStore();
+  const bridgeUnavailable = backendUnavailableReason();
+  const backendReady = bridgeUnavailable === null;
+  const freshEmptyBackend = backendReady && hasBackend() && serversHydrated && servers.length === 0;
+  const serverListFailed = backendReady && hasBackend() && !serversHydrated && serversLoadError !== null;
+  const loadingServers = backendReady && hasBackend() && !serversHydrated && !serverListFailed;
   const showCreate = !loadingServers && !serverListFailed && (creating || firstRunCreate || freshEmptyBackend);
 
   useEffect(() => {
     if (freshEmptyBackend) setFirstRunCreate(true);
   }, [freshEmptyBackend]);
+
+  if (bridgeUnavailable !== null) {
+    return <BackendBridgeUnavailable reason={bridgeUnavailable} />;
+  }
+
 
   const openCreate = () => {
     if (showCreate) return;
@@ -139,7 +178,7 @@ function Shell() {
                 <p role="alert" className="text-sm text-red-300">
                   Could not load saved servers: {serversLoadError ?? 'The server list is unavailable.'}
                 </p>
-                <button type="button" onClick={reloadServers} className="mc-btn mc-btn-default mt-4">
+                <button type="button" onClick={() => { void retryServers(); }} className="mc-btn mc-btn-default mt-4">
                   Retry
                 </button>
               </div>

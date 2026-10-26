@@ -13,8 +13,14 @@ declare global {
   interface Window { electronAPI?: ElectronApi }
 }
 
+export function isElectronHost(): boolean {
+  // The Electron renderer UA always contains "Electron/<version>", even when the preload failed
+  // to expose window.electronAPI. Used to distinguish "desktop bridge missing" from a browser.
+  return typeof navigator !== 'undefined' && /\bElectron\//.test(navigator.userAgent);
+}
+
 export function isElectron(): boolean {
-  return typeof window !== 'undefined' && window.electronAPI !== undefined;
+  return isElectronHost() && typeof window !== 'undefined' && window.electronAPI !== undefined;
 }
 
 /** Electron invoke with the {code,message} JSON-in-message error contract rebuilt as AppError. */
@@ -41,6 +47,43 @@ export function isDesktop(): boolean {
   return isElectron() || isTauri();
 }
 
+export type BackendHost = 'electron' | 'tauri' | 'http' | 'browser';
+
+export interface BackendEnvironment {
+  host: BackendHost;
+  /** False only for a desktop host whose preload bridge is missing (packaged-app failure). */
+  bridgeAvailable: boolean;
+  /** Human-readable explanation when the app must fail closed instead of using browser mocks. */
+  unavailableReason: string | null;
+}
+
+/**
+ * Classify the runtime the renderer is embedded in. A missing Electron preload must be detected
+ * from the host UA: without it the app would otherwise silently fall back to browser mock data.
+ */
+export function backendEnvironment(): BackendEnvironment {
+  if (isElectronHost()) {
+    const bridgeAvailable = typeof window !== 'undefined' && window.electronAPI !== undefined;
+    return {
+      host: 'electron',
+      bridgeAvailable,
+      unavailableReason: bridgeAvailable
+        ? null
+        : 'The Electron preload bridge (window.electronAPI) is unavailable, so this window cannot reach the server backend. '
+          + 'This usually means preload.js failed to load or the app build is incomplete. Restart the app; if it persists, reinstall. '
+          + 'Browser mock data is disabled while running inside Electron.',
+    };
+  }
+  if (isTauri()) return { host: 'tauri', bridgeAvailable: true, unavailableReason: null };
+  if (isHttpBackendConfigured()) return { host: 'http', bridgeAvailable: true, unavailableReason: null };
+  return { host: 'browser', bridgeAvailable: false, unavailableReason: null };
+}
+
+/** Non-null only when a desktop host is missing its preload bridge (F-11 fail-closed state). */
+export function backendUnavailableReason(): string | null {
+  return backendEnvironment().unavailableReason;
+}
+
 /** True when a desktop host (Electron/Tauri) or a runtime-configured HTTP backend is available. */
 export function hasBackend(): boolean {
   return isElectron() || isTauri() || isHttpBackendConfigured();
@@ -56,6 +99,94 @@ export async function stubInvoke<T>(command: string, args?: Record<string, unkno
 export interface AppError {
   code: 'validation' | 'not-found' | 'conflict' | 'io' | 'db' | 'internal' | string;
   message: string;
+}
+
+/** Error codes that add no diagnostic value to a user-facing toast. */
+const TRIVIAL_ERROR_CODES: ReadonlySet<string> = new Set([
+  '', 'unknown', 'error', 'internal', 'backend-error', 'http-error', 'invalid-response',
+]);
+
+export interface NormalizedError {
+  code: string;
+  message: string;
+  /** `[code] message` for informative codes, plain `message` otherwise. */
+  display: string;
+  informative: boolean;
+}
+
+export function isInformativeErrorCode(code: string | null | undefined): boolean {
+  return code !== null && code !== undefined && !TRIVIAL_ERROR_CODES.has(code.toLowerCase());
+}
+
+/**
+ * Single source of truth for turning an `unknown` rejection into the `{code,message}` contract.
+ * Backend paths (Electron/Tauri/HTTP) preserve the AppError code; plain Errors get `unknown`.
+ */
+export function normalizeError(error: unknown, fallback = 'Backend request failed.'): NormalizedError {
+  let code = 'unknown';
+  let message = fallback;
+  if (typeof error === 'string') {
+    if (error.trim() !== '') message = error.trim();
+  } else if (error instanceof Error) {
+    if (error.message.trim() !== '') message = error.message;
+    const candidate = (error as Error & { code?: unknown }).code;
+    if (typeof candidate === 'string' && candidate.trim() !== '') code = candidate;
+  } else if (error !== null && typeof error === 'object') {
+    const candidate = error as { code?: unknown; message?: unknown };
+    if (typeof candidate.message === 'string' && candidate.message.trim() !== '') message = candidate.message;
+    if (typeof candidate.code === 'string' && candidate.code.trim() !== '') code = candidate.code;
+  }
+  const informative = isInformativeErrorCode(code);
+  return { code, message, informative, display: informative ? `[${code}] ${message}` : message };
+}
+
+/** Toast-friendly text that keeps `[code]` for actionable backend errors (F-19). */
+export function formatErrorText(error: unknown, fallback = 'Backend request failed.'): string {
+  return normalizeError(error, fallback).display;
+}
+
+export function appErrorMessage(error: unknown, fallback = 'Backend request failed.'): string {
+  return normalizeError(error, fallback).message;
+}
+
+export function appErrorCode(error: unknown): string {
+  return normalizeError(error).code;
+}
+
+/**
+ * Monotonic "latest request wins" guard for tab loaders/search callbacks. Each `begin()` aborts the
+ * previous lease; callers check `lease.isCurrent()` before committing state. No backend IPC call is
+ * cancelled (the contract has no cancel), the stale response is simply ignored.
+ */
+export interface LatestRequestLease {
+  readonly id: number;
+  readonly signal: AbortSignal;
+  isCurrent(): boolean;
+}
+
+export interface LatestRequestController {
+  begin(): LatestRequestLease;
+  cancel(): void;
+}
+
+export function createLatestRequest(): LatestRequestController {
+  let current = 0;
+  let controller: AbortController | null = null;
+  return {
+    begin(): LatestRequestLease {
+      current += 1;
+      const id = current;
+      controller?.abort();
+      controller = new AbortController();
+      const signal = controller.signal;
+      return { id, signal, isCurrent: () => current === id && !signal.aborted };
+    },
+    cancel(): void {
+      current += 1;
+      controller?.abort();
+      controller = null;
+    },
+  };
 }
 
 /** Server row DTO (Rust ServerRecord, camelCase). */
@@ -123,6 +254,10 @@ export interface WorldDto {
   lastModified: string;
   active: boolean;
   pending?: boolean;
+  /** Additive: parsed from level.dat (null when unreadable/not generated yet). */
+  seed?: string | null;
+  /** Additive: corrupt level.dat / scan warning. */
+  warning?: string | null;
 }
 
 export type BackupKindDto = 'Manual' | 'Auto' | 'Pre-install' | 'Pre-restore' | 'World-delete';
@@ -524,18 +659,18 @@ export const tauriWorlds = {
     invokeRequired<{ backupId: string }>('world_activate', { id, name }),
   create: (id: string, name: string, seed: string, levelType: string) =>
     invokeRequired<WorldDto>('world_create', { id, name, seed, levelType }),
-  duplicate: (id: string, name: string) => invokeRequired<WorldDto>('world_duplicate', { id, name }),
+  duplicate: (id: string, name: string, jobId?: string) => invokeRequired<WorldDto>('world_duplicate', { id, name, jobId }),
   remove: (id: string, name: string) => invokeRequired<boolean>('world_delete', { id, name }),
-  exportWorld: (id: string, name: string) =>
-    invokeRequired<{ path: string } | { cancelled: true }>('world_export', { id, name }),
-  importWorld: (id: string) =>
-    invokeRequired<{ name: string } | { cancelled: true }>('world_import', { id }),
+  exportWorld: (id: string, name: string, jobId?: string) =>
+    invokeRequired<{ path: string } | { cancelled: true }>('world_export', { id, name, jobId }),
+  importWorld: (id: string, jobId?: string) =>
+    invokeRequired<{ name: string } | { cancelled: true }>('world_import', { id, jobId }),
 };
 
 export const tauriBackups = {
   list: (id: string) => invokeRequired<BackupDto[]>('backups_list', { id }),
-  create: (id: string, name: string, jobId?: string) =>
-    invokeRequired<BackupDto>('backup_create', { id, name, jobId }),
+  create: (id: string, name: string, jobId?: string, options?: { shutdownDuring?: boolean }) =>
+    invokeRequired<BackupDto>('backup_create', { id, name, jobId, shutdownDuring: options?.shutdownDuring }),
   restore: (id: string, backupId: string, mode: 'in-place' | 'reset', jobId?: string) =>
     invokeRequired<boolean>('backup_restore', { id, backupId, mode, jobId }),
   remove: (backupId: string) => invokeRequired<boolean>('backup_delete', { backupId }),
@@ -565,6 +700,7 @@ export const tauriContent = {
     invokeRequired<{ installed: number; files: string[]; warnings: string[]; skipped?: number }>('content_install', {
       id, projectId, versionId, title, jobId,
     }),
+  cancel: (jobId: string) => invokeRequired<boolean>('content_install_cancel', { jobId }),
 };
 
 export const tauriJava = {
