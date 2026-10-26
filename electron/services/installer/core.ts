@@ -256,6 +256,37 @@ export async function runInstaller(javaExe: string, installerJar: string, args: 
     await sleep(5000);
   }
 }
+// ---------- neoforge install coordinates ----------
+// Documented MC→artifact mapping only (ADR-0007; never numeric inference):
+// - MC 1.20.1 keeps the legacy `net/neoforged/forge` artifact with a `1.20.1-47.x` version.
+// - MC 1.20.2+ uses `net/neoforged/neoforge` with the full modern version and no MC prefix
+//   (e.g. 21.1.80 for MC 1.21.1, 20.4.253 for 1.20.4, 26.3.0.99 for MC 26.3).
+// Pure and exported so catalogue/install coordinates are unit-testable without network.
+export interface NeoForgeInstallerCandidate { url: string; name: string; artifact: 'neoforge' | 'forge'; mavenVersion: string }
+export function neoforgeInstallerCandidates(mc: string, loaderVersion: string): NeoForgeInstallerCandidate[] {
+  const mcVersion = String(mc ?? '').trim();
+  const requested = String(loaderVersion ?? '').trim();
+  if (!mcVersion || !requested) return [];
+  // Persisted legacy pins may already carry the MC prefix ("1.20.1-47.1.106"); accept both forms.
+  const bare = requested.startsWith(`${mcVersion}-`) ? requested.slice(mcVersion.length + 1).trim() : requested;
+  if (!bare) return [];
+  const root = 'https://maven.neoforged.net/releases/net/neoforged';
+  if (mcVersion === '1.20.1') {
+    const mavenVersion = `${mcVersion}-${bare}`;
+    return [{
+      url: `${root}/forge/${mavenVersion}/forge-${mavenVersion}-installer.jar`,
+      name: `neoforge-legacy-${mavenVersion}-installer.jar`,
+      artifact: 'forge',
+      mavenVersion,
+    }];
+  }
+  return [{
+    url: `${root}/neoforge/${bare}/neoforge-${bare}-installer.jar`,
+    name: `neoforge-${bare}-installer.jar`,
+    artifact: 'neoforge',
+    mavenVersion: bare,
+  }];
+}
 // ---------- paper (Fill v3) ----------
 // Live shape (verified against https://fill.papermc.io/v3/projects/paper/versions/1.21.4/builds):
 //   [ { id: 232, time: "...", channel: "STABLE"|"BETA"|"ALPHA",
@@ -399,23 +430,20 @@ export async function installLoader(kind: LoaderKind, dir: string, mc: string, v
     return;
   }
   if (kind === 'neoforge') {
-    // loaders_resolve yields "1.20.1-47.1.106" (version already carries the MC prefix); strip it.
-    const bare = ver.startsWith(mc + '-') ? ver.slice(mc.length + 1) : ver;
-    const v = `${mc}-${bare}`;
-    const urls: [string, string][] = [
-      [`https://maven.neoforged.net/releases/net/neoforged/neoforge/${v}/neoforge-${v}-installer.jar`, `neoforge-${v}-installer.jar`],
-      [`https://maven.neoforged.net/releases/net/neoforged/forge/${v}/forge-${v}-installer.jar`, `neoforge-legacy-${v}-installer.jar`],
-    ];
-    for (const [u, name] of urls) {
-      const probe = await fetchOk(u, { method: 'HEAD' });
-      if (probe.ok) {
-        const jar = path.join(cacheDir, name);
-        if (!existsSync(jar)) await download(u, jar);
-        await runInstaller(javaExe, jar, ['--installServer'], dir, 'neoforge');
-        return;
-      }
+    // Documented coordinate (see neoforgeInstallerCandidates): 1.20.1 legacy `1.20.1-47.x`
+    // under net/neoforged/forge; 1.20.2+ modern full version under net/neoforged/neoforge.
+    const candidates = neoforgeInstallerCandidates(mc, ver);
+    if (candidates.length === 0) throw new Error(`neoforge loader version is required for Minecraft ${mc} (got "${ver}")`);
+    const attempted: string[] = [];
+    for (const candidate of candidates) {
+      const probe = await fetchOk(candidate.url, { method: 'HEAD' });
+      if (!probe.ok) { attempted.push(`${candidate.mavenVersion} (HTTP ${probe.status})`); continue; }
+      const jar = path.join(cacheDir, candidate.name);
+      if (!existsSync(jar)) await download(candidate.url, jar);
+      await runInstaller(javaExe, jar, ['--installServer'], dir, 'neoforge');
+      return;
     }
-    throw new Error(`neoforge installer not found for ${v}`);
+    throw new Error(`neoforge installer not found for Minecraft ${mc} ${ver} (tried ${attempted.join(', ') || candidates.map(candidate => candidate.mavenVersion).join(', ')})`);
   }
   throw new Error(`loader not supported: ${kind as string}`);
 }

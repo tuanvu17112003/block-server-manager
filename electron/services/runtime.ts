@@ -6,8 +6,9 @@ import type { IpcContext, Handler } from '../ipc';
 import { appError, Store, type ServerDto, type CreateServerInput } from './store';
 import { Jobs } from './jobs';
 import { ServerProcesses } from './server-process';
-import { vanillaVersions, paperVersions, loadersResolve } from './versions';
-import { ensureJava, detectJava, requiredJavaMajor, installLoader, ensureServerProperties, writeEula, type LoaderKind } from './installer/core';
+import { vanillaVersions, paperVersions, loadersResolve, validateLoaderPin } from './versions';
+import { installLoader, ensureServerProperties, writeEula, type LoaderKind } from './installer/core';
+import { requiredJavaMajor, offlineJavaMajor, installMajorFor, detectJava, validateJava, ensureJava } from './java';
 import { probePortAvailable, PORT_MIN, PORT_MAX } from './validate-args';
 import { publishStagedServer, assertServerNameAvailable } from './install-transaction';
 import { searchModpacks, projectVersions } from './installer/modrinth';
@@ -46,11 +47,22 @@ export function buildRuntime(): {
     const cacheDir = path.join(ctx.dataRoot, 'cache');
     const runtimeRoot = path.join(ctx.dataRoot, 'runtime');
 
+    // Start must not wait on Mojang: prefer the local mapping and only fall back to metadata for
+    // versions the local table does not know (e.g. future 26.x) when a network lookup is unavoidable.
+    const startTimeRequiredMajor = async (mcVersion: string): Promise<number> => {
+      const offline = offlineJavaMajor(mcVersion);
+      if (offline !== null) return offline;
+      return requiredJavaMajor(mcVersion);
+    };
+
     const resolveJava = async (dto: ServerDto): Promise<string> => {
-      if (dto.javaPath) return dto.javaPath;
-      const major = await requiredJavaMajor(dto.mcVersion);
-      const rt = await ensureJava(major, runtimeRoot, cacheDir);
-      return rt.javapath;
+      const required = await startTimeRequiredMajor(dto.mcVersion);
+      const installMajor = installMajorFor(required) ?? required;
+      if (dto.javaPath) {
+        // A configured override is inspected locally (major/arch) — never silently replaced.
+        return (await validateJava(dto.javaPath, installMajor)).path;
+      }
+      return (await ensureJava(installMajor, runtimeRoot, cacheDir)).path;
     };
     processes = new ServerProcesses(new Store(ctx.dataRoot), ctx.dataRoot, ctx.send, resolveJava);
 
@@ -58,24 +70,23 @@ export function buildRuntime(): {
       java_detect: async a => {
         const mcVersion = String(a.mcVersion);
         const requiredMajor = await requiredJavaMajor(mcVersion);
-        const found = await detectJava(requiredMajor, [path.join(ctx.dataRoot, "runtime")]);
-        return { mcVersion, requiredMajor, installMajor: found[0]?.major ?? requiredMajor, candidates: found };
+        const installMajor = installMajorFor(requiredMajor) ?? requiredMajor;
+        const candidates = await detectJava(requiredMajor, [runtimeRoot], { maxCandidates: 32 });
+        return { mcVersion, requiredMajor, installMajor, candidates };
       },
       java_validate: async a => {
         const mcVersion = String(a.mcVersion);
         const requiredMajor = await requiredJavaMajor(mcVersion);
-        const found = await detectJava(requiredMajor, [path.join(ctx.dataRoot, "runtime")]);
-        const hit = found.find(c => c.javapath === String(a.path));
-        if (!hit) throw appError('validation', 'That Java path is not a matching runtime.');
-        return hit;
+        const installMajor = installMajorFor(requiredMajor) ?? requiredMajor;
+        return validateJava(String(a.path), installMajor);
       },
       java_ensure: async a => {
         const major = Number(a.major);
         const jobId = String(a.jobId ?? '');
-        const rt = await ensureJava(major, path.join(ctx.dataRoot, 'runtime'), path.join(ctx.dataRoot, 'cache'),
-          p => { if (jobId) j.progress(jobId, { progress: 10, stage: p.phase }); });
+        const candidate = await ensureJava(major, runtimeRoot, cacheDir,
+          progress => { if (jobId) j.progress(jobId, { progress: progress.pct ?? 10, stage: progress.phase }); });
         if (jobId) j.progress(jobId, { progress: 100, stage: 'java ready' });
-        return { path: rt.javapath, major: rt.major, architectureBits: 64, source: rt.source };
+        return { path: candidate.path, major: candidate.major, architectureBits: candidate.architectureBits, source: candidate.source };
       },
       versions_vanilla: () => vanillaVersions(),
       versions_paper: () => paperVersions(),
@@ -105,19 +116,20 @@ export function buildRuntime(): {
           // WP-2.3 port model: allocate (record-free + OS-bindable) before provisioning; the same
           // port is written to the staged server.properties and carried by the published record.
           const port = await s.allocatePort(input.port ?? null);
+          // WP-3.1: a loader pin must exist in the live catalogue for this MC version.
+          const choices = await loadersResolve(input.mcVersion);
+          const pin = validateLoaderPin(input.loader, input.mcVersion, input.loaderVersion ?? '', choices);
+          if (!pin.ok) throw appError('validation', pin.message ?? `Invalid ${input.loader} version for Minecraft ${input.mcVersion}.`);
           j.progress(jobId, { progress: 5, stage: 'resolving Java' });
-          const major = await requiredJavaMajor(input.mcVersion);
+          const requiredMajor = await requiredJavaMajor(input.mcVersion);
+          const installMajor = installMajorFor(requiredMajor) ?? requiredMajor;
           // A configured Java path is validated and used as-is; only a missing runtime triggers
           // provisioning. Start/install must not silently download a JDK over an explicit choice.
           let javaExe: string;
           if (input.javaPath) {
-            if (!fs.existsSync(input.javaPath)) {
-              throw appError('validation', `Java path not found: ${input.javaPath}`);
-            }
-            javaExe = input.javaPath;
+            javaExe = (await validateJava(input.javaPath, requiredMajor)).path;
           } else {
-            const runtime = await ensureJava(major, runtimeRoot, cacheDir);
-            javaExe = runtime.javapath;
+            javaExe = (await ensureJava(installMajor, runtimeRoot, cacheDir)).path;
           }
           // WP-2.4: everything installs into <dataRoot>/installer-staging/<uuid>; the record and the
           // final servers/<id> directory only appear after artifact + launch-shape validation.
@@ -151,10 +163,10 @@ export function buildRuntime(): {
       },
       server_install_cancel: a => jobs!.cancel(String(a.jobId)),
 
-      server_start: a => processes!.start(String(a.id)),
+      server_start: a => processes!.startDetached(String(a.id)),
       server_stop: a => processes!.stop(String(a.id)),
       server_kill: a => processes!.kill(String(a.id)),
-      server_restart: a => processes!.restart(String(a.id)),
+      server_restart: a => processes!.restartDetached(String(a.id)),
       server_send_command: a => processes!.sendCommand(String(a.id), String(a.cmd)),
       logs_tail: a => processes!.tail(String(a.id), Number(a.lines ?? 200)),
       server_command_history: a => new Store(ctx.dataRoot).commandHistory(String(a.id)),

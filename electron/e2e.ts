@@ -7,7 +7,8 @@ import { Store } from './services/store';
 import { buildRuntime } from './services/runtime';
 import { installCurseforge, inspectStagedZip } from './services/installer/curseforge';
 import { searchModpacks } from './services/installer/modrinth';
-import { startWithAutoFix, writeEula, ensureJava } from './services/installer/core';
+import { startWithAutoFix, writeEula } from './services/installer/core';
+import { ensureJava } from './services/java';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -53,7 +54,7 @@ export async function runE2E(ctx: IpcContext): Promise<boolean> {
   try {
     const java = await ensureJava(21, path.join(ctx.dataRoot, 'runtime'), path.join(ctx.dataRoot, 'cache'));
     const paper = await H.server_install({
-      input: { name: 'e2e-paper', loader: 'Paper', mcVersion: '1.21.4', ramMb: 1024, eulaAccepted: true, javaPath: java.javapath },
+      input: { name: 'e2e-paper', loader: 'Paper', mcVersion: '1.21.4', ramMb: 1024, eulaAccepted: true, javaPath: java.path },
       jobId: 'jpaper',
     }, ctx) as { id: string };
     t('paper-install', !!paper?.id);
@@ -103,9 +104,9 @@ export async function runE2E(ctx: IpcContext): Promise<boolean> {
     const dto = store.createServer({ name: 'e2e-sf5', loader: 'Forge', mcVersion: res.mc ?? '1.20.1', loaderVersion: res.loaderVersion ?? undefined, ramMb: 4096, eulaAccepted: true, javaPath: undefined });
     fs.mkdirSync(dir, { recursive: true });
     // move engine output into the managed dir shape: engine already installed into `dir` (managed path used directly)
-    const rt = await (await import('./services/installer/core')).ensureJava(21, path.join(ctx.dataRoot, 'runtime'), path.join(ctx.dataRoot, 'cache'));
+    const rt = await (await import('./services/java')).ensureJava(21, path.join(ctx.dataRoot, 'runtime'), path.join(ctx.dataRoot, 'cache'));
     writeEula(dir); // e2e boots the engine dir directly; the pipeline path writes this itself
-    const lc = (await import('./services/installer/core')).launchCommand(dir, rt.javapath);
+    const lc = (await import('./services/installer/core')).launchCommand(dir, rt.path);
     const boot = await startWithAutoFix(dir, lc, { timeoutMs: 10 * 60_000 });
     t('sf5-boot-Done', boot.ok);
     results.push(`sf5-reason=${boot.reason.slice(0, 140)}`);

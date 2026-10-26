@@ -692,6 +692,20 @@ export interface ServerStatusPayload {
   status: string;
 }
 
+/** `server://readiness/{id}` channel name (boot/auto-fix progress, D8). */
+export function serverReadinessEvent(id: string): string {
+  return `server://readiness/${id}`;
+}
+
+export interface ServerReadinessPayload {
+  serverId: string;
+  phase: 'preparing' | 'spawning' | 'spawned' | 'retrying' | 'ready' | 'stopped' | 'failed';
+  attempt?: number;
+  pid?: number | null;
+  message?: string;
+  at?: string;
+}
+
 async function listenOrNoop<T>(event: string, cb: (payload: T) => void): Promise<UnlistenFn> {
   if (isElectron()) return window.electronAPI!.on(event, (p) => cb(p as T));
   if (isTauri()) return listen<T>(event, (e) => cb(e.payload));
@@ -710,6 +724,14 @@ export function onServerStatus(
   cb: (payload: ServerStatusPayload) => void,
 ): Promise<UnlistenFn> {
   return listenOrNoop<ServerStatusPayload>(serverStatusEvent(id), cb);
+}
+
+/** Subscribe to `server://readiness/{id}` (spawn/retry/ready/failed progress). */
+export function onServerReadiness(
+  id: string,
+  cb: (payload: ServerReadinessPayload) => void,
+): Promise<UnlistenFn> {
+  return listenOrNoop<ServerReadinessPayload>(serverReadinessEvent(id), cb);
 }
 
 /** Subscribe to `job://progress/{jobId}` (Tauri event or configured backend SSE). */

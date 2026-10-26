@@ -36,6 +36,19 @@ interface ExitInfo {
   spawnError: Error | null;
 }
 
+interface PreparedLaunch {
+  dir: string;
+  cmd: { exe: string; args: string[] };
+  learnedFile: string;
+}
+
+export interface ReadinessPayload {
+  phase: 'preparing' | 'spawning' | 'spawned' | 'retrying' | 'ready' | 'stopped' | 'failed';
+  attempt?: number;
+  pid?: number | null;
+  message?: string;
+}
+
 interface Sidecar { platform?: 'modrinth' | 'curseforge'; slug?: string | null; files?: string[] }
 
 export interface ServerProcessOptions {
@@ -174,25 +187,64 @@ export class ServerProcesses {
     try { return JSON.parse(fs.readFileSync(path.join(dir, 'msm-install.json'), 'utf8')) as Sidecar; } catch { return null; }
   }
 
-  async start(id: string): Promise<void> {
+  async start(id: string): Promise<void> { await this.startWithMode(id, false); }
+
+  /** Fast-ack start for the IPC layer: preparation errors reject; boot/auto-fix continues in the
+   *  background and is reported through `server://status` + `server://readiness` events (D8). */
+  async startDetached(id: string): Promise<void> { await this.startWithMode(id, true); }
+
+  /** Restart that returns once the new launch has been prepared/spawned (events drive the rest). */
+  async restartDetached(id: string): Promise<void> {
+    if (this.starting.has(id)) throw appError('conflict', 'Server is starting; wait for it to finish before restarting.');
+    await this.stop(id);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await this.startDetached(id);
+  }
+
+  private async startWithMode(id: string, detach: boolean): Promise<void> {
     if (this.running.has(id) || this.starting.has(id)) throw appError('conflict', 'Server already running.');
     const dto = this.store.getServer(id);
     if (!dto) throw appError('not-found', `Server ${id} not found.`);
     this.starting.add(id);
     this.stopRequested.delete(id);
+    this.emitReadiness(id, { phase: 'preparing' });
+    let prepared: PreparedLaunch;
     try {
-      await this.startInner(id, dto);
+      prepared = await this.prepareLaunch(id, dto);
+    } catch (error) {
+      this.starting.delete(id);
+      this.stopRequested.delete(id);
+      this.emitReadiness(id, { phase: 'failed', message: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+    const finalized = this.bootLoop(id, dto, prepared).finally(() => {
+      this.starting.delete(id);
+      this.stopRequested.delete(id);
+    });
+    if (detach) {
+      void finalized.catch((error: unknown) => {
+        try { if (this.running.has(id)) this.killTree(id); } catch { /* best effort */ }
+        try { this.setStatus(id, 'crashed'); } catch { /* server may be gone */ }
+        this.emitReadiness(id, { phase: 'failed', message: error instanceof Error ? error.message : String(error) });
+        console.error(`[start/${id}] ${(error as Error)?.message ?? error}`);
+      });
+      return;
+    }
+    try {
+      await finalized;
     } catch (error) {
       if (this.running.has(id)) this.killTree(id);
       try { this.setStatus(id, 'stopped'); } catch { /* server may be gone */ }
+      this.emitReadiness(id, { phase: 'failed', message: error instanceof Error ? error.message : String(error) });
       throw error;
-    } finally {
-      this.starting.delete(id);
-      this.stopRequested.delete(id);
     }
   }
 
-  private async startInner(id: string, dto: ServerDto): Promise<void> {
+  private emitReadiness(id: string, payload: ReadinessPayload): void {
+    this.send(`server://readiness/${id}`, { serverId: id, ...payload, at: new Date().toISOString() });
+  }
+
+  private async prepareLaunch(id: string, dto: ServerDto): Promise<PreparedLaunch> {
     const dir = this.serverDir(id);
     // EULA authority (B-20): the JSON flag and the file must BOTH say accepted. Never auto-write
     // `eula=true` here; acceptance is only written by an explicit Settings/Create action.
@@ -225,20 +277,37 @@ export class ServerProcesses {
       ? makeCuratedResolver({ platform: sidecar.platform, packSlug: sidecar.slug ?? null, presentPaths: sidecar.files ?? [], learnedFile })
       : null;
     await applyJarSideness(path.join(dir, 'mods'), curated?.protectBasenames ?? new Set());
+    return { dir, cmd, learnedFile };
+  }
 
+  private async bootLoop(id: string, dto: ServerDto, prepared: PreparedLaunch): Promise<void> {
+    const { dir, cmd, learnedFile } = prepared;
     this.setStatus(id, 'starting');
     for (let round = 1; round <= 8; round += 1) {
-      if (this.stopRequested.has(id)) { this.setStatus(id, 'stopped'); return; }
+      if (this.stopRequested.has(id)) {
+        this.setStatus(id, 'stopped');
+        this.emitReadiness(id, { phase: 'stopped' });
+        return;
+      }
+      this.emitReadiness(id, { phase: round === 1 ? 'spawning' : 'retrying', attempt: round });
       const watch = this.spawnWatch(id, dir, cmd, this.options.spawnOverride);
+      this.emitReadiness(id, { phase: 'spawned', attempt: round, pid: this.running.get(id)?.proc.pid ?? null });
       const outcome = await watch.started; // resolves on Done(, user stop, or early exit
-      if (outcome === 'running') return;
+      if (outcome === 'running') {
+        this.emitReadiness(id, { phase: 'ready', attempt: round, pid: this.running.get(id)?.proc.pid ?? null });
+        return;
+      }
       const exit = await watch.exited; // wait for the dead process before reading crash data
       if (outcome === 'stopped' || exit.userStop || this.stopRequested.has(id)) {
         this.setStatus(id, 'stopped');
+        this.emitReadiness(id, { phase: 'stopped' });
         return;
       }
       // Spawn itself failed (e.g. deleted/invalid java.exe): surface a coded IO error, no retry.
-      if (exit.spawnError) throw appError('io', `Could not start the server process: ${exit.spawnError.message}`);
+      if (exit.spawnError) {
+        this.emitReadiness(id, { phase: 'failed', attempt: round, message: exit.spawnError.message });
+        throw appError('io', `Could not start the server process: ${exit.spawnError.message}`);
+      }
       // Crashed before Done(: L3 attribution + disable + learn + retry. No user-visible crash
       // event until the retry loop gives up (avoids toast spam while auto-fixing).
       const tail = exit.ring.slice(-400);
@@ -280,10 +349,15 @@ export class ServerProcesses {
           console.log(`[autofix r${round}] could not fetch ${depId}: ${(error as Error).message}`);
         }
       }
-      if (!acted) { this.setStatus(id, 'crashed'); return; }
+      if (!acted) {
+        this.setStatus(id, 'crashed');
+        this.emitReadiness(id, { phase: 'failed', attempt: round, message: 'Server crashed during boot and auto-fix could not attribute a mod.' });
+        return;
+      }
       this.setStatusQuiet(id, 'starting');
     }
     this.setStatus(id, 'crashed');
+    this.emitReadiness(id, { phase: 'failed', message: 'Server failed to start after 8 auto-fix rounds.' });
   }
 
   /** Spawn and watch. `started` resolves on Done( (running), user stop (stopped) or early exit

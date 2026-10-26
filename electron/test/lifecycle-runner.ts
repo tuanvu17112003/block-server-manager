@@ -255,6 +255,22 @@ export async function runLifecycleTests(root: string): Promise<SuiteResult> {
     await assert.rejects(() => f.processes.tail('..\\escape', 10), (error: unknown) => (error as { code?: string }).code === 'validation');
   });
 
+  await run.must('detached start acks quickly and reports readiness phases (D8)', async () => {
+    const f = fixture(root, 'detached');
+    const startedAt = Date.now();
+    await f.processes.startDetached(f.serverId);
+    const ackMs = Date.now() - startedAt;
+    assert.ok(ackMs < 2000, `startDetached took ${ackMs}ms (must not wait for boot)`);
+    assert.equal(await statusOf(f.store, f.serverId), 'starting');
+    await waitUntil(() => f.children.length === 1, { timeoutMs: 5000, label: 'spawn' });
+    f.children[0]!.line('Done (0.700s)! For help, type "help"');
+    await waitUntil(async () => (await statusOf(f.store, f.serverId)) === 'running', { timeoutMs: 5000, label: 'running' });
+    const phases = f.events
+      .filter((event) => event.channel === `server://readiness/${f.serverId}`)
+      .map((event) => (event.payload as { phase?: string }).phase);
+    for (const phase of ['preparing', 'spawning', 'spawned', 'ready']) assert.ok(phases.includes(phase), `missing readiness phase ${phase} (got ${phases.join(',')})`);
+  });
+
   // Dispose every fixture: stop fake children so their log streams close before the temp root is
   // removed (otherwise rmSync fails with ENOTEMPTY on Windows).
   for (const f of activeFixtures) {
