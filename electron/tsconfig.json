@@ -13,5 +13,5 @@
     "sourceMap": false,
     "types": ["node"]
   },
-  "include": ["main.ts", "preload.ts", "ipc.ts", "e2e.ts", "mgmt-test.ts", "ipc-test.ts", "services/**/*.ts"]
+  "include": ["main.ts", "preload.ts", "ipc.ts", "e2e.ts", "mgmt-test.ts", "ipc-test.ts", "services/**/*.ts", "test/**/*.ts"]
 }

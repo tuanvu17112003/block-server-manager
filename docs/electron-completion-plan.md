@@ -1,8 +1,16 @@
 # Block Server Manager — Electron migration completion plan
 
-**Status:** analysis complete, implementation **not started** (awaiting approval).
-**Prepared:** 2026-10-26 · **Workspace:** `H:\TESTMultiAI\20` · **Baseline commit:** `e3d0dbd` + large uncommitted management/content wave.
+**Status:** approved 2026-10-26 (D1–D12 = recommended, all phases); **Phase 0 complete** (verification foundation, gate green); Phase 1 starting.
+**Prepared:** 2026-10-26 · **Workspace:** `H:\TESTMultiAI\20` · **Baseline commit:** `6f05c50` (tag `pre-completion-fixes`; full `.app-data` mirror at `H:\TESTMultiAI\20-backups\app-data-2026-10-26`).
 **Inputs:** four independent audits (`docs/audit/01-backend-runtime.md`, `02-frontend.md`, `03-installer.md`, `05-parity-matrix.md`), a Lead audit of the management/content wave (`04-management-content.md`), and a live evidence run (`docs/audit/evidence.md`, screenshots under `docs/audit/evidence/`).
+
+## Implementation log
+
+| Phase | Status | Gate / evidence |
+|---|---|---|
+| 0 — Safety net & verification foundation | **DONE** | tag `pre-completion-fixes` + baseline commit; `.app-data` 6.6 GB mirror; zero-dep harness (unit via `node:test`, Electron service/contract/UI runners); `npm run verify` = **PASS 8/8**; screenshots under `artifacts/<ts>/`; test modes isolated to temp profiles/data roots; selftest verdict fixed (B-25 partially) |
+| 1 — Release blockers | in progress | target: `npm run verify` + extended repros green |
+| 2–8 | pending | — |
 
 ---
 

@@ -116,31 +116,53 @@ export function registerIpc(ipcMain: IpcMain, ctx: IpcContext): void {
 
 export function handlersMap(): Record<string, Handler> { return handlers; }
 
-/** Direct handler invocation for the automated gate (no window needed). */
+/** Direct handler invocation for the automated gate (no window needed). Booleans only — never
+ *  "a string exists" — so a broken assertion cannot pass (B-25). */
 export async function runSelfTest(ctx: IpcContext): Promise<boolean> {
-  const t = (name: string, v: unknown) => ({ name, v });
-  const results: { name: string; v: unknown }[] = [];
-  results.push(t('ping', handlers.ping({}, ctx)));
-  const created = await handlers.servers_create({
-    input: { name: 'selftest-' + Date.now(), loader: 'Vanilla', mcVersion: '1.21.1', ramMb: 2048 },
-  }, ctx) as { id: string; name: string; status: string };
-  results.push(t('create', created.name));
-  const list = await handlers.servers_list({}, ctx) as unknown[];
-  results.push(t('list>=1', list.length >= 1));
-  const updated = await handlers.servers_set_java_path({ id: created.id, path: 'C:/j/java.exe' }, ctx) as { javaPath: string };
-  results.push(t('setJava', updated.javaPath === 'C:/j/java.exe'));
-  const got = await handlers.server_get({ id: created.id }, ctx) as { id: string } | null;
-  results.push(t('get', got?.id === created.id));
-  await handlers.servers_delete({ id: created.id }, ctx);
-  const after = await handlers.servers_list({}, ctx) as { name: string }[];
-  results.push(t('delete', !after.some(s => s.name === created.name)));
-  // error contract: servers_delete throws not-found before touching any filesystem path
-  let errShape = 'no-error';
-  try { await handlers.servers_delete({ id: 'missing' }, ctx); } catch (e) { errShape = ((e as { code?: string }).code === 'not-found') ? 'not-found' : 'wrong'; }
-  results.push(t('error-code', errShape === 'not-found'));
-  const pass = results.every(r => r.v === true || typeof r.v === 'string');
-  // eslint-disable-next-line no-console
-  console.log(results.map(r => `${r.name}=${String(r.v)}`).join(' | '));
-  void appError;
-  return pass;
+  const checks: { name: string; ok: boolean; detail?: string }[] = [];
+  const check = (name: string, ok: boolean, detail?: string): void => { checks.push({ name, ok, detail }); };
+  const must = async (name: string, fn: () => Promise<void> | void): Promise<void> => {
+    try { await fn(); check(name, true); }
+    catch (error) { check(name, false, error instanceof Error ? error.message : String(error)); }
+  };
+
+  await must('ping', async () => { if ((await handlers.ping({}, ctx)) !== 'pong') throw new Error('pong expected'); });
+  await must('runtime-handlers-registered', async () => {
+    for (const name of ['versions_vanilla', 'server_start', 'server_settings_get', 'backups_list', 'worlds_list', 'players_list', 'metrics_get', 'content_list']) {
+      if (typeof handlers[name] !== 'function') throw new Error(`handler ${name} missing`);
+    }
+  });
+  await must('create-list-get-delete', async () => {
+    const created = await handlers.servers_create({
+      input: { name: 'selftest-' + Date.now(), loader: 'Vanilla', mcVersion: '1.21.1', ramMb: 2048 },
+    }, ctx) as { id: string; name: string };
+    if (typeof created.id !== 'string' || created.id.length === 0) throw new Error('no id');
+    const list = await handlers.servers_list({}, ctx) as unknown[];
+    if (list.length < 1) throw new Error('list empty');
+    const updated = await handlers.servers_set_java_path({ id: created.id, path: 'C:/j/java.exe' }, ctx) as { javaPath: string };
+    if (updated.javaPath !== 'C:/j/java.exe') throw new Error('javaPath not persisted');
+    const got = await handlers.server_get({ id: created.id }, ctx) as { id: string } | null;
+    if (got?.id !== created.id) throw new Error('server_get mismatch');
+    await handlers.servers_delete({ id: created.id }, ctx);
+    const after = await handlers.servers_list({}, ctx) as { id: string }[];
+    if (after.some((entry) => entry.id === created.id)) throw new Error('delete left record');
+  });
+  await must('error-code', async () => {
+    try {
+      await handlers.servers_delete({ id: 'missing' }, ctx);
+      throw new Error('delete of a missing server must reject');
+    } catch (error) {
+      if ((error as { code?: string }).code !== 'not-found') throw new Error('wrong error code');
+    }
+  });
+  await must('port-check', async () => {
+    const result = await handlers.port_check({ port: 25565 }, ctx) as { available?: unknown };
+    if (typeof result.available !== 'boolean') throw new Error('port_check shape');
+  });
+
+  for (const entry of checks) {
+    // eslint-disable-next-line no-console
+    console.log(`${entry.ok ? 'PASS' : 'FAIL'} ${entry.name}${entry.detail ? ` — ${entry.detail}` : ''}`);
+  }
+  return checks.length > 0 && checks.every((entry) => entry.ok);
 }

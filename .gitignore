@@ -40,3 +40,7 @@ dist-electron/
 # curseforge api key (never commit)
 .app-data/curseforge-key.txt
 .e2e.out
+
+# verification artifacts
+artifacts/
+
