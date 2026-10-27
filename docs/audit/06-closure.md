@@ -85,9 +85,11 @@ pre-update backup excludes them by spec).
 
 ## Known limitations / non-goals (honest)
 
-- **Phase 8:** 24 h soak runs over wall-clock time after this plan's code closure; the JSONL evidence record
-  (`<dataRoot>/soak/soak.jsonl`) is the authority for the observed window. One manual click-through of a full
-  modpack install from the UI wizard remains a manual acceptance step (engine + UI DOM paths are covered).
+- **Phase 8:** complete — the 24 h soak passed (24.01 h, 1,419 cycles, 0 handler errors, bounded memory,
+  no JVM orphans; [summary](../evidence/soak-24h-summary.json)). One manual click-through of a full modpack
+  install from the UI wizard remains a manual acceptance step (engine + UI DOM paths are covered). The soak's
+  own post-window teardown exceeded its internal safety window and the harness process had to be terminated
+  externally (no JVM remained); the production quit path is separately proven by `scripts/quitsmoke.mjs`.
 - Packaging/installer (NSIS) deferred (D10); no auto-update, i18n, RCON (ADR-0011), playit.gg, full files
   browser, roles/database backends, schedules beyond backups, SQLite rewrite — per approved non-goals.
 - The dormant `src-tauri/` tree is frozen reference; it is not built or shipped and may be archived/deleted

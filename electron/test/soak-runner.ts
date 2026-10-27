@@ -56,6 +56,7 @@ export async function runSoak(options: SoakOptions): Promise<SoakSummary> {
   const call = async <T>(name: string, args: Record<string, unknown> = {}, timeoutMs = 180_000): Promise<T | null> => {
     const handler = h[name];
     if (!handler) { errors.push(`missing handler ${name}`); return null; }
+    write({ event: 'step', name });
     const started = Date.now();
     try {
       // Every handler is bounded: a stuck lifecycle transition must not freeze the soak silently.
