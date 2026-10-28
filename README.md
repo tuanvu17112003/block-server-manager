@@ -88,6 +88,7 @@ legacy/src-tauri/  ARCHIVED Tauri/Rust reference (not built; parity reference)
 - [Completion plan + phase log](docs/electron-completion-plan.md)
 - [Verification guide](docs/verification.md)
 - [Tab/UX spec](docs/specs/app-tabs.md) · [Management/content spec](docs/specs/management-content.md)
+- [Playwright MCP real-app test brief](docs/testing/playwright-mcp-test-brief.md) · launcher: `scripts/start-test-app.ps1`
 - [Packaging guide (NSIS)](docs/packaging.md) · [Security audit](docs/audit/08-security-audit.md)
 - [Architecture overview](docs/architecture/overview.md) · [ADRs](docs/architecture/adr/)
 - [Audit reports (evidence + parity)](docs/audit/01-backend-runtime.md)
