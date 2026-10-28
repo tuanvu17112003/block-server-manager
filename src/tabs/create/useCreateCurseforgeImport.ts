@@ -1,7 +1,14 @@
 // CurseForge import state/effects for the Create wizard (extracted from Create.tsx, WP-6.5).
 import { useEffect, useRef, useState } from 'react';
-import type { CurseForgeArchiveInspection, CurseForgeDownloadUpdate, CurseForgeProjectMetaDto, CurseForgeStagedZip } from '../../tauri';
-import { hasBackend, isDesktop, onCurseForgeDownload, tauriCurseForge } from '../../tauri';
+import type {
+  CurseForgeArchiveInspection,
+  CurseForgeDownloadUpdate,
+  CurseForgeModpackSearchResult,
+  CurseForgeModpackSort,
+  CurseForgeProjectMetaDto,
+  CurseForgeStagedZip,
+} from '../../tauri';
+import { hasBackend, isDesktop, onCurseForgeDownload, tauriCurseForge, tauriCurseForgeKey } from '../../tauri';
 import { cfInstallable, curseforgeProjectInputError, errorText } from './helpers';
 
 interface Options {
@@ -26,6 +33,49 @@ export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Op
   const [cfProjectMeta, setCfProjectMeta] = useState<CurseForgeProjectMetaDto | null>(null);
   const [cfProjectBusy, setCfProjectBusy] = useState(false);
   const [cfProjectError, setCfProjectError] = useState('');
+  const [cfKeyStatus, setCfKeyStatus] = useState<{ configured: boolean; source: 'safeStorage' | 'file' | null; encrypted: boolean; hint: string } | null>(null);
+  const [cfSearchQuery, setCfSearchQuery] = useState('');
+  const [cfSearchSort, setCfSearchSort] = useState<CurseForgeModpackSort>('popularity');
+  const [cfSearchBusy, setCfSearchBusy] = useState(false);
+  const [cfSearchError, setCfSearchError] = useState('');
+  const [cfSearchResult, setCfSearchResult] = useState<CurseForgeModpackSearchResult | null>(null);
+  const [cfResolvingId, setCfResolvingId] = useState<number | null>(null);
+
+  const refreshCurseforgeKeyStatus = async (): Promise<void> => {
+    if (!hasBackend()) return;
+    try {
+      setCfKeyStatus(await tauriCurseForgeKey.status());
+    } catch {
+      setCfKeyStatus(null);
+    }
+  };
+
+  useEffect(() => {
+    void refreshCurseforgeKeyStatus();
+  }, []);
+
+  const searchCurseforgeModpacks = async (loadMore = false): Promise<void> => {
+    if (!hasBackend()) return;
+    setCfSearchBusy(true);
+    setCfSearchError('');
+    try {
+      const offset = loadMore ? (cfSearchResult?.hits.length ?? 0) : 0;
+      const result = await tauriCurseForge.searchModpacks(cfSearchQuery, {
+        offset,
+        limit: 20,
+        sort: cfSearchSort,
+      });
+      setCfSearchResult((previous) => (
+        loadMore && previous
+          ? { ...result, hits: [...previous.hits, ...result.hits] }
+          : result
+      ));
+    } catch (error) {
+      setCfSearchError(errorText(error, 'Could not search CurseForge modpacks.'));
+    } finally {
+      setCfSearchBusy(false);
+    }
+  };
 
   const selectCurseforgeZip = (name: string): void => {
     if (cfProjectId !== null) {
@@ -91,13 +141,14 @@ export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Op
   };
 
   /** Official API key mode: project URL/slug/id → latest file → serverPackFileId. */
-  const resolveCurseforgeProject = async (): Promise<void> => {
-    const invalid = curseforgeProjectInputError(cfProjectInput);
+  const resolveCurseforgeProject = async (rawOverride?: string): Promise<boolean> => {
+    const candidate = (rawOverride ?? cfProjectInput).trim();
+    const invalid = curseforgeProjectInputError(candidate);
     if (invalid) {
       setCfProjectError(invalid);
-      return;
+      return false;
     }
-    const raw = cfProjectInput.trim();
+    const raw = candidate;
     setCfProjectBusy(true);
     setCfProjectError('');
     try {
@@ -108,12 +159,25 @@ export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Op
       setCurseforgeBrowserMessage(
         `${meta.name}: Minecraft ${meta.minecraftVersion ?? '?'} · ${meta.loader ?? '?'} · ${meta.hasServerPack ? 'server pack available (one-click)' : 'no server pack; client manifest install'}`,
       );
+      return true;
     } catch (error) {
       setCfProjectId(null);
       setCfProjectMeta(null);
       setCfProjectError(errorText(error, 'Could not resolve the CurseForge project.'));
+      return false;
     } finally {
       setCfProjectBusy(false);
+    }
+  };
+
+  /** Select a result from the in-app modpack browser: resolve it through the same one-click flow. */
+  const pickSearchedCurseforgeModpack = async (projectId: number): Promise<boolean> => {
+    setCfProjectInput(String(projectId));
+    setCfResolvingId(projectId);
+    try {
+      return await resolveCurseforgeProject(String(projectId));
+    } finally {
+      setCfResolvingId(null);
     }
   };
 
@@ -219,6 +283,18 @@ export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Op
     cfProjectMeta,
     cfProjectBusy,
     cfProjectError,
+    cfKeyStatus,
+    refreshCurseforgeKeyStatus,
+    cfSearchQuery,
+    setCfSearchQuery,
+    cfSearchSort,
+    setCfSearchSort,
+    cfSearchBusy,
+    cfSearchError,
+    cfSearchResult,
+    cfResolvingId,
+    searchCurseforgeModpacks,
+    pickSearchedCurseforgeModpack,
     cfProjectInspection,
     curseforgeInspectionMatchesSelection,
     selectedCurseforgeInspection,

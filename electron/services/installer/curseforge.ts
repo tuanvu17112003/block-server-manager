@@ -94,7 +94,7 @@ function loaderFromGameVersions(gameVersions: string[] | undefined): LoaderKind 
 }
 
 export async function inspectCurseForgeProject(ref: number | string, dataRoot: string): Promise<CfProjectMeta> {
-  if (!cfKey(dataRoot)) throw new Error('CurseForge API key not configured. Put the classic key in <data-root>/curseforge-key.txt.');
+  if (!cfKey(dataRoot)) throw appError('validation', 'A CurseForge API key is required for one-click installs. Add it in Settings → CurseForge API key (it is stored securely, no file editing needed).');
   const raw = String(ref).trim();
   let projectId = Number(raw);
   if (!Number.isInteger(projectId) || projectId <= 0) {
@@ -119,6 +119,103 @@ export async function inspectCurseForgeProject(ref: number | string, dataRoot: s
     loaderVersion: null,
     hasServerPack: meta.serverPackFileId !== undefined && meta.serverPackFileId !== null,
   };
+}
+
+// ---- official API key mode: in-app modpack browsing ----
+export interface CfModpackHit {
+  projectId: number;
+  name: string;
+  slug: string;
+  summary: string;
+  author: string | null;
+  downloads: number;
+  updatedAt: string | null;
+  iconUrl: string | null;
+  websiteUrl: string | null;
+}
+
+export interface CfModpackSearchResult {
+  hits: CfModpackHit[];
+  totalHits: number;
+  offset: number;
+  limit: number;
+}
+
+export type CfModpackSort = 'popularity' | 'recent' | 'name' | 'downloads';
+
+const CF_SORT_FIELDS: Record<CfModpackSort, number> = {
+  popularity: 2, // total downloads (popularity)
+  recent: 3, // last updated
+  name: 4,
+  downloads: 6, // total downloads field
+};
+
+/** Pure mapping of the official `/mods/search` payload; tolerant of missing optional fields. */
+export function mapCurseForgeSearchPayload(payload: unknown, offset: number, limit: number): CfModpackSearchResult {
+  const body = (payload ?? {}) as {
+    data?: unknown;
+    pagination?: { totalCount?: unknown };
+  };
+  const rows = Array.isArray(body.data) ? body.data : [];
+  const hits: CfModpackHit[] = [];
+  for (const raw of rows) {
+    if (!raw || typeof raw !== 'object') continue;
+    const row = raw as {
+      id?: unknown; name?: unknown; slug?: unknown; summary?: unknown;
+      downloadCount?: unknown; dateModified?: unknown;
+      logo?: { thumbnailUrl?: unknown } | null;
+      links?: { websiteUrl?: unknown } | null;
+      authors?: { name?: unknown }[] | null;
+    };
+    const projectId = Number(row.id);
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    if (!Number.isInteger(projectId) || projectId <= 0 || name === '') continue;
+    const authorRow = Array.isArray(row.authors) ? row.authors.find((entry) => typeof entry?.name === 'string') : undefined;
+    hits.push({
+      projectId,
+      name,
+      slug: typeof row.slug === 'string' ? row.slug : '',
+      summary: typeof row.summary === 'string' ? row.summary : '',
+      author: authorRow && typeof authorRow.name === 'string' ? authorRow.name : null,
+      downloads: Number.isFinite(Number(row.downloadCount)) ? Number(row.downloadCount) : 0,
+      updatedAt: typeof row.dateModified === 'string' ? row.dateModified : null,
+      iconUrl: row.logo && typeof row.logo.thumbnailUrl === 'string' ? row.logo.thumbnailUrl : null,
+      websiteUrl: row.links && typeof row.links.websiteUrl === 'string' ? row.links.websiteUrl : null,
+    });
+  }
+  const total = Number(body.pagination?.totalCount);
+  return { hits, totalHits: Number.isFinite(total) && total >= 0 ? total : hits.length, offset, limit };
+}
+
+/**
+ * In-app CurseForge modpack browsing (official API; requires a user key stored by Settings).
+ * `classId=4471` is the official "Modpacks" class; `gameId=432` is Minecraft.
+ */
+export async function searchCurseForgeModpacks(
+  query: string,
+  dataRoot: string,
+  options: { offset?: number; limit?: number; sort?: CfModpackSort } = {},
+): Promise<CfModpackSearchResult> {
+  if (!cfKey(dataRoot)) {
+    throw appError('validation', 'A CurseForge API key is required to browse modpacks in-app. Add it in Settings → CurseForge API key.');
+  }
+  const offset = Number.isFinite(Number(options.offset)) ? Math.max(0, Math.floor(Number(options.offset))) : 0;
+  const limit = Number.isFinite(Number(options.limit)) ? Math.max(1, Math.min(50, Math.floor(Number(options.limit)))) : 20;
+  const sort: CfModpackSort = options.sort && CF_SORT_FIELDS[options.sort] ? options.sort : 'popularity';
+  const params = new URLSearchParams({
+    gameId: '432',
+    classId: '4471',
+    searchFilter: String(query ?? '').trim(),
+    index: String(offset),
+    pageSize: String(limit),
+    sortField: String(CF_SORT_FIELDS[sort]),
+    sortOrder: 'desc',
+  });
+  const payload = await official(dataRoot, `/mods/search?${params.toString()}`);
+  if (payload === null) {
+    throw appError('validation', 'The CurseForge API rejected the request (check the key in Settings → CurseForge API key).');
+  }
+  return mapCurseForgeSearchPayload(payload, offset, limit);
 }
 
 // ---- staged ZIP inspection (route A classify → UI DTO) ----

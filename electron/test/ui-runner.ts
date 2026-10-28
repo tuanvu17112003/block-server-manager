@@ -403,6 +403,24 @@ export async function runUiTests(ctx: IpcContext, win: BrowserWindow, artifactsD
       await waitForPattern(/CREATE SERVER/i, 15_000);
       const hasBack = await exec<boolean>(`Boolean(Array.from(document.querySelectorAll('button')).find((element) => /(^|\\s)BACK$/i.test((element.textContent || '').trim())))`);
       if (!hasBack) throw new Error('Back button missing from the Create header');
+      // CurseForge tab must explain the in-app API-key path (Settings), never ask users to edit a
+      // TXT file, and must not expose search controls before a key exists.
+      const cfClicked = (await clickButtonMatching('CURSEFORGE SERVER PACK')) || (await clickButtonMatching('CurseForge'));
+      if (!cfClicked) {
+        gaps.push('Create CurseForge card not clickable');
+      } else {
+        try {
+          await waitForPattern(/Browse CurseForge modpacks/i, 15_000);
+          const cfText = await exec<string>('document.body.innerText');
+          if (!/API key needed/i.test(cfText)) gaps.push('CurseForge wizard does not show the API-key-needed state.');
+          if (!/Settings\s*(?:→|->)\s*CurseForge API key/i.test(cfText)) gaps.push('CurseForge wizard does not point users to Settings for the API key.');
+          if (/curseforge-key\.txt/i.test(cfText)) gaps.push('CurseForge wizard still tells users to edit curseforge-key.txt.');
+          const searchVisible = await exec<boolean>(`Boolean(document.querySelector('input[aria-label="Search CurseForge modpacks"]'))`);
+          if (searchVisible) gaps.push('CurseForge search is visible without an API key.');
+        } catch (error) {
+          gaps.push(`CurseForge key-gated view did not render: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
       const editionClicked = (await clickButtonMatching('Vanilla', 'button.mc-edition')) || (await clickButtonMatching('^VANILLA')) || (await clickButtonMatching('^Vanilla'));
       if (!editionClicked) {
         markPending('Create edition card', 'Vanilla edition card not found (Create decomposition in progress)');

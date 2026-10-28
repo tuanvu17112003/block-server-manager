@@ -18,6 +18,7 @@ export const RENDERER_COMMANDS = [
   'curseforge_inspect_project', 'curseforge_inspect_zip', 'curseforge_key_clear', 'curseforge_key_set',
   'curseforge_key_status', 'curseforge_list_zips',
   'curseforge_open_browser', 'curseforge_open_external_browser', 'curseforge_pick_zip',
+  'curseforge_search_modpacks',
   'diagnostics_bundle', 'diagnostics_recent',
   'java_detect', 'java_ensure', 'java_validate', 'loaders_resolve', 'logs_tail', 'metrics_get',
   'modpack_pipeline_cancel', 'modpack_pipeline_discard_preview', 'modpack_pipeline_install',
@@ -94,7 +95,7 @@ export async function runContractTests(ctx: IpcContext, filter?: string): Promis
         const shared = readSharedCommands();
         const missing = RENDERER_COMMANDS.filter((name) => typeof merged[name] !== 'function');
         assert.deepEqual(missing, []);
-        assert.equal(RENDERER_COMMANDS.length, 71);
+        assert.equal(RENDERER_COMMANDS.length, 72);
         assert.equal(RENDERER_COMMANDS.length, shared.length);
       });
       await run.must('unknown command is not registered', async () => {
@@ -102,7 +103,7 @@ export async function runContractTests(ctx: IpcContext, filter?: string): Promis
       });
       await run.must('shared/contracts.ts COMMANDS equals the renderer command list (WP-7.1)', async () => {
         const shared = readSharedCommands();
-        assert.equal(shared.length, 71);
+        assert.equal(shared.length, 72);
         assert.equal(new Set(shared).size, shared.length, 'COMMANDS must not repeat a name');
         assert.deepEqual([...shared].sort(), [...RENDERER_COMMANDS].sort());
       });

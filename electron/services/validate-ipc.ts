@@ -15,7 +15,7 @@ import { normalizeCreateServerInput } from './validate-args';
 
 type Args = Record<string, unknown>;
 
-/** Runtime mirror of `shared/contracts.ts` `COMMANDS` (same 66 names, sorted). */
+/** Runtime mirror of `shared/contracts.ts` `COMMANDS` (same 72 names, sorted). */
 export const COMMAND_NAMES = [
   'backup_create',
   'backup_delete',
@@ -41,6 +41,7 @@ export const COMMAND_NAMES = [
   'curseforge_open_browser',
   'curseforge_open_external_browser',
   'curseforge_pick_zip',
+  'curseforge_search_modpacks',
   'diagnostics_bundle',
   'diagnostics_recent',
   'java_detect',
@@ -667,6 +668,12 @@ const VALIDATORS: Record<KnownCommand, CommandValidator> = {
     fail(command, '"project" must be a CurseForge project id (number) or slug/url (string).');
   },
   curseforge_cancel_download: (command, args) => { requireToken(command, args, 'transferId'); },
+  curseforge_search_modpacks: (command, args) => {
+    optionalString(command, args, 'query', { maxLength: 200, allowEmpty: true });
+    optionalIntIn(command, args, 'offset', { min: 0, max: 100_000 });
+    optionalIntIn(command, args, 'limit', { min: 1, max: 50 });
+    optionalEnum(command, args, 'sort', ['popularity', 'recent', 'name', 'downloads'] as const);
+  },
 
   // ---- secrets / diagnostics (Phase 7) ----
   curseforge_key_status: noArgs,
@@ -741,6 +748,7 @@ export const MINIMAL_VALID_ARGS: Record<KnownCommand, Args> = {
   content_versions: { id: 'server-1', projectId: 'project-1' },
   content_install: { id: 'server-1', projectId: 'project-1', versionId: null, title: null, jobId: 'job-1' },
   content_install_cancel: { jobId: 'job-1' },
+  curseforge_search_modpacks: { query: 'skyfactory', offset: 0, limit: 20, sort: 'popularity' },
   curseforge_key_status: {},
   curseforge_key_set: { key: '0123456789abcdef0123456789abcdef' },
   curseforge_key_clear: {},

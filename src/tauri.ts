@@ -510,6 +510,27 @@ export interface CurseForgeProjectMetaDto {
   hasServerPack: boolean;
 }
 
+export type CurseForgeModpackSort = 'popularity' | 'recent' | 'name' | 'downloads';
+
+export interface CurseForgeModpackHit {
+  projectId: number;
+  name: string;
+  slug: string;
+  summary: string;
+  author: string | null;
+  downloads: number;
+  updatedAt: string | null;
+  iconUrl: string | null;
+  websiteUrl: string | null;
+}
+
+export interface CurseForgeModpackSearchResult {
+  hits: CurseForgeModpackHit[];
+  totalHits: number;
+  offset: number;
+  limit: number;
+}
+
 export interface PipelineCreateInput {
   name: string;
   port?: number;
@@ -805,6 +826,14 @@ export const tauriCurseForge = {
     invokeRequired<CurseForgeArchiveInspection>('curseforge_inspect_zip', { name }),
   inspectProject: (project: string | number) =>
     invokeRequired<CurseForgeProjectMetaDto>('curseforge_inspect_project', { project }),
+  /** In-app modpack browsing through the official API (requires a key saved in Settings). */
+  searchModpacks: (query: string, options: { offset?: number; limit?: number; sort?: CurseForgeModpackSort } = {}) =>
+    invokeRequired<CurseForgeModpackSearchResult>('curseforge_search_modpacks', {
+      query,
+      offset: options.offset ?? 0,
+      limit: options.limit ?? 20,
+      sort: options.sort ?? 'popularity',
+    }),
   cancelDownload: (transferId: string) =>
     invokeRequired<boolean>('curseforge_cancel_download', { transferId }),
 };

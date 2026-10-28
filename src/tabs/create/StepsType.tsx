@@ -68,6 +68,19 @@ export function StepsType(props: StepsTypeContainerProps) {
       cfProjectMeta={curseforge.cfProjectMeta}
       cfProjectId={curseforge.cfProjectId}
       onResolveProject={() => { void curseforge.resolveCurseforgeProject(); }}
+      cfKeyConfigured={curseforge.cfKeyStatus ? curseforge.cfKeyStatus.configured : null}
+      cfKeyHint={curseforge.cfKeyStatus?.hint ?? ''}
+      onRefreshKeyStatus={() => { void curseforge.refreshCurseforgeKeyStatus(); }}
+      cfSearchQuery={curseforge.cfSearchQuery}
+      onCfSearchQueryChange={curseforge.setCfSearchQuery}
+      cfSearchSort={curseforge.cfSearchSort}
+      onCfSearchSortChange={curseforge.setCfSearchSort}
+      cfSearchBusy={curseforge.cfSearchBusy}
+      cfSearchError={curseforge.cfSearchError}
+      cfSearchResult={curseforge.cfSearchResult}
+      cfResolvingId={curseforge.cfResolvingId}
+      onSearchPacks={(loadMore) => { void curseforge.searchCurseforgeModpacks(loadMore); }}
+      onPickSearchedPack={(projectId) => { void curseforge.pickSearchedCurseforgeModpack(projectId).then((ok) => { if (ok) setStep(3); }); }}
       onContinueToConfigure={() => { if (curseforge.cfProjectId !== null) setStep(3); }}
       onPickMockKind={(picked) => {
         pipeline.clearPipelineReview();

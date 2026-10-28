@@ -47,6 +47,7 @@ export const COMMANDS = [
   'curseforge_open_browser',
   'curseforge_open_external_browser',
   'curseforge_pick_zip',
+  'curseforge_search_modpacks',
   'diagnostics_bundle',
   'diagnostics_recent',
   'java_detect',

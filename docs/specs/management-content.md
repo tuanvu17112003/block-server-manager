@@ -63,10 +63,15 @@ truth for the Electron services and UI.
   architectureBits, source}`/override validation. Save is atomic (validation before writes, rollback on
   failure) and never stops a running server unless the EULA itself is changed. `eula.txt` truth and the
   stored flag must both say accepted to start (`eula=false` wins; never auto-accepted).
-- A CurseForge API-key section stores the key in `safeStorage` (or the legacy `<dataRoot>/curseforge-key.txt`
-  fallback), never displays it in full, and is optional (keyless routes work).
+- A CurseForge API-key section stores the key in `safeStorage` (or the managed app-data fallback —
+  users never edit files by hand), never displays it in full, and is optional (keyless routes work).
+  With a key saved, **Create → CurseForge modpacks** browses the official catalogue in-app
+  (`curseforge_search_modpacks`: query + sort + paging), and selecting a hit resolves the latest file /
+  `serverPackFileId` and continues to the normal one-click configure/install flow. Without a key the
+  wizard shows the Settings pointer plus the manual ZIP import path (download a SERVER ZIP, then
+  “Browse for ZIP”).
 
 ## Cross-cutting
-- Command surface (66 renderer commands), shared contract lists, `{code,message}` error envelope, and
+- Command surface (72 renderer commands), shared contract lists, `{code,message}` error envelope, and
   sender-frame/IPC arg validation are defined in `shared/contracts.ts` + `electron/services/validate-ipc.ts`.
 - Real UI E2E seeds these services and asserts the tab contract; see `docs/verification.md`.

@@ -1,6 +1,6 @@
 // Create step 1 — server type / pack source picker (extracted from Create.tsx, WP-6.5).
 import { Badge, Button, Card, CardTitle, inputCls } from '../../components/ui';
-import type { CurseForgeDownloadUpdate, CurseForgeProjectMetaDto } from '../../tauri';
+import type { CurseForgeDownloadUpdate, CurseForgeModpackSearchResult, CurseForgeModpackSort, CurseForgeProjectMetaDto } from '../../tauri';
 import { MAX_LOCAL_MRPACK_BYTES, formatBytes, type Kind } from './helpers';
 
 interface StepTypeProps {
@@ -18,6 +18,20 @@ interface StepTypeProps {
   onOpenExternal: () => void;
   onCancelDownload: (downloadId: string) => void;
   onContinueToZipSelection: () => void;
+  // CurseForge API key status + in-app browser
+  cfKeyConfigured: boolean | null;
+  cfKeyHint: string;
+  onRefreshKeyStatus: () => void;
+  cfSearchQuery: string;
+  onCfSearchQueryChange: (value: string) => void;
+  cfSearchSort: CurseForgeModpackSort;
+  onCfSearchSortChange: (sort: CurseForgeModpackSort) => void;
+  cfSearchBusy: boolean;
+  cfSearchError: string;
+  cfSearchResult: CurseForgeModpackSearchResult | null;
+  cfResolvingId: number | null;
+  onSearchPacks: (loadMore?: boolean) => void;
+  onPickSearchedPack: (projectId: number) => void;
   // CurseForge key-mode project resolver
   cfProjectInput: string;
   onCfProjectInputChange: (value: string) => void;
@@ -94,7 +108,7 @@ export function StepType(props: StepTypeProps) {
           <p className="text-sm text-zinc-300">
             On a modpack page, open <strong>Files</strong>, choose a version, then open <strong>Additional Files</strong> and download the <strong>SERVER</strong> pack.
             The regular client modpack ZIP is also installable: its <code>manifest.json</code> is resolved keylessly and client-only files are skipped.
-            With a classic API key in <code>curseforge-key.txt</code>, paste the project URL below for a one-click server-pack install.
+            With a CurseForge API key saved in Settings, you can browse and install packs in-app below, or paste a project URL for a one-click server-pack install.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button onClick={props.onOpenBrowser}>Open CurseForge</Button>
@@ -153,10 +167,104 @@ export function StepType(props: StepTypeProps) {
       )}
       {props.kind === 'curseforge' && (
         <Card>
-          <CardTitle>One-click with the official API key</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>Browse CurseForge modpacks</CardTitle>
+            <Badge tone={props.cfKeyConfigured === true ? 'green' : 'amber'}>
+              {props.cfKeyConfigured === null ? 'checking key…' : props.cfKeyConfigured ? 'API key configured' : 'API key needed'}
+            </Badge>
+          </div>
+          {props.cfKeyConfigured !== true ? (
+            <>
+              <p className="text-sm text-zinc-300">
+                Add a classic CurseForge API key in <strong>Settings → CurseForge API key</strong>. Once saved, this wizard can
+                search the CurseForge modpack catalogue in-app and install the latest server pack with one click. Without a key you
+                can still open CurseForge, download a SERVER ZIP manually, and use “Browse for ZIP” above.
+              </p>
+              {props.cfKeyHint && <p className="mt-1 text-xs text-zinc-500">{props.cfKeyHint}</p>}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="secondary" onClick={props.onRefreshKeyStatus} disabled={props.cfKeyConfigured === null}>
+                  I saved the key — check again
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-zinc-400">
+                Search the official CurseForge modpack catalogue. Selecting a pack resolves its latest file and server pack automatically.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  aria-label="Search CurseForge modpacks"
+                  value={props.cfSearchQuery}
+                  onChange={(event) => props.onCfSearchQueryChange(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') props.onSearchPacks(); }}
+                  placeholder="Search modpacks, e.g. skyfactory"
+                  className={`${inputCls} max-w-md`}
+                />
+                <select
+                  aria-label="Sort CurseForge results"
+                  value={props.cfSearchSort}
+                  onChange={(event) => props.onCfSearchSortChange(event.target.value as CurseForgeModpackSort)}
+                  className={`${inputCls} max-w-[170px]`}
+                >
+                  <option value="popularity">Popular</option>
+                  <option value="downloads">Most downloads</option>
+                  <option value="recent">Recently updated</option>
+                  <option value="name">Name</option>
+                </select>
+                <Button size="sm" onClick={() => props.onSearchPacks()} disabled={props.cfSearchBusy}>
+                  {props.cfSearchBusy ? 'Searching…' : 'Search'}
+                </Button>
+              </div>
+              {props.cfSearchError && <p role="alert" className="mt-2 text-xs text-red-300">{props.cfSearchError}</p>}
+              {props.cfSearchResult && (
+                props.cfSearchResult.hits.length === 0 ? (
+                  <p role="status" className="mt-3 text-sm text-zinc-500">
+                    No modpacks matched{props.cfSearchQuery ? ` “${props.cfSearchQuery}”` : ''}.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {props.cfSearchResult.hits.map((hit) => (
+                      <div key={hit.projectId} className="flex flex-wrap items-center gap-3 rounded border border-zinc-800 bg-zinc-950 p-2.5">
+                        {hit.iconUrl
+                          ? <img src={hit.iconUrl} alt="" className="h-9 w-9 rounded" loading="lazy" />
+                          : <div className="flex h-9 w-9 items-center justify-center rounded bg-zinc-800 text-lg">📦</div>}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-baseline gap-2">
+                            <strong className="text-sm">{hit.name}</strong>
+                            {hit.author && <span className="text-xs text-zinc-500">by {hit.author}</span>}
+                            <span className="text-xs text-zinc-500">{hit.downloads.toLocaleString()} downloads</span>
+                          </div>
+                          {hit.summary && <p className="line-clamp-2 text-xs text-zinc-400">{hit.summary}</p>}
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => props.onPickSearchedPack(hit.projectId)}
+                          disabled={props.cfResolvingId !== null || props.cfProjectBusy}
+                        >
+                          {props.cfResolvingId === hit.projectId ? 'Resolving…' : 'Use pack'}
+                        </Button>
+                      </div>
+                    ))}
+                    {props.cfSearchResult.totalHits > props.cfSearchResult.hits.length && (
+                      <div className="flex justify-center">
+                        <Button size="sm" variant="secondary" onClick={() => props.onSearchPacks(true)} disabled={props.cfSearchBusy}>
+                          {props.cfSearchBusy ? 'Loading…' : `Load more (${props.cfSearchResult.hits.length} of ${props.cfSearchResult.totalHits})`}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )
+              )}
+            </>
+          )}
+        </Card>
+      )}
+      {props.kind === 'curseforge' && (
+        <Card>
+          <CardTitle>Or resolve a project link</CardTitle>
           <p className="text-sm text-zinc-300">
-            Put a classic CurseForge key in <code>curseforge-key.txt</code> under the app data folder.
-            Paste a modpack URL, slug or numeric project id; the latest file's <code>serverPackFileId</code> is resolved automatically.
+            Paste a modpack URL, slug or numeric project id; the latest file's <code>serverPackFileId</code> is resolved automatically with your saved API key.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <input
@@ -166,10 +274,13 @@ export function StepType(props: StepTypeProps) {
               placeholder="https://www.curseforge.com/minecraft/modpacks/skyfactory-5 or 392141"
               className={`${inputCls} max-w-xl`}
             />
-            <Button onClick={props.onResolveProject} disabled={props.cfProjectBusy || !props.hasBackend}>
+            <Button onClick={props.onResolveProject} disabled={props.cfProjectBusy || !props.hasBackend || props.cfKeyConfigured !== true}>
               {props.cfProjectBusy ? 'Resolving…' : 'Resolve project'}
             </Button>
           </div>
+          {props.cfKeyConfigured !== true && (
+            <p className="mt-2 text-xs text-zinc-500">Resolving a project link also needs the API key saved in Settings.</p>
+          )}
           {props.cfProjectError && <p role="alert" className="mt-2 text-xs text-red-300">{props.cfProjectError}</p>}
           {props.cfProjectMeta && (
             <div className="mt-3 rounded border border-emerald-800 bg-emerald-950/30 p-3">

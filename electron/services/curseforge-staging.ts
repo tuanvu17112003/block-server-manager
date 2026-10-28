@@ -8,7 +8,7 @@ import { BrowserWindow, shell, dialog, session, type DownloadItem, type Event as
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IpcContext, Handler } from '../ipc';
-import { inspectStagedZip, inspectCurseForgeProject } from './installer/curseforge';
+import { inspectStagedZip, inspectCurseForgeProject, searchCurseForgeModpacks, type CfModpackSort } from './installer/curseforge';
 
 interface ActiveDownload { id: string; name: string; cancel: () => void }
 
@@ -194,6 +194,11 @@ export class CurseForgeStaging {
       },
       curseforge_cancel_download: a => this.cancelDownload(String(a.transferId ?? a.id ?? '')),
       curseforge_inspect_project: a => inspectCurseForgeProject(String(a.project), this.ctx.dataRoot),
+      curseforge_search_modpacks: a => searchCurseForgeModpacks(String(a.query ?? ''), this.ctx.dataRoot, {
+        offset: Number(a.offset ?? 0),
+        limit: Number(a.limit ?? 20),
+        sort: (typeof a.sort === 'string' ? a.sort : undefined) as CfModpackSort | undefined,
+      }),
     };
   }
 }

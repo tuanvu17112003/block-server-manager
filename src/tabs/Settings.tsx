@@ -100,7 +100,7 @@ export default function Settings() {
         configured: true,
         source,
         encrypted: Boolean(result?.encrypted),
-        hint: source === 'safeStorage' ? 'Configured with OS-encrypted storage.' : 'Configured in the app data folder (curseforge-key.txt).',
+        hint: source === 'safeStorage' ? 'Configured with OS-encrypted storage.' : 'Configured in the app-data fallback (managed automatically).',
       });
       setCfKeyDraft('');
       pushToast(source === 'safeStorage' ? 'CurseForge key saved with OS-encrypted storage.' : 'CurseForge key saved to the app data folder.', 'ok');
@@ -573,10 +573,11 @@ export default function Settings() {
       <Card>
         <CardTitle>CurseForge API key</CardTitle>
         <p className="text-xs text-zinc-400">
-          Optional. Keyless CurseForge routes (public API + CDN) work without a key; a key enables the
-          official API for one-click server packs. The key is stored with the OS keystore when
-          available, otherwise in <code>curseforge-key.txt</code> inside the app data folder. It is
-          never displayed in full and never written to logs.
+          Optional. Keyless CurseForge routes (public API + CDN) work without a key. Adding a classic
+          CurseForge API key here enables <strong>in-app modpack browsing</strong> and one-click
+          server-pack installs in the Create wizard — no file editing needed. The key is stored with
+          the OS keystore when available (app-data fallback otherwise) and is never displayed in full,
+          bundled, or written to logs or support bundles.
         </p>
         <p className="mt-3 text-sm">
           <span className="text-zinc-300">Status: </span>
