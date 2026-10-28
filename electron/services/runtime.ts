@@ -20,6 +20,7 @@ import { Worlds } from './worlds';
 import { Players } from './players';
 import { Metrics } from './metrics';
 import { Content } from './content';
+import { effectiveCacheDir } from './storage';
 
 export interface Runtime {
   jobs: Jobs;
@@ -44,7 +45,8 @@ export function buildRuntime(): {
   const register = (ctx: IpcContext): Runtime => {
     const j = new Jobs(ctx.send);
     jobs = j;
-    const cacheDir = path.join(ctx.dataRoot, 'cache');
+    // Downloads (server/loader/Java archives, pack caches) honor Settings → Downloads & storage.
+    const cacheDir = effectiveCacheDir(ctx.dataRoot);
     const runtimeRoot = path.join(ctx.dataRoot, 'runtime');
 
     // Start must not wait on Mojang: prefer the local mapping and only fall back to metadata for

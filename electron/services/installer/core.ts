@@ -798,10 +798,54 @@ export function selectPaperBuildById(builds: FillBuild[], buildId: number): Pape
   if (!artifact) throw new Error(`Paper build ${buildId} is not artifact-complete (${PAPER_SERVER_DOWNLOAD} needs url + size + sha256)`);
   return artifact;
 }
-export async function installLoader(kind: LoaderKind, dir: string, mc: string, ver: string, javaExe: string, cacheDir: string, opts: Cancelable = {}): Promise<void> {
+async function latestFabricLoaderVersion(mc: string, signal?: AbortSignal): Promise<string> {
+  const pick = (payload: unknown): string | null => {
+    const entries = Array.isArray(payload) ? payload : [];
+    const parsed = entries
+      .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
+      .map((entry) => {
+        const loader = typeof entry.loader === 'object' && entry.loader !== null ? entry.loader as Record<string, unknown> : entry;
+        return { version: typeof loader.version === 'string' ? loader.version : '', stable: loader.stable === true };
+      })
+      .filter((entry) => entry.version !== '');
+    return (parsed.find((entry) => entry.stable) ?? parsed[0])?.version ?? null;
+  };
+  try {
+    const scoped = await fetchTrusted(`https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(mc)}`, LOADER_ALLOWED_HOSTS, { signal });
+    if (scoped.ok) {
+      const version = pick(await scoped.json());
+      if (version) return version;
+    }
+  } catch { /* fall back to the global loader list */ }
+  const global = await fetchTrusted('https://meta.fabricmc.net/v2/versions/loader', LOADER_ALLOWED_HOSTS, { signal });
+  if (!global.ok) throw new Error(`Fabric loader metadata HTTP ${global.status}`);
+  const version = pick(await global.json());
+  if (!version) throw new Error('Fabric did not return a loader version');
+  return version;
+}
+
+async function latestQuiltLoaderVersion(mc: string, signal?: AbortSignal): Promise<string> {
+  const pick = (payload: unknown): string | null => {
+    const entries = Array.isArray(payload) ? payload : [];
+    const first = entries.find((entry) => typeof (entry as { version?: unknown } | null)?.version === 'string') as { version?: string } | undefined;
+    return first?.version ?? null;
+  };
+  for (const url of [`https://meta.quiltmc.org/v3/versions/loader/${encodeURIComponent(mc)}`, 'https://meta.quiltmc.org/v3/versions/loader']) {
+    try {
+      const response = await fetchTrusted(url, LOADER_ALLOWED_HOSTS, { signal });
+      if (!response.ok) continue;
+      const version = pick(await response.json());
+      if (version) return version;
+    } catch { /* try the next endpoint */ }
+  }
+  throw new Error(`Quilt did not return a loader version for Minecraft ${mc}`);
+}
+
+export async function installLoader(kind: LoaderKind, dir: string, mc: string, ver: string | null, javaExe: string, cacheDir: string, opts: Cancelable = {}): Promise<void> {
   const { signal } = opts;
   throwIfAborted(signal);
   mkdirSync(dir, { recursive: true });
+  const loaderVersion = (ver ?? '').trim();
   if (kind === 'paper') {
     const buildsUrl = `https://fill.papermc.io/v3/projects/paper/versions/${encodeURIComponent(mc)}/builds`;
     const res = await fetchTrusted(buildsUrl, LOADER_ALLOWED_HOSTS, { signal });
@@ -811,7 +855,7 @@ export async function installLoader(kind: LoaderKind, dir: string, mc: string, v
     try { payload = await res.json(); } catch (e) { throw new Error(`Fill API returned invalid JSON for Paper ${mc}: ${(e as Error).message}`); }
     if (!Array.isArray(payload)) throw new Error(`unexpected Fill API payload for Paper ${mc}: expected a build array`);
     // loaderVersion may be a numeric build pin; the wizard currently sends the MC version (ignored -> latest STABLE).
-    const pinned = /^\d+$/.test(ver.trim()) ? Number(ver.trim()) : null;
+    const pinned = /^\d+$/.test(loaderVersion) ? Number(loaderVersion) : null;
     let artifact: PaperServerArtifact;
     try {
       artifact = pinned !== null ? selectPaperBuildById(payload as FillBuild[], pinned) : selectPaperBuild(payload as FillBuild[]);
@@ -840,12 +884,18 @@ export async function installLoader(kind: LoaderKind, dir: string, mc: string, v
     if (!iUrl) throw new Error(`no ${kind} installer in meta`);
     const iJar = path.join(cacheDir, `${kind}-installer-${installers[0].version ?? path.basename(iUrl)}.jar`);
     if (!(await verifyCachedFile(iJar, {}))) await download(iUrl, iJar, { allowedHosts: LOADER_ALLOWED_HOSTS, signal });
-    if (kind === 'fabric') await runInstaller(javaExe, iJar, ['server', '-dir', dir, '-mcversion', mc, '-loader', ver, '-downloadMinecraft'], dir, 'fabric', { signal });
-    else await runInstaller(javaExe, iJar, ['install', 'server', mc, ver, `--install-dir=${dir}`, '--download-server'], dir, 'quilt', { signal });
+    // Plain server packs may not pin a loader build: use the newest stable loader from provider meta.
+    const resolvedVersion = loaderVersion || (kind === 'fabric'
+      ? await latestFabricLoaderVersion(mc, signal)
+      : await latestQuiltLoaderVersion(mc, signal));
+    log(`[${kind}] ${mc}: using loader ${resolvedVersion}`);
+    if (kind === 'fabric') await runInstaller(javaExe, iJar, ['server', '-dir', dir, '-mcversion', mc, '-loader', resolvedVersion, '-downloadMinecraft'], dir, 'fabric', { signal });
+    else await runInstaller(javaExe, iJar, ['install', 'server', mc, resolvedVersion, `--install-dir=${dir}`, '--download-server'], dir, 'quilt', { signal });
     return;
   }
   if (kind === 'forge') {
-    const v = `${mc}-${ver}`;
+    if (!loaderVersion) throw new Error(`Forge needs an exact loader version for Minecraft ${mc} (this archive has no manifest/installer metadata). Use the author's server pack or a pack ZIP with manifest.json.`);
+    const v = `${mc}-${loaderVersion}`;
     const url = `https://maven.minecraftforge.net/net/minecraftforge/forge/${v}/forge-${v}-installer.jar`;
     const jar = path.join(cacheDir, `forge-${v}-installer.jar`);
     const head = await fetchTrusted(url, LOADER_ALLOWED_HOSTS, { method: 'HEAD', signal });
@@ -857,8 +907,8 @@ export async function installLoader(kind: LoaderKind, dir: string, mc: string, v
   if (kind === 'neoforge') {
     // Documented coordinate (see neoforgeInstallerCandidates): 1.20.1 legacy `1.20.1-47.x`
     // under net/neoforged/forge; 1.20.2+ modern full version under net/neoforged/neoforge.
-    const candidates = neoforgeInstallerCandidates(mc, ver);
-    if (candidates.length === 0) throw new Error(`neoforge loader version is required for Minecraft ${mc} (got "${ver}")`);
+    const candidates = neoforgeInstallerCandidates(mc, loaderVersion);
+    if (candidates.length === 0) throw new Error(`NeoForge needs an exact loader version for Minecraft ${mc} (this archive has no manifest/installer metadata; got "${loaderVersion}").`);
     const attempted: string[] = [];
     for (const candidate of candidates) {
       const probe = await fetchTrusted(candidate.url, LOADER_ALLOWED_HOSTS, { method: 'HEAD', signal });
@@ -868,7 +918,7 @@ export async function installLoader(kind: LoaderKind, dir: string, mc: string, v
       await runInstaller(javaExe, jar, ['--installServer'], dir, 'neoforge', { signal });
       return;
     }
-    throw new Error(`neoforge installer not found for Minecraft ${mc} ${ver} (tried ${attempted.join(', ') || candidates.map(candidate => candidate.mavenVersion).join(', ')})`);
+    throw new Error(`neoforge installer not found for Minecraft ${mc} ${loaderVersion} (tried ${attempted.join(', ') || candidates.map(candidate => candidate.mavenVersion).join(', ')})`);
   }
   throw new Error(`loader not supported: ${kind as string}`);
 }

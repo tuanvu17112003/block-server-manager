@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { Badge, Button, Card, CardTitle, Confirm, Field, ProgressBar, inputCls } from '../components/ui';
-import { hasBackend, onJobProgress, tauriDiagnostics, tauriJava, tauriServers } from '../tauri';
-import type { JavaCandidate, JavaDetection, ServerSettingsDto } from '../tauri';
+import { hasBackend, onJobProgress, tauriDiagnostics, tauriJava, tauriServers, tauriStorage } from '../tauri';
+import type { JavaCandidate, JavaDetection, ServerSettingsDto, StorageInfoDto } from '../tauri';
 
 const CURSEFORGE_AUTO_DELETE_KEY = 'cf-auto-delete-zip';
 
@@ -68,23 +68,69 @@ export default function Settings() {
   const [cfKeyDraft, setCfKeyDraft] = useState('');
   const [cfKeyBusy, setCfKeyBusy] = useState(false);
   const [cfKeyError, setCfKeyError] = useState('');
+  const [storageInfo, setStorageInfo] = useState<StorageInfoDto | null>(null);
+  const [storageBusy, setStorageBusy] = useState(false);
+  const [storageError, setStorageError] = useState('');
   const activeIdRef = useRef(active.id);
   activeIdRef.current = active.id;
 
-  // TODO(WP-7.3 wiring): the Lead registers `curseforge_key_status|set|clear` IPC handlers; the
-  // direct bridge call keeps this section working as soon as they land (same pattern as Backups).
   useEffect(() => {
-    if (!desktopBridge) return;
+    if (!hasBackend()) return;
     let cancelled = false;
-    void desktopBridge.invoke('curseforge_key_status')
-      .then((value) => { if (!cancelled) setCfKeyStatus(value as CurseForgeKeyStatusDto); })
-      .catch(() => {
-        // IPC not registered yet (Lead wiring) or bridge hiccup: show an explicit unavailable state
-        // instead of a permanent "Checking...".
-        if (!cancelled) setCfKeyStatus({ configured: false, source: null, encrypted: false, hint: 'Key management is not available in this build yet.' });
-      });
+    void tauriStorage.get()
+      .then((value) => { if (!cancelled) setStorageInfo(value); })
+      .catch(() => { /* storage IPC unavailable in this build */ });
+    const bridge = typeof window !== 'undefined' ? window.electronAPI : undefined;
+    if (bridge) {
+      void bridge.invoke('curseforge_key_status')
+        .then((value) => { if (!cancelled) setCfKeyStatus(value as CurseForgeKeyStatusDto); })
+        .catch(() => {
+          // IPC not registered yet or bridge hiccup: explicit unavailable state instead of "Checking...".
+          if (!cancelled) setCfKeyStatus({ configured: false, source: null, encrypted: false, hint: 'Key management is not available in this build yet.' });
+        });
+    }
     return () => { cancelled = true; };
-  }, [desktopBridge]);
+  }, []);
+
+  const chooseDownloadsFolder = async (): Promise<void> => {
+    if (!desktopBridge) { pushToast('Choosing a folder requires the desktop app.', 'info'); return; }
+    setStorageBusy(true);
+    setStorageError('');
+    try {
+      const picked = await tauriStorage.pickFolder();
+      if (!picked) return;
+      const info = await tauriStorage.set(picked);
+      setStorageInfo(info);
+      pushToast(`Downloads will be saved to ${info.effectiveDownloadsPath}.`, 'ok');
+    } catch (error) {
+      setStorageError(optionalInvokeError(error, 'Could not change the download folder.'));
+    } finally {
+      setStorageBusy(false);
+    }
+  };
+
+  const resetDownloadsFolder = async (): Promise<void> => {
+    if (!desktopBridge) return;
+    setStorageBusy(true);
+    setStorageError('');
+    try {
+      const info = await tauriStorage.set(null);
+      setStorageInfo(info);
+      pushToast('Download folder reset to the app default.', 'ok');
+    } catch (error) {
+      setStorageError(optionalInvokeError(error, 'Could not reset the download folder.'));
+    } finally {
+      setStorageBusy(false);
+    }
+  };
+
+  const openStorageFolder = async (target: 'downloads' | 'data'): Promise<void> => {
+    try {
+      await tauriStorage.openFolder(target);
+    } catch (error) {
+      pushToast(optionalInvokeError(error, 'Could not open the folder.'), 'err');
+    }
+  };
 
   const saveCurseForgeKey = async (): Promise<void> => {
     const api = typeof window !== 'undefined' ? window.electronAPI : undefined;
@@ -615,6 +661,56 @@ export default function Settings() {
         <p className="mt-2 text-xs text-zinc-500">
           The full key is never displayed. Clear it here after rotating or revoking it in your CurseForge account.
         </p>
+      </Card>
+
+      <Card>
+        <CardTitle>Downloads &amp; storage</CardTitle>
+        <p className="text-xs text-zinc-400">
+          Choose where the manager saves its downloads (installer/loader jars, Modrinth and CurseForge pack
+          archives, cached Java zips). Server folders, worlds and backups stay in the app data folder.
+          Changing the folder applies to <strong>future downloads</strong>; existing files are not moved.
+        </p>
+        <div className="mt-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-zinc-300">Download folder:</span>
+            {storageInfo ? (
+              <code className="break-all rounded bg-zinc-900 px-1.5 py-0.5 text-xs text-zinc-200">{storageInfo.effectiveDownloadsPath}</code>
+            ) : (
+              <span className="text-xs text-zinc-500">Reading…</span>
+            )}
+            {storageInfo?.isDefault && <Badge tone="green">app default</Badge>}
+            {storageInfo && !storageInfo.isDefault && <Badge tone="blue">custom</Badge>}
+          </div>
+          {storageInfo?.overrideUnavailable && (
+            <p role="alert" className="text-xs text-amber-300">
+              The saved folder is missing or unavailable; new downloads will be written there when it is reachable.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" disabled={!desktopBridge || storageBusy} onClick={() => void chooseDownloadsFolder()}>
+              {storageBusy ? 'Saving…' : 'Choose folder…'}
+            </Button>
+            <Button size="sm" variant="outline" disabled={!desktopBridge || storageBusy || storageInfo?.isDefault !== false} onClick={() => void resetDownloadsFolder()}>
+              Reset to default
+            </Button>
+            <Button size="sm" variant="outline" disabled={!desktopBridge} onClick={() => void openStorageFolder('downloads')}>
+              Open download folder
+            </Button>
+          </div>
+          <p className="text-xs text-zinc-500 break-all">
+            App data folder (servers, worlds, backups, database): <code>{storageInfo?.dataRoot ?? '—'}</code>{' '}
+            <button
+              type="button"
+              className="underline decoration-dotted"
+              disabled={!desktopBridge}
+              onClick={() => void openStorageFolder('data')}
+            >
+              open
+            </button>
+          </p>
+          {storageError && <p role="alert" className="text-xs text-red-300">{storageError}</p>}
+          {!desktopBridge && <p className="text-xs text-zinc-500">Storage settings require the desktop app.</p>}
+        </div>
       </Card>
 
       <Card>

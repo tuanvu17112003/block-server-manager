@@ -71,7 +71,14 @@ truth for the Electron services and UI.
   wizard shows the Settings pointer plus the manual ZIP import path (download a SERVER ZIP, then
   “Browse for ZIP”).
 
+- A **Downloads & storage** section chooses the folder for manager downloads (installer/loader jars,
+  Modrinth/CurseForge archives, cached Java zips): default `<dataRoot>/cache`, any absolute writable
+  path allowed except manager-managed folders (servers/backups/runtime/staging/logs); persisted in the
+  JSON store, write-probed before saving, with Reset-to-default and Open-folder actions. Changing it
+  applies to future downloads only; server folders, worlds and backups remain in the app data root
+  (also displayed there).
+
 ## Cross-cutting
-- Command surface (72 renderer commands), shared contract lists, `{code,message}` error envelope, and
+- Command surface (76 renderer commands), shared contract lists, `{code,message}` error envelope, and
   sender-frame/IPC arg validation are defined in `shared/contracts.ts` + `electron/services/validate-ipc.ts`.
 - Real UI E2E seeds these services and asserts the tab contract; see `docs/verification.md`.

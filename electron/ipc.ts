@@ -16,6 +16,7 @@ import { validateCommandArgs } from './services/validate-ipc';
 import { clearCurseForgeKey, curseForgeKeyStatus, setCurseForgeKey } from './services/secrets';
 import { resetCurseForgeKeyCache } from './services/installer/curseforge';
 import { createSupportBundle, recentDiagnostics } from './services/diagnostics';
+import { getStorageInfo, setDownloadsPath } from './services/storage';
 
 export interface IpcContext {
   dataRoot: string;
@@ -86,6 +87,27 @@ const handlers: Record<string, Handler> = {
     },
   }),
   diagnostics_recent: (a) => recentDiagnostics(Number(a.limit ?? 200)),
+
+  // ---- Phase 8: user-selectable download location (Settings → Downloads & storage) ----
+  storage_get: (_a, ctx) => getStorageInfo(ctx.dataRoot),
+  storage_set: (a, ctx) => setDownloadsPath(ctx.dataRoot, a.path ?? null),
+  storage_pick_folder: async (_a, ctx) => {
+    const info = getStorageInfo(ctx.dataRoot);
+    const result = await dialog.showOpenDialog({
+      defaultPath: info.effectiveDownloadsPath,
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Choose the download folder',
+    });
+    return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
+  },
+  storage_open_folder: async (a, ctx) => {
+    const info = getStorageInfo(ctx.dataRoot);
+    const folder = String(a.target ?? 'downloads') === 'data' ? info.dataRoot : info.effectiveDownloadsPath;
+    fs.mkdirSync(folder, { recursive: true });
+    const failure = await shell.openPath(folder);
+    if (failure !== '') throw appError('io', `Could not open "${folder}": ${failure}`);
+    return true;
+  },
 };
 
 // ---- P1: runtime (java, versions/loaders, install, lifecycle) ----

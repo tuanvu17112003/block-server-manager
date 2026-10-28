@@ -21,6 +21,7 @@ import { installMajorFor, requiredJavaMajor, ensureJava, validateJava } from './
 import { makeCuratedResolver } from './installer/curated';
 import { resolveMrpack, splitDeps, installModrinth, type MrIndex } from './installer/modrinth';
 import { installCurseforge, inspectStagedZip, inspectCurseForgeProject, type InstallCfResult } from './installer/curseforge';
+import { effectiveCacheDir } from './storage';
 
 // ---- public source contract (renderer `PipelineSourceRequest`) ----
 export type PipelineSourceRequest =
@@ -359,7 +360,7 @@ export class Pipeline {
 
   constructor(private ctx: IpcContext, private jobs: Jobs) {}
 
-  private cacheDir(): string { return path.join(this.ctx.dataRoot, 'cache'); }
+  private cacheDir(): string { return effectiveCacheDir(this.ctx.dataRoot); }
 
   async preview(source: PipelineSourceRequest, jobId: string): Promise<PipelinePreviewDto> {
     const controller = jobId ? this.jobs.begin(jobId) : null;

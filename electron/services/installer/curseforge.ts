@@ -256,6 +256,31 @@ export async function inspectStagedZip(zipPath: string): Promise<CfInspection> {
 }
 
 // ---- install engine ----
+/**
+ * A server-pack folder that already contains a runnable server (prebuilt) needs no loader install.
+ * Shapes verified against real packs (serverpack-tools.md §3): Forge/NeoForge `run.bat`/`libraries`,
+ * Fabric/Quilt `*-server-launch*.jar`, old Forge universal jar, or a plain vanilla `server.jar`
+ * without mod/plugin folders.
+ */
+export function packShipsRunnableServer(dir: string): boolean {
+  try {
+    const rootEntries = fs.readdirSync(dir);
+    // Strong launch evidence only: a generated launch script alone (or a sample user_jvm_args.txt)
+    // is not enough — Forge/NeoForge server packs may ship those next to the installer they still
+    // need executed. `libraries/` plus a launch marker is what a completed install leaves behind.
+    if (fs.existsSync(path.join(dir, 'libraries'))) return true;
+    if (rootEntries.some((name) => /^(fabric|quilt)-server-launch.*\.jar$/i.test(name))) return true;
+    if (rootEntries.some((name) => /^forge-\d+\.\d+(?:\.\d+)?-[\d.]+(?:-universal)?\.jar$/i.test(name))) return true;
+    const hasLoaderInstaller = rootEntries.some((name) => /^(forge|neoforge)-.*-installer\.jar$/i.test(name));
+    return !hasLoaderInstaller
+      && fs.existsSync(path.join(dir, 'server.jar'))
+      && !fs.existsSync(path.join(dir, 'mods'))
+      && !fs.existsSync(path.join(dir, 'plugins'));
+  } catch {
+    return false;
+  }
+}
+
 export interface InstallCfOpts extends Cancelable {
   projectId?: number; zipPath?: string; dir: string; dataRoot: string; cacheDir: string;
   onProgress?: (p: { stage: string; pct?: number }) => void;
@@ -388,16 +413,39 @@ export async function installCurseforge(o: InstallCfOpts): Promise<InstallCfResu
     await extractZip(clientZip, o.dir, { root: 'overrides/', skipExisting: true, signal });
   }
 
-  // loader (M-9): prebuilt → as-is; shipped installer → run it ourselves; else from manifest
+  // loader (M-9): prebuilt → as-is; shipped installer → run it ourselves; else from metadata.
   o.onProgress?.({ stage: `installing loader`, pct: 15 });
-  if (!fs.existsSync(path.join(o.dir, 'run.bat')) && !fs.existsSync(path.join(o.dir, 'libraries'))) {
-    const shipped = fs.readdirSync(o.dir).find(f => /^(forge|neoforge)-.*-installer\.jar$/i.test(f));
+  const rootEntries = fs.readdirSync(o.dir);
+  const shippedInstaller = rootEntries.find(f => /^(forge|neoforge)-.*-installer\.jar$/i.test(f));
+  // A shipped loader installer always wins over weak run-script markers: packs like SF5 ship
+  // `run.bat`/`user_jvm_args.txt` samples *and* the installer; only running the installer produces
+  // the `libraries/` launch artifacts. Strong prebuilt evidence (libraries/launch jar) skips it.
+  const hasPrebuiltLauncher = packShipsRunnableServer(o.dir);
+  if (!hasPrebuiltLauncher) {
+    const shipped = shippedInstaller;
     if (shipped) {
       log(`[curseforge] pack ships installer "${shipped}" — running --installServer ourselves`);
       await runInstaller(await resolveJavaRuntime(), path.join(o.dir, shipped), ['--installServer'], o.dir, 'shipped loader', { signal });
+    } else if (mc && (kind === 'fabric' || kind === 'quilt')) {
+      // Plain Fabric/Quilt server pack without manifest: loader build is resolved from provider meta.
+      log(`[curseforge] installing ${kind} ${mc} loader from provider metadata (no manifest in pack)`);
+      await installLoader(kind, o.dir, mc, null, await resolveJavaRuntime(), o.cacheDir, { signal });
     } else if (kind && mc && ver) {
       await installLoader(kind, o.dir, mc, ver, await resolveJavaRuntime(), o.cacheDir, { signal });
-    } else throw new Error('server pack has neither a loader nor a manifest to install one from');
+    } else if (!mc) {
+      throw new Error(
+        'This pack archive does not declare a Minecraft version and does not ship a runnable server. '
+        + 'Use the author-provided SERVER pack ZIP (it contains run.bat/libraries or a loader installer), '
+        + 'or a CurseForge client pack ZIP with manifest.json.',
+      );
+    } else {
+      throw new Error(
+        `${kind ?? 'unknown'} pack for Minecraft ${mc} has no manifest.json and does not ship a loader version. `
+        + 'Use the author-provided SERVER pack ZIP (with its loader installer) or a client pack ZIP with manifest.json.',
+      );
+    }
+  } else {
+    log('[curseforge] pack already ships a runnable/prebuilt server — skipping loader install');
   }
 
   if (manifest?.files?.length) {

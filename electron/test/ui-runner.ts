@@ -374,6 +374,12 @@ export async function runUiTests(ctx: IpcContext, win: BrowserWindow, artifactsD
       const settings = await invoke<{ values?: Record<string, string>; motd?: string }>('server_settings_get', { id: serverA.id });
       const persistedMotd = String(settings.values?.motd ?? settings.motd ?? '');
       if (!persistedMotd.includes('UI MOTD saved')) throw new Error(`settings did not persist: ${JSON.stringify(settings)}`);
+      // Settings must expose the CurseForge key and the manager download location (user requirements).
+      const settingsText = await exec<string>('document.body.innerText');
+      if (!/Downloads\s*&\s*storage/i.test(settingsText)) gaps.push('Settings is missing the "Downloads & storage" section.');
+      if (!/CurseForge API key/i.test(settingsText)) gaps.push('Settings is missing the CurseForge API key section.');
+      if (!/Choose folder/i.test(settingsText)) gaps.push('Settings storage section does not offer a folder picker.');
+      if (!/Download folder/i.test(settingsText)) gaps.push('Settings storage section does not display the effective download folder.');
     }, SETTINGS_STEP_TIMEOUT_MS);
     await shot('05-settings-save');
 

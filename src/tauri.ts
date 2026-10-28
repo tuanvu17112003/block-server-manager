@@ -731,6 +731,24 @@ export const tauriCurseForgeKey = {
   clear: () => invokeRequired<{ cleared: boolean }>('curseforge_key_clear'),
 };
 
+export interface StorageInfoDto {
+  dataRoot: string;
+  downloadsPath: string | null;
+  effectiveDownloadsPath: string;
+  defaultDownloadsPath: string;
+  isDefault: boolean;
+  overrideUnavailable: boolean;
+}
+
+/** Download location (Settings → Downloads & storage): cache/archives/installers/Java zips. */
+export const tauriStorage = {
+  get: () => invokeRequired<StorageInfoDto>('storage_get'),
+  set: (path: string | null) => invokeRequired<StorageInfoDto>('storage_set', { path }),
+  pickFolder: () => invokeRequired<string | null>('storage_pick_folder'),
+  openFolder: (target: 'downloads' | 'data' = 'downloads') =>
+    invokeRequired<boolean>('storage_open_folder', { target }),
+};
+
 /** Diagnostics: support bundle location + recent launcher log ring (no secrets). */
 export const tauriDiagnostics = {
   bundle: () => invokeRequired<{ path: string; bytes: number; entries: string[]; createdAt: string }>('diagnostics_bundle'),

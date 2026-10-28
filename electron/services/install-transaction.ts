@@ -190,23 +190,82 @@ export interface PublishStagedServerResult {
   launch: LaunchCommand | null;
 }
 
-/** `renameSync`, falling back to a private copy + rename for cross-volume data roots (EXDEV). */
+const RETRYABLE_PUBLISH_CODES = new Set(['EPERM', 'EACCES', 'EBUSY', 'ENOTEMPTY', 'EEXIST']);
+
+function isRetryablePublishError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return code !== undefined && RETRYABLE_PUBLISH_CODES.has(code);
+}
+
+/** Synchronous sleep: the publish runs inside a sync section on purpose (no IPC gap). */
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Windows can briefly deny renaming a freshly built tree: Defender/indexers scan the new files, and
+ * a still-exiting verification JVM may hold the staging directory as its cwd. Retry with backoff
+ * before falling back to a copy, instead of failing an otherwise successful install with EPERM.
+ */
+function renameSyncWithRetry(from: string, to: string, attempts = 10, baseDelayMs = 120): void {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      fs.renameSync(from, to);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isRetryablePublishError(error) || attempt === attempts - 1) throw error;
+      sleepSync(baseDelayMs + attempt * baseDelayMs);
+    }
+  }
+  throw lastError;
+}
+
+function copySyncWithRetry(from: string, to: string, attempts = 5): void {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      fs.cpSync(from, to, { recursive: true, errorOnExist: true, force: false });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isRetryablePublishError(error) || attempt === attempts - 1) throw error;
+      sleepSync(250 + attempt * 250);
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Move the staged tree into its final location. Preferred path is a single atomic `renameSync`
+ * (same data root); EXDEV and transient Windows lock errors fall back to a private copy + rename so
+ * a locked source never produces a half-published server. Errors surface as a friendly `io` error.
+ */
 export function publishStagedDirectory(from: string, to: string): void {
   fs.mkdirSync(path.dirname(to), { recursive: true });
   try {
-    fs.renameSync(from, to);
+    renameSyncWithRetry(from, to);
     return;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
+    const code = (error as NodeJS.ErrnoException | null)?.code;
+    if (code !== 'EXDEV' && !isRetryablePublishError(error)) throw error;
+    // eslint-disable-next-line no-console
+    console.warn(`[install] direct publish failed (${code ?? 'unknown'}); retrying with a copy fallback.`);
   }
   const temp = `${to}.publishing-${randomUUID()}`;
   try {
-    fs.cpSync(from, temp, { recursive: true, errorOnExist: true, force: false });
-    fs.renameSync(temp, to);
-    fs.rmSync(from, { recursive: true, force: true });
+    copySyncWithRetry(from, temp);
+    renameSyncWithRetry(temp, to);
+    try { fs.rmSync(from, { recursive: true, force: true }); } catch { /* staging cleanup is best effort */ }
   } catch (error) {
     try { fs.rmSync(temp, { recursive: true, force: true }); } catch { /* best effort */ }
-    throw error;
+    const code = (error as NodeJS.ErrnoException | null)?.code ?? 'unknown';
+    throw appError(
+      'io',
+      `Could not publish the installed server (${code}) — Windows denied moving the files. `
+      + 'Antivirus/indexers or another process may still hold the staging folder; close other tools scanning the folder and retry.',
+    );
   }
 }
 

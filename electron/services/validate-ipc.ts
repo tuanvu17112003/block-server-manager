@@ -79,6 +79,10 @@ export const COMMAND_NAMES = [
   'servers_delete',
   'servers_list',
   'servers_set_java_path',
+  'storage_get',
+  'storage_open_folder',
+  'storage_pick_folder',
+  'storage_set',
   'system_disk',
   'versions_paper',
   'versions_vanilla',
@@ -675,6 +679,21 @@ const VALIDATORS: Record<KnownCommand, CommandValidator> = {
     optionalEnum(command, args, 'sort', ['popularity', 'recent', 'name', 'downloads'] as const);
   },
 
+  // ---- storage / downloads location ----
+  storage_get: noArgs,
+  storage_set: (command, args) => {
+    const value = args.path;
+    if (value === null || value === undefined) return;
+    if (typeof value !== 'string') fail(command, '"path" must be a string or null.');
+    if (value.trim() === '') fail(command, '"path" must not be empty (use null to reset).');
+    if (value.length > 2048) fail(command, '"path" is too long.');
+    if (value.includes('\0')) fail(command, '"path" contains an invalid character.');
+  },
+  storage_pick_folder: noArgs,
+  storage_open_folder: (command, args) => {
+    optionalEnum(command, args, 'target', ['downloads', 'data'] as const);
+  },
+
   // ---- secrets / diagnostics (Phase 7) ----
   curseforge_key_status: noArgs,
   curseforge_key_set: (command, args) => {
@@ -707,6 +726,10 @@ export const MINIMAL_VALID_ARGS: Record<KnownCommand, Args> = {
   servers_delete: { id: 'server-1' },
   servers_create: { input: MINIMAL_SERVER_INPUT },
   servers_set_java_path: { id: 'server-1', path: null },
+  storage_get: {},
+  storage_set: { path: null },
+  storage_pick_folder: {},
+  storage_open_folder: { target: 'downloads' },
   server_settings_get: { id: 'server-1' },
   server_settings_update: { id: 'server-1', values: {} },
   server_open_folder: { id: 'server-1' },

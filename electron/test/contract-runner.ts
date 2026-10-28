@@ -28,7 +28,8 @@ export const RENDERER_COMMANDS = [
   'server_command_history', 'server_get', 'server_install', 'server_install_cancel', 'server_kill',
   'server_open_folder', 'server_restart', 'server_send_command', 'server_settings_get',
   'server_settings_update', 'server_start', 'server_stop', 'servers_create', 'servers_delete',
-  'servers_list', 'servers_set_java_path', 'system_disk', 'versions_paper', 'versions_vanilla',
+  'servers_list', 'servers_set_java_path', 'storage_get', 'storage_open_folder', 'storage_pick_folder',
+  'storage_set', 'system_disk', 'versions_paper', 'versions_vanilla',
   'world_activate', 'world_create', 'world_delete', 'world_duplicate', 'world_export',
   'world_import', 'worlds_list',
 ] as const;
@@ -95,7 +96,7 @@ export async function runContractTests(ctx: IpcContext, filter?: string): Promis
         const shared = readSharedCommands();
         const missing = RENDERER_COMMANDS.filter((name) => typeof merged[name] !== 'function');
         assert.deepEqual(missing, []);
-        assert.equal(RENDERER_COMMANDS.length, 72);
+        assert.equal(RENDERER_COMMANDS.length, 76);
         assert.equal(RENDERER_COMMANDS.length, shared.length);
       });
       await run.must('unknown command is not registered', async () => {
@@ -103,7 +104,7 @@ export async function runContractTests(ctx: IpcContext, filter?: string): Promis
       });
       await run.must('shared/contracts.ts COMMANDS equals the renderer command list (WP-7.1)', async () => {
         const shared = readSharedCommands();
-        assert.equal(shared.length, 72);
+        assert.equal(shared.length, 76);
         assert.equal(new Set(shared).size, shared.length, 'COMMANDS must not repeat a name');
         assert.deepEqual([...shared].sort(), [...RENDERER_COMMANDS].sort());
       });
