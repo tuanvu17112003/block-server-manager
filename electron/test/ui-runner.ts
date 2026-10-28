@@ -374,14 +374,27 @@ export async function runUiTests(ctx: IpcContext, win: BrowserWindow, artifactsD
       const settings = await invoke<{ values?: Record<string, string>; motd?: string }>('server_settings_get', { id: serverA.id });
       const persistedMotd = String(settings.values?.motd ?? settings.motd ?? '');
       if (!persistedMotd.includes('UI MOTD saved')) throw new Error(`settings did not persist: ${JSON.stringify(settings)}`);
-      // Settings must expose the CurseForge key and the manager download location (user requirements).
-      const settingsText = await exec<string>('document.body.innerText');
-      if (!/Downloads\s*&\s*storage/i.test(settingsText)) gaps.push('Settings is missing the "Downloads & storage" section.');
-      if (!/CurseForge API key/i.test(settingsText)) gaps.push('Settings is missing the CurseForge API key section.');
-      if (!/Choose folder/i.test(settingsText)) gaps.push('Settings storage section does not offer a folder picker.');
-      if (!/Download folder/i.test(settingsText)) gaps.push('Settings storage section does not display the effective download folder.');
     }, SETTINGS_STEP_TIMEOUT_MS);
     await shot('05-settings-save');
+
+    await check('App settings is a separate global section (API key, download folder, diagnostics)', async () => {
+      if (!(await clickButtonMatching('App settings'))) throw new Error('App settings sidebar entry missing');
+      await waitForPattern(/Global preferences/i, 15_000);
+      const text = await exec<string>('document.body.innerText');
+      const sectionChecks: [string, RegExp][] = [
+        ['CurseForge API key', /CurseForge API key/i],
+        ['Downloads & storage', /Downloads\s*&\s*storage/i],
+        ['Diagnostics', /Diagnostics/i],
+        ['Choose folder', /Choose folder/i],
+      ];
+      for (const [label, pattern] of sectionChecks) {
+        if (!pattern.test(text)) gaps.push(`App settings is missing "${label}".`);
+      }
+      if (/Server settings \(7-field/i.test(text)) gaps.push('App settings unexpectedly contains server-scoped settings fields.');
+      await shot('07-app-settings');
+      if (!(await clickButtonMatching('Back'))) throw new Error('Back from app settings missing');
+      await waitUntil(async () => hasText(SERVER_A), { timeoutMs: 15_000, label: 'return from app settings' });
+    });
 
     await check('delete-server via Settings falls back to the remaining server', async () => {
       if (!(await clickSidebarServer(SERVER_B))) throw new Error('second server row missing');

@@ -58,25 +58,29 @@ truth for the Electron services and UI.
   available while stopped (empty state in the UI), maps are pruned for stopped/deleted servers.
 
 ## Settings
-- File-authoritative 7-field subset (`name`, `motd`, `max-players`, `difficulty`, `gamemode`, port,
-  `online-mode`) + RAM + EULA; Java selection uses the detected candidate `{path, major,
-  architectureBits, source}`/override validation. Save is atomic (validation before writes, rollback on
-  failure) and never stops a running server unless the EULA itself is changed. `eula.txt` truth and the
-  stored flag must both say accepted to start (`eula=false` wins; never auto-accepted).
-- A CurseForge API-key section stores the key in `safeStorage` (or the managed app-data fallback —
-  users never edit files by hand), never displays it in full, and is optional (keyless routes work).
-  With a key saved, **Create → CurseForge modpacks** browses the official catalogue in-app
-  (`curseforge_search_modpacks`: query + sort + paging), and selecting a hit resolves the latest file /
-  `serverPackFileId` and continues to the normal one-click configure/install flow. Without a key the
-  wizard shows the Settings pointer plus the manual ZIP import path (download a SERVER ZIP, then
-  “Browse for ZIP”).
+Two separate surfaces:
 
-- A **Downloads & storage** section chooses the folder for manager downloads (installer/loader jars,
-  Modrinth/CurseForge archives, cached Java zips): default `<dataRoot>/cache`, any absolute writable
-  path allowed except manager-managed folders (servers/backups/runtime/staging/logs); persisted in the
-  JSON store, write-probed before saving, with Reset-to-default and Open-folder actions. Changing it
-  applies to future downloads only; server folders, worlds and backups remain in the app data root
-  (also displayed there).
+1. **Server Settings tab** (per active server): file-authoritative 7-field subset (`name`, `motd`,
+   `max-players`, `difficulty`, `gamemode`, port, `online-mode`) + RAM + EULA + this server's Java
+   runtime; atomic save (validation before writes, rollback on failure) that never stops a running
+   server unless the EULA itself changes; restart badge; advanced-files shortcuts; Danger zone
+   (delete this server). `eula.txt` truth and the stored flag must both say accepted to start
+   (`eula=false` wins; never auto-accepted).
+2. **App settings** (global, sidebar entry, independent of the active server):
+   - **CurseForge API key** — stored in `safeStorage` (or the managed app-data fallback — users never
+     edit files by hand), never displayed in full, never bundled/logged, optional (keyless routes
+     work). With a key saved, **Create → CurseForge modpacks** browses the official catalogue in-app
+     (`curseforge_search_modpacks`: query + sort + paging), and selecting a hit resolves the latest
+     file / `serverPackFileId` and continues to the one-click configure/install flow. Without a key the
+     wizard shows the Settings pointer plus the manual ZIP import path.
+   - **Downloads & storage** — folder for manager downloads (installer/loader jars, Modrinth/CurseForge
+     archives, cached Java zips): default `<dataRoot>/cache`, any absolute writable path except
+     manager-managed folders (servers/backups/runtime/staging/logs); persisted in the JSON store,
+     write-probed before saving, with Reset-to-default and Open-folder actions. Applies to future
+     downloads only; server folders, worlds and backups remain in the app data root (shown there).
+   - **CurseForge download retention** — auto-delete staged ZIP copies after successful installation
+     (off by default; the original user file is never deleted).
+   - **Diagnostics** — redacting support bundle (no worlds/mods/backups/secrets).
 
 ## Cross-cutting
 - Command surface (76 renderer commands), shared contract lists, `{code,message}` error envelope, and

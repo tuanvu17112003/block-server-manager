@@ -4,6 +4,7 @@ import type { TabId } from './types';
 import { StoreProvider, useStore } from './store';
 import { backendUnavailableReason, hasBackend, mockBackendEnabled } from './tauri';
 import { CreateHeader, Header, Sidebar, TabBar, ToastHost } from './components/layout';
+import { Button } from './components/ui';
 import Overview from './tabs/Overview';
 import Create from './tabs/Create';
 import ConsoleTab from './tabs/ConsoleTab';
@@ -13,6 +14,7 @@ import Worlds from './tabs/Worlds';
 import Backups from './tabs/Backups';
 import Metrics from './tabs/Metrics';
 import Settings from './tabs/Settings';
+import AppSettings from './tabs/AppSettings';
 
 interface ErrorBoundaryState {
   error: Error | null;
@@ -106,6 +108,7 @@ function Shell() {
   const [createSession, setCreateSession] = useState(0);
   const [firstRunCreate, setFirstRunCreate] = useState(false);
   const [returnTab, setReturnTab] = useState<TabId>('overview');
+  const [showAppSettings, setShowAppSettings] = useState(false);
   const { servers, serversHydrated, serversLoadError, retryServers, select } = useStore();
   const bridgeUnavailable = backendUnavailableReason();
   const backendReady = bridgeUnavailable === null;
@@ -134,6 +137,7 @@ function Shell() {
 
   const openCreate = () => {
     if (showCreate) return;
+    setShowAppSettings(false);
     setReturnTab(tab);
     setCreateSession((session) => session + 1);
     setCreating(true);
@@ -151,6 +155,7 @@ function Shell() {
   };
   const selectServerAndExit = (serverId: string) => {
     select(serverId);
+    setShowAppSettings(false);
     if (!showCreate) return;
     setCreating(false);
     setFirstRunCreate(false);
@@ -159,13 +164,34 @@ function Shell() {
 
   return (
     <div className="mc-app-shell flex h-screen min-h-0 min-w-0 w-full overflow-hidden">
-      <Sidebar goCreate={openCreate} createActive={showCreate} onSelectServer={selectServerAndExit} />
+      <Sidebar
+        goCreate={openCreate}
+        createActive={showCreate}
+        onSelectServer={selectServerAndExit}
+        onOpenAppSettings={() => setShowAppSettings(true)}
+        appSettingsActive={showAppSettings}
+      />
       <div className="mc-app-main flex min-h-0 min-w-0 flex-1 flex-col">
         {showCreate ? (
           <>
             <CreateHeader onCancel={cancelCreate} />
             <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-zinc-950 p-4 thin-scroll">
               <Create key={createSession} onExit={exitCreate} />
+            </main>
+          </>
+        ) : showAppSettings ? (
+          <>
+            <header className="mc-header flex flex-wrap items-center gap-2 px-4 py-2.5">
+              <h1 className="mc-header-title">App settings</h1>
+              <span className="text-xs text-zinc-500">Global preferences — not tied to a server</span>
+              <div className="ml-auto flex items-center gap-1.5">
+                <Button size="sm" variant="ghost" onClick={() => setShowAppSettings(false)} title="Back to the server view">
+                  ← Back
+                </Button>
+              </div>
+            </header>
+            <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-zinc-950 p-4 thin-scroll">
+              <AppSettings />
             </main>
           </>
         ) : loadingServers ? (

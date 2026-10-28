@@ -47,13 +47,15 @@ screenshots under `artifacts/<timestamp>/`.
   `app.db`, the app imports its servers/backups/history/settings into the JSON store when the target is
   empty (source is left untouched; a marker `legacy-import.json` records the report, and
   `legacy-import-plan.json` is written instead when the target already has servers).
-- CurseForge API key: Settings → CurseForge API key (encrypted with Electron `safeStorage`, app-data
-  fallback managed automatically — no file editing). Adding a key enables **in-app CurseForge modpack
-  browsing** in Create; keyless Modrinth/CurseForge routes keep working without a key. The key is never
-  bundled, logged, or included in support bundles.
-- Downloads: Settings → Downloads & storage chooses where installer/loader jars, Modrinth/CurseForge
-  archives and cached Java zips are written (default `<dataRoot>/cache`). Server folders, worlds and
-  backups always stay in the app data root shown there.
+- CurseForge API key: sidebar **⚙ App settings** → CurseForge API key (encrypted with Electron
+  `safeStorage`, app-data fallback managed automatically — no file editing). Adding a key enables
+  **in-app CurseForge modpack browsing** in Create; keyless Modrinth/CurseForge routes keep working
+  without a key. The key is never bundled, logged, or included in support bundles.
+- Downloads: **App settings → Downloads & storage** chooses where installer/loader jars, Modrinth and
+  CurseForge archives and cached Java zips are written (default `<dataRoot>/cache`). Server folders,
+  worlds and backups always stay in the app data root shown there.
+- Global preferences (API key, download folder, CurseForge ZIP retention, diagnostics) live in the
+  separate **App settings** section; the per-server **Settings** tab only edits that server.
 
 ## Project layout
 

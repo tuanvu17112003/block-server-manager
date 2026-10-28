@@ -18,10 +18,14 @@ export function Sidebar({
   goCreate,
   createActive,
   onSelectServer,
+  onOpenAppSettings,
+  appSettingsActive,
 }: {
   goCreate: () => void;
   createActive: boolean;
   onSelectServer: (serverId: string) => void;
+  onOpenAppSettings: () => void;
+  appSettingsActive: boolean;
 }) {
   const { servers, activeId } = useStore();
   const [q, setQ] = useState('');
@@ -60,6 +64,17 @@ export function Sidebar({
           </button>
         ))}
         {filtered.length === 0 && <p className="px-2 py-4 text-xs text-zinc-500">No servers match “{q}”.</p>}
+      </div>
+      <div className="border-t border-zinc-800 p-2">
+        <button
+          type="button"
+          onClick={onOpenAppSettings}
+          disabled={createActive}
+          title="Global app settings (API key, download folder, diagnostics)"
+          className={`mc-btn w-full justify-start text-left ${appSettingsActive ? 'mc-btn-default' : ''}`}
+        >
+          ⚙ App settings
+        </button>
       </div>
     </aside>
   );
