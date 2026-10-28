@@ -44,3 +44,6 @@ dist-electron/
 # verification artifacts
 artifacts/
 
+
+# Internal workflow/investigation artifacts (not part of the app)
+.workflow/
