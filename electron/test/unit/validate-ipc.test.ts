@@ -174,6 +174,18 @@ test('validation errors are command-prefixed and keep the {code,message} shape',
   }
 });
 
+test('CurseForge key accepts real classic formats ($ / + symbols) and rejects whitespace/control', () => {
+  assert.doesNotThrow(() => validateCommandArgs('curseforge_key_set', {
+    key: '$2a$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUV',
+  }));
+  assert.doesNotThrow(() => validateCommandArgs('curseforge_key_set', {
+    key: 'abc/def+ghi=jkl$mno-pqr_stu.vwx1234567890',
+  }));
+  assertValidation('curseforge_key_set', { key: 'short' });
+  assertValidation('curseforge_key_set', { key: 'has space inside 1234567890' });
+  assertValidation('curseforge_key_set', { key: 'control\u0000character1234567890' });
+});
+
 test('optional args tolerate explicit undefined (renderer object spreads)', () => {
   assert.doesNotThrow(() => validateCommandArgs('backup_create', {
     id: 'server-1', name: 'backup-1', jobId: undefined, shutdownDuring: undefined,

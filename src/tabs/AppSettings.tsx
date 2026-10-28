@@ -18,11 +18,12 @@ interface CurseForgeKeyStatusDto {
 function optionalInvokeError(error: unknown, fallback: string): string {
   const raw = error && typeof error === 'object' && 'message' in error ? String((error as { message: unknown }).message) : '';
   if (!raw) return fallback;
+  const stripCommandPrefix = (text: string): string => text.replace(/^[a-z0-9_]+:\s*/i, '');
   try {
     const parsed = JSON.parse(raw) as { message?: string };
-    return parsed?.message ?? raw;
+    return stripCommandPrefix(parsed?.message ?? raw);
   } catch {
-    return raw;
+    return stripCommandPrefix(raw);
   }
 }
 

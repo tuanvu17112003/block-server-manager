@@ -57,17 +57,22 @@ export interface CurseForgeKeyWriteResult {
 
 const KEY_MIN_LENGTH = 16;
 const KEY_MAX_LENGTH = 512;
-/** Classic CurseForge keys are URL-safe tokens; reject whitespace/control characters outright. */
-const KEY_PATTERN = /^[A-Za-z0-9._-]+$/;
+/**
+ * CurseForge "classic" keys are not URL-safe only: real console keys use the bcrypt-ish form
+ * `$2a$10$...` and may also contain `/`, `+`, `=` (verified against the reference project's
+ * `new_key.txt`). Accept any single-line printable ASCII token; only whitespace/control/Unicode
+ * characters are rejected.
+ */
+const KEY_PATTERN = /^[!-~]+$/;
 
-/** Basic format validation (no network): non-empty URL-safe token of 16-512 chars. */
+/** Basic format validation (no network): single-line printable ASCII token of 16-512 chars. */
 export function validateCurseForgeKey(value: unknown): KeyValidation {
   if (typeof value !== 'string') return { ok: false, reason: 'CurseForge API key must be a string.' };
   if (value.trim().length === 0) return { ok: false, reason: 'CurseForge API key is empty.' };
   if (/\s/.test(value)) return { ok: false, reason: 'CurseForge API key must not contain whitespace.' };
   if (value.length < KEY_MIN_LENGTH) return { ok: false, reason: `CurseForge API key is too short (minimum ${KEY_MIN_LENGTH} characters).` };
   if (value.length > KEY_MAX_LENGTH) return { ok: false, reason: `CurseForge API key is too long (maximum ${KEY_MAX_LENGTH} characters).` };
-  if (!KEY_PATTERN.test(value)) return { ok: false, reason: 'CurseForge API key contains unsupported characters.' };
+  if (!KEY_PATTERN.test(value)) return { ok: false, reason: 'CurseForge API key must be printable ASCII without spaces (letters, digits, and symbols such as $ / + =).' };
   return { ok: true };
 }
 

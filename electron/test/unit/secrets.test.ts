@@ -53,10 +53,13 @@ function makeDeps(cryptoEnabled: boolean, dataRoot = '/data'): { deps: SecretSto
   return { deps: { dataRoot, fs, crypto }, fs, crypto };
 }
 
-test('validateCurseForgeKey: accepts URL-safe tokens and rejects malformed input', () => {
+test('validateCurseForgeKey: accepts real classic key formats and rejects malformed input', () => {
   assert.equal(validateCurseForgeKey(VALID_KEY).ok, true);
   assert.equal(validateCurseForgeKey('a'.repeat(16)).ok, true);
   assert.equal(validateCurseForgeKey('A-1_2.3a'.repeat(4)).ok, true);
+  // Real classic keys are bcrypt-ish (`$2a$10$...`) and may contain `/`, `+`, `=`.
+  assert.equal(validateCurseForgeKey('$2a$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUV').ok, true);
+  assert.equal(validateCurseForgeKey('abc/def+ghi=jkl$mno-pqr_stu.vwx1234567890').ok, true);
   const rejected: unknown[] = [
     undefined, null, 42, {}, [],
     '', '   ',
@@ -65,7 +68,8 @@ test('validateCurseForgeKey: accepts URL-safe tokens and rejects malformed input
     `${VALID_KEY}\n`,
     'bad key with spaces 123456',
     'x'.repeat(513),
-    'invalid$chars$that$are$long$enough',
+    `validkey1234567890\u00a7`, // non-ASCII (§)
+    `validkey1234567890\u0000`, // control character
   ];
   for (const value of rejected) {
     const result = validateCurseForgeKey(value);

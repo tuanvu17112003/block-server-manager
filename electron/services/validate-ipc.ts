@@ -702,7 +702,8 @@ const VALIDATORS: Record<KnownCommand, CommandValidator> = {
     const trimmed = key.trim();
     if (trimmed.length < 16 || trimmed.length > 512) fail(command, '"key" must be 16-512 characters.');
     if (/\s/.test(trimmed)) fail(command, '"key" must not contain whitespace.');
-    if (!/^[A-Za-z0-9._-]+$/.test(trimmed)) fail(command, '"key" contains unsupported characters.');
+    // Real CurseForge keys include `$`, `/`, `+`, `=` (bcrypt-ish classic keys); allow printable ASCII.
+    if (!/^[!-~]+$/.test(trimmed)) fail(command, '"key" must be printable ASCII without spaces.');
   },
   curseforge_key_clear: noArgs,
   diagnostics_bundle: noArgs,
