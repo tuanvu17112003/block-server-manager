@@ -12,9 +12,9 @@ dist/
 Thumbs.db
 *.local
 
-# Rust build output + Tauri codegen (regenerable; belt-and-braces with src-tauri/.gitignore)
-src-tauri/target/
-src-tauri/gen/
+# Archived Tauri tree build output/codegen (regenerable; not part of the shipped app)
+legacy/src-tauri/target/
+legacy/src-tauri/gen/
 
 # Tooling node_modules (nested-only; do NOT ignore bare .opencode/ - skills/ is source)
 .opencode/node_modules/
@@ -43,6 +43,9 @@ dist-electron/
 
 # verification artifacts
 artifacts/
+
+# packaged output (NSIS installer + win-unpacked; distributed as release artifacts, not committed)
+release/
 
 
 # Internal workflow/investigation artifacts (not part of the app)

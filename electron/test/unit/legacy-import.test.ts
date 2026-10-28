@@ -26,7 +26,7 @@ const SERVER_C = '33333333-3333-4333-8333-333333333333';
 const BACKUP_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PROTO_SERVER = '44444444-4444-4444-8444-444444444444';
 
-// Mirrors src-tauri/src/db/mod.rs SCHEMA_V1 (tables the legacy Tauri app shipped).
+// Mirrors legacy/src-tauri/src/db/mod.rs SCHEMA_V1 (tables the legacy Tauri app shipped).
 const RUST_SCHEMA_V1 = `
 CREATE TABLE servers (
   id             TEXT PRIMARY KEY,

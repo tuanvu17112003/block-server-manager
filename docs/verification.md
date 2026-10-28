@@ -25,6 +25,9 @@ writes `console-errors.json`, `ui-gaps.json`, `ui-pending.json` and ~19 screensh
 | IPC (renderer) | `--ipctest` | renderer → preload contextBridge → ipcMain round-trip including Create-screen metadata assertions and the sender policy |
 | Real UI E2E | `--uitest` | hidden BrowserWindow with the real preload + built renderer, seeded backends: every tab renders real data, server switching, settings save (no shell flash), delete fallback, Create wizard/CATALOGUE/EULA, zero renderer errors; screenshots |
 | Engine E2E (`--full`) | `--e2e` | real installs/boots: Vanilla, Paper, Modrinth pipeline (verified boot), CurseForge key-mode server pack with metadata inference; leaves `.app-data` evidence |
+| Packaging (unpacked) | `npm run pack:dir && npm run pack:verify` | electron-builder packages `dist/` + `dist-electron/` into an asar; the packaged executable runs `--selftest` and `--mgmttest` successfully |
+| Packaging (NSIS) | `npm run pack:win && npm run pack:verify:installer` | real installer is built; silent install into a temp folder, installed app runs `--selftest` + `--mgmttest`, `resources/app.asar` exists, silent uninstall removes it. See [packaging.md](packaging.md) |
+| Security audit | `node scripts/security-audit.mjs` | no live secrets in tracked files or any git history diff; sensitive filenames/untracked-secret checks; report [audit/08-security-audit.md](audit/08-security-audit.md) |
 
 ## Isolation and environment
 

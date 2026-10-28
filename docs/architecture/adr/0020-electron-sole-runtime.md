@@ -5,14 +5,15 @@
   backend contract) remains valid as an optional browser deployment target.
 - Context: the app was ported from Tauri 2 + Rust to Electron + TypeScript + React per
   `docs/electron-completion-plan.md`. The port is complete through Phase 6 and verified by the gates in
-  `docs/verification.md`. The Rust tree (`src-tauri/`) is intentionally retained as a frozen behavioural
-  reference and is **not** part of any build, package, or runtime path.
+  `docs/verification.md`. The Rust tree is archived under `legacy/src-tauri/` as a frozen behavioural reference and is
+  **not** part of any build, package, or runtime path.
 
 ## Decision
 
 1. Electron (main process `electron/`, renderer `src/`) is the only desktop runtime shipped.
-2. `src-tauri/` is dormant reference code: no npm script, CI step, packaging step, or runtime import may
-   depend on it. It may be archived/deleted after the Phase-8 verification sign-off.
+2. `legacy/src-tauri/` is archived reference code: no npm script, CI step, packaging step, or runtime
+   import may depend on it. It was archived on 2026-10-28 after the Phase-8 verification sign-off and
+   may be deleted once no longer useful as a reference.
 3. The renderer supports exactly two real backend transports:
    - Electron IPC via the preload bridge (`window.electronAPI`), the desktop default;
    - the framework-neutral HTTP/SSE contract (ADR-0019) when `backend-config.json` is configured.

@@ -5,7 +5,7 @@
 // (`fetchOk`/`download`/`extractZip`) and exposes injectable effect seams so every parsing/filtering
 // rule is unit-testable without network, a real JDK, or Windows tools.
 //
-// Rust parity: `src-tauri/src/java/mod.rs` (supported majors 8/17/21/25, Mojang metadata first with
+// Rust parity: `legacy/src-tauri/src/java/mod.rs` (supported majors 8/17/21/25, Mojang metadata first with
 // the documented offline fallback, PATH/JAVA_HOME/registry/known-location discovery, 64-bit filter,
 // `major >= required` compatibility, SHA-256+size verified Adoptium install).
 import fs from 'node:fs';

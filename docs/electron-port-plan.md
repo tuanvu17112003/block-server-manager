@@ -6,13 +6,13 @@
 > - [verification guide](verification.md) — gates and evidence
 > - [audit reports](audit/01-backend-runtime.md) — findings/parity/evidence
 > - [ADR-0020](architecture/adr/0020-electron-sole-runtime.md) — Electron is the sole runtime; the Tauri
->   tree is dormant and `frontend-export/` was retired. The command surface is now 71 renderer commands.
+>   tree is archived under `legacy/src-tauri/` and `frontend-export/` was retired. The command surface is now 71 renderer commands.
 
 Port "Block Server Manager" from Tauri (Rust backend, dormant after port) to Electron with a
 Node/TS main process, then integrate the proven modpack install modules
 (`H:\TestAI\modrinth-curseforge\sample` — 12/12 live PASS, 4-layer client-mod defense, CF key-mode).
 
-**User decisions:** JSON store (no SQLite) · `src-tauri/` kept dormant.
+**User decisions:** JSON store (no SQLite) · `src-tauri/` kept as archived reference (`legacy/src-tauri/`).
 
 ## Architecture
 

@@ -1,0 +1,31 @@
+appId: com.blockserver.manager
+productName: Block Server Manager
+copyright: Block Server Manager contributors
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+  - "!**/*.map"
+asar: true
+npmRebuild: false
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: Block-Server-Manager-${version}-Setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Block Server Manager
+  uninstallDisplayName: Block Server Manager
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+publish: null

@@ -1,7 +1,7 @@
 # Block Server Manager
 
 Desktop Minecraft server manager — **Electron + TypeScript + React** (the former Tauri + Rust tree is
-dormant reference code under `src-tauri/`; see [ADR-0020](docs/architecture/adr/0020-electron-sole-runtime.md)).
+dormant reference code archived under `legacy/src-tauri/`; see [ADR-0020](docs/architecture/adr/0020-electron-sole-runtime.md)).
 
 Create and manage Minecraft servers (Vanilla, Paper, Fabric, Forge, NeoForge), install Modrinth and
 CurseForge modpacks with a client-mod defense, and operate them: console, players, worlds, backups,
@@ -40,6 +40,19 @@ npm run verify:full  # adds the live engine E2E install matrix (network + Java)
 Layers, artifacts and manual acceptance: [docs/verification.md](docs/verification.md). UI E2E writes
 screenshots under `artifacts/<timestamp>/`.
 
+## Package (Windows)
+
+```powershell
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+npm run pack:dir               # build + unpacked app in release/win-unpacked/
+npm run pack:verify            # packaged app: --selftest + --mgmttest
+npm run pack:win               # NSIS installer in release/
+npm run pack:verify:installer  # silent install -> installed self-tests -> silent uninstall
+```
+
+The installer is unsigned (SmartScreen "Unknown publisher"), per-user, and keeps app data on uninstall.
+Details, artifacts and verification: [docs/packaging.md](docs/packaging.md).
+
 ## Data and secrets
 
 - Dev data root: `<repo>/.app-data/`; packaged app: `<userData>/data/`.
@@ -63,9 +76,11 @@ screenshots under `artifacts/<timestamp>/`.
 electron/        Electron main process (IPC router, services, installer engines, tests under test/)
 shared/          Shared contract types (command list + DTOs)
 src/             React renderer (tabs, Create wizard modules, store, backend adapters)
-scripts/         Verification runner + build-data checks
-docs/            Specs, ADRs, audits, verification guide, completion plan
-src-tauri/       DORMANT Tauri/Rust reference implementation (not built; parity reference)
+scripts/         Verification runner, security audit, packaging verification + build-data checks
+docs/            Specs, ADRs, audits, verification + packaging guides, completion plan
+build/           App icons used by electron-builder (from the archived Tauri tree)
+release/         Packaged output (git-ignored): installer + win-unpacked
+legacy/src-tauri/  ARCHIVED Tauri/Rust reference (not built; parity reference)
 ```
 
 ## Documentation map
@@ -73,6 +88,7 @@ src-tauri/       DORMANT Tauri/Rust reference implementation (not built; parity 
 - [Completion plan + phase log](docs/electron-completion-plan.md)
 - [Verification guide](docs/verification.md)
 - [Tab/UX spec](docs/specs/app-tabs.md) · [Management/content spec](docs/specs/management-content.md)
+- [Packaging guide (NSIS)](docs/packaging.md) · [Security audit](docs/audit/08-security-audit.md)
 - [Architecture overview](docs/architecture/overview.md) · [ADRs](docs/architecture/adr/)
 - [Audit reports (evidence + parity)](docs/audit/01-backend-runtime.md)
 
@@ -87,5 +103,7 @@ src-tauri/       DORMANT Tauri/Rust reference implementation (not built; parity 
 - **Java download fails**: check network/proxy; Settings → Java lets you pin an installed 64-bit JDK.
 - **Modded server crashes on boot**: managed packs auto-disable attributed client/broken mods and retry;
   unmanaged servers are never modified automatically (see console/crash-report hints instead).
+- **SmartScreen warns about the installer**: packaged builds are unsigned; choose "More info → Run anyway"
+  or provide a code-signing certificate before public distribution ([docs/packaging.md](docs/packaging.md)).
 
 NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.

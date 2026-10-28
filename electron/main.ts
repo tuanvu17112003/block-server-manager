@@ -1,4 +1,4 @@
-// Electron main — window + lifecycle + IPC wiring (port of src-tauri shell, see docs/electron-port-plan.md).
+// Electron main — window + lifecycle + IPC wiring (port of the archived Tauri shell, see docs/electron-port-plan.md).
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import os from 'node:os';

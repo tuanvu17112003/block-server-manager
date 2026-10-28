@@ -159,7 +159,7 @@ Lean implementation-ready knowledge. See `WORKFLOW.md §3.3`.
 - `implementation/quilt-installer-checksum.md` — historical checksum handoff for the retired Quilt server-creation path.
 
 Stack decision: Electron + TypeScript + React (Vite) + Tailwind (ADR-0020 supersedes the Tauri stack in
-ADR-0002 for the shipped app; the Rust tree is dormant reference). The framework-neutral HTTP backend
+ADR-0002 for the shipped app; the Rust tree is archived reference at `legacy/src-tauri/`). The framework-neutral HTTP backend
 contract (ADR-0019) remains an optional browser deployment target.
 Scope: modpack sources, console, players, worlds/backups/metrics/content/settings. Deferred: full files
 browser, schedules beyond backups, roles, RCON (ADR-0011).

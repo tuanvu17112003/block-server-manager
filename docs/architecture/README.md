@@ -13,4 +13,5 @@
 - `adr/0017-stable-modpack-archive-fingerprints.md` — bind provider fingerprints and archive inspection to the same temporary snapshot.
 - `adr/0018-loader-redirect-policy.md` — validate new-pipeline loader metadata and artifact redirects at every hop.
 - `adr/0019-framework-neutral-http-backend-contract.md` — optional HTTP/SSE backend for browser deployments.
-- `adr/0020-electron-sole-runtime.md` — Electron as the only shipped desktop runtime; mock data opt-in; Tauri tree dormant.
+- `adr/0020-electron-sole-runtime.md` — Electron as the only shipped desktop runtime; mock data opt-in; Tauri tree archived under `legacy/src-tauri/`.
+- `adr/0021-nsis-packaging.md` — Windows NSIS installer (electron-builder, per-user, unsigned, no auto-update).

@@ -3,7 +3,7 @@
 The app is an **Electron + TypeScript + React** desktop manager. The Electron main process owns
 persistence, Java provisioning, provider downloads, staged installation, process supervision and event
 channels; the React renderer (Vite + Tailwind) drives setup and lifecycle controls. The former Tauri/Rust
-tree (`src-tauri/`) is dormant reference code and is not built or shipped
+tree (`legacy/src-tauri/`) is archived reference code and is not built or shipped
 ([ADR-0020](adr/0020-electron-sole-runtime.md)).
 
 ```mermaid

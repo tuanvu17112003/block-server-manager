@@ -4,7 +4,7 @@
 // unit-tested with plain `node --test` â€” see electron/test/unit/legacy-import.test.ts. The Electron
 // startup hook is wired in main.ts by the Lead via `detectLegacy` / `planImport` / `runImport`.
 //
-// Legacy layout (Tauri identifier `com.blockserver.manager`, Rust reference src-tauri/src/db/mod.rs):
+// Legacy layout (Tauri identifier `com.blockserver.manager`, Rust reference legacy/src-tauri/src/db/mod.rs):
 //   <legacyRoot>/app.db           SQLite v1 servers + v2 console_command_history + v3 managed_server_files
 //                                 (also backups / worlds / jobs / settings tables, additive migrations)
 //   <legacyRoot>/servers/<id>/    per-server folder (server.jar, mods/, world/, logs/, backups/...)
