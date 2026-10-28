@@ -216,6 +216,7 @@ lines.push('## Hardening notes');
 lines.push('- `.gitignore` excludes `.app-data/` (incl. `curseforge-key.txt`), build outputs, logs and verification artifacts.');
 lines.push('- The CurseForge key is stored at runtime (safeStorage or app-data fallback), never compiled in; support bundles redact it and the diagnostics logger redacts token-shaped values.');
 lines.push('- Tests use random/obviously fake key strings only.');
+lines.push('- GitHub Advanced Security secret scanning is not available for this private repository (GHAS not enabled); this local audit is the equivalent check and also scans every commit diff, not just the default branch.');
 lines.push('- Before publishing, confirm the repository is **private** unless the user explicitly wants it public.');
 lines.push('');
 if (largeTracked.length > 0) {

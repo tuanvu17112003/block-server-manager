@@ -1,6 +1,6 @@
 # Security audit — secrets and exposed sensitive information
 
-Date: 2026-10-28T05:42:33.096Z · Scope: tracked tree at HEAD (430 files) + full git history + on-disk sensitive files.
+Date: 2026-10-28T05:44:27.058Z · Scope: tracked tree at HEAD (432 files) + full git history + on-disk sensitive files.
 All evidence is masked; full secret values are never written to this report.
 
 ## Result
@@ -8,13 +8,13 @@ All evidence is masked; full secret values are never written to this report.
 
 | Check | Result |
 |---|---|
-| Tracked files scanned | 430 (binary/oversized skipped) |
+| Tracked files scanned | 432 (binary/oversized skipped) |
 | Live-secret pattern hits (non-placeholder) | 0 |
 | Test/fixture placeholder hits (expected, fake values) | 13 |
 | Sensitive filenames ever committed | 0 |
 | History diff live-secret hits | 0 |
 | History diff placeholder hits (test fixtures/docs) | 13 |
-| History pickaxe context commits (excluding code references) | 1 |
+| History pickaxe context commits (excluding code references) | 7 |
 | Untracked sensitive files that would be committed | 0 |
 | Ignored local secret files (never pushed) | 1 |
 | Tracked files > 2 MB | 0 |
@@ -58,7 +58,7 @@ No actionable findings. The only pattern hits are deliberate fake credentials in
 | `f4d4acd7ae` | assigned-secret | raw-…ue (15 chars) | test/docs placeholder |
 | `f4d4acd7ae` | assigned-secret | secr…ue (12 chars) | test/docs placeholder |
 | `f4d4acd7ae` | authorization-header-literal | Auth…er (39 chars) | test/docs placeholder |
-- Pickaxe context commits: `$2a$10` in 7a55dad fix(curseforge-key): accept real classic key formats (\$ / + = etc.) — printable ASCII instead of URL-safe-only ; `x-api-key` in f4d4acd feat(phase7): architecture/security/docs — shared contracts + IPC arg validation (71 commands), Electron-only ad; `x-api-key` in da3ab4a feat(electron): P2 module integration — modrinth/curseforge engines + curated L4 data, pipeline preview/install ; `x-api-key` in a391ff1 feat(electron): P0 shell — electron main/preload/ipc, JSON server store, adapter branch, selftest gate (src-taur
+- Pickaxe context commits: `cfc_pat_` in 24d0da5 chore(security): add reproducible security audit (tracked tree + full git history) and untrack internal .workflo; `$2a$10` in 24d0da5 chore(security): add reproducible security audit (tracked tree + full git history) and untrack internal .workflo; `$2a$10` in 7a55dad fix(curseforge-key): accept real classic key formats (\$ / + = etc.) — printable ASCII instead of URL-safe-only ; `gzp_` in 24d0da5 chore(security): add reproducible security audit (tracked tree + full git history) and untrack internal .workflo; `ghp_` in 24d0da5 chore(security): add reproducible security audit (tracked tree + full git history) and untrack internal .workflo; `BEGIN RSA PRIVATE KEY` in 24d0da5 chore(security): add reproducible security audit (tracked tree + full git history) and untrack internal .workflo; `BEGIN OPENSSH PRIVATE KEY` in 24d0da5 chore(security): add reproducible security audit (tracked tree + full git history) and untrack internal .workflo; `x-api-key` in 24d0da5 chore(security): add reproducible security audit (tracked tree + full git history) and untrack internal .workflo; `x-api-key` in f4d4acd feat(phase7): architecture/security/docs — shared contracts + IPC arg validation (71 commands), Electron-only ad; `x-api-key` in da3ab4a feat(electron): P2 module integration — modrinth/curseforge engines + curated L4 data, pipeline preview/install ; `x-api-key` in a391ff1 feat(electron): P0 shell — electron main/preload/ipc, JSON server store, adapter branch, selftest gate (src-taur
 - `x-api-key` / `Authorization` matches in code are header names, not values (no credential found).
 
 ## Local (never pushed) sensitive files
@@ -68,5 +68,6 @@ No actionable findings. The only pattern hits are deliberate fake credentials in
 - `.gitignore` excludes `.app-data/` (incl. `curseforge-key.txt`), build outputs, logs and verification artifacts.
 - The CurseForge key is stored at runtime (safeStorage or app-data fallback), never compiled in; support bundles redact it and the diagnostics logger redacts token-shaped values.
 - Tests use random/obviously fake key strings only.
+- GitHub Advanced Security secret scanning is not available for this private repository (GHAS not enabled); this local audit is the equivalent check and also scans every commit diff, not just the default branch.
 - Before publishing, confirm the repository is **private** unless the user explicitly wants it public.
 
