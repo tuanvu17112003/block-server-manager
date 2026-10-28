@@ -49,24 +49,10 @@ Invoke-RestMethod http://127.0.0.1:9222/json/list      # must list title "Block 
                                                        # url file:///.../resources/app.asar/dist/index.html
 ```
 
-### Playwright MCP configuration (user does this once on their machine)
-
-```json
-{
-  "mcpServers": {
-    "playwright": {
-      "command": "npx",
-      "args": ["@playwright/mcp@latest", "--cdp-endpoint=http://127.0.0.1:9222"]
-    }
-  }
-}
-```
-
-If your MCP client uses the config file form, set `browser.cdpEndpoint` to the same URL. The documented
-CDP mode supports Chrome/Chromium started with `--remote-debugging-port`, Edge, **Electron apps**, and
-cloud browsers. Start the app **before** starting the MCP server/connecting; then take a snapshot.
-If the MCP opens on `about:blank` or a second tab, select the tab titled **Block Server Manager** using
-the tab tools. `browser_navigate` is not needed (the page is already loaded); avoid navigating away.
+The app must be reachable on the CDP endpoint before your browser tools connect. MCP/browser setup is
+managed outside this brief; if your tools open on `about:blank` or a second tab, select the tab titled
+**Block Server Manager**. `browser_navigate` is not needed (the page is already loaded); avoid navigating
+away.
 
 ### Stop and clean up
 
