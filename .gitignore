@@ -34,6 +34,9 @@ logs/
 #Codex skills
 .agents
 
+# AI-agent local state (never commit)
+.commandcode/
+
 # electron dev data root
 .app-data/
 dist-electron/
