@@ -1,0 +1,172 @@
+{
+  "harness": "verify-adapter-install.mjs",
+  "startedAt": "2026-10-29T14:17:27.395Z",
+  "purpose": "C8 / invariant I3: a real modpack must install through the ADAPTER layer and reach a verified boot, not merely resolve. Before this run every adapter claim was E2- (resolve parity only).",
+  "pack": "Prominence™ II Hasturian Era v4.1.5hf.mrpack",
+  "packBytes": 427703135,
+  "javaPath": "C:\\Program Files\\Java\\jdk-17\\bin\\java.exe",
+  "preview": {
+    "sourceName": "Prominence™ II: Hasturian Era",
+    "loader": {
+      "kind": "fabric",
+      "minecraftVersion": "1.20.1",
+      "loaderVersion": "0.19.3"
+    },
+    "include": 351,
+    "exclude": 211,
+    "conflicts": [
+      "mods/PickUpNotifier-v8.0.0-1.20.1-Fabric.jar",
+      "mods/fancymenu_fabric_3.7.0_MC_1.20.1.jar",
+      "mods/ForgeConfigScreens-v8.0.2-1.20.1-Fabric.jar"
+    ],
+    "totalFiles": 565,
+    "sourcePin": {
+      "source": "packArchive",
+      "sourceId": ".app-data/cache/mrpack/Prominence™ II Hasturian Era v4.1.5hf.mrpack",
+      "artifact": null
+    },
+    "warnings": [
+      "mods/PickUpNotifier-v8.0.0-1.20.1-Fabric.jar: community exclude: PickUpNotifier",
+      "mods/fancymenu_fabric_3.7.0_MC_1.20.1.jar: community exclude: fancymenu",
+      "mods/ForgeConfigScreens-v8.0.2-1.20.1-Fabric.jar: community exclude: ForgeConfigScreens",
+      "mods/SimplyTooltips-fabric-0.1.5-1.20.1.jar: community force-include: /(^|/)simplytooltips-/",
+      "mods/s-lib-fabric-3.0.1+1.20.1.jar: community force-include: /(^|/)s-lib-/"
+    ]
+  },
+  "install": {
+    "status": "complete",
+    "serverId": "b4b67ed2-de96-4d42-afae-675792d7ec2c",
+    "loader": {
+      "kind": "fabric",
+      "minecraftVersion": "1.20.1",
+      "loaderVersion": "0.19.3"
+    },
+    "files": [
+      {
+        "path": "349 files",
+        "outcome": "installed"
+      },
+      {
+        "path": "2 client-only",
+        "outcome": "skipped-client-only"
+      },
+      {
+        "path": "214 plan-excluded",
+        "outcome": "skipped-user-choice"
+      },
+      {
+        "path": "mods/chipped-fabric-1.20.1-3.0.7.jar",
+        "outcome": "disabled-by-autofix",
+        "detail": "round 1: disabled chipped"
+      },
+      {
+        "path": "mods/mutant-skeleton-armor-tweaks-fabric-3.1.0+1.20.1.jar",
+        "outcome": "disabled-by-autofix",
+        "detail": "round 1: disabled mutant_skeleton_armor_tweaks"
+      },
+      {
+        "path": "mods/quests_teams_fixes-fabric-1.0.1+1.20.1.jar",
+        "outcome": "disabled-by-autofix",
+        "detail": "round 1: disabled quests_teams_fixes"
+      },
+      {
+        "path": "mods/simply_swords_tweaks-fabric-2.1.0+1.20.1.jar",
+        "outcome": "disabled-by-autofix",
+        "detail": "round 1: disabled simply_swords_tweaks"
+      },
+      {
+        "path": "mods/simplyswords-fabric-1.70.2-1.20.1.jar",
+        "outcome": "disabled-by-autofix",
+        "detail": "round 1: disabled simplyswords"
+      },
+      {
+        "path": "mods/simplybows-0.1.4.jar",
+        "outcome": "disabled-by-autofix",
+        "detail": "round 1: disabled simplybows"
+      },
+      {
+        "path": "mods/unrestricted_enchanting-fabric-1.1.0+1.20.1.jar",
+        "outcome": "disabled-by-autofix",
+        "detail": "round 1: disabled unrestricted_enchanting"
+      },
+      {
+        "path": "mods/simplybows-opac-bridge-1.0.2-opac-0.32.7.jar",
+        "outcome": "disabled-by-autofix",
+        "detail": "round 2: disabled simplybows_opac_bridge"
+      },
+      {
+        "path": "mods/simplycompat-1.2.5.jar",
+        "outcome": "disabled-by-autofix",
+        "detail": "round 2: disabled simplycompat"
+      }
+    ],
+    "stages": [
+      {
+        "stage": "download",
+        "outcome": "complete"
+      },
+      {
+        "stage": "validate",
+        "outcome": "complete"
+      },
+      {
+        "stage": "verify-boot",
+        "outcome": "complete",
+        "detail": "9 auto-fix(es) in 3 round(s)"
+      },
+      {
+        "stage": "publish",
+        "outcome": "complete"
+      }
+    ],
+    "warnings": [
+      "2 client-only files skipped (declared server-unsupported)",
+      "214 files excluded by the reviewed plan",
+      "auto-fix applied 9 change(s) across 3 boot round(s) before verification passed"
+    ],
+    "error": null,
+    "autofix": null
+  },
+  "published": {
+    "dir": "(data root)/servers/<id>",
+    "topLevelEntries": [
+      ".cache",
+      ".fabric",
+      ".mixin.out",
+      "att-debug",
+      "banned-ips.json",
+      "banned-players.json",
+      "config",
+      "datapacks",
+      "defaultconfigs",
+      "eula.txt",
+      "fabric-server-launch.jar",
+      "fabric-server-launcher.properties",
+      "install-report.json",
+      "installer.log",
+      "libraries",
+      "logs",
+      "moddata",
+      "modernfix",
+      "mods",
+      "mods-disabled",
+      "moonlight-global-datapacks",
+      "msm-install.json",
+      "ops.json",
+      "patchouli_books",
+      "resourcepacks",
+      "server.jar",
+      "server.properties",
+      "stackdeobf_mappings",
+      "usercache.json",
+      "versions"
+    ],
+    "modJarCount": 341,
+    "hasEula": true,
+    "hasProperties": true
+  },
+  "verdict": "PASS",
+  "error": null,
+  "finishedAt": "2026-10-29T14:22:46.508Z",
+  "durationSeconds": 319.1
+}
