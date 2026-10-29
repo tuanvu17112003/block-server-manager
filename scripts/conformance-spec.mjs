@@ -413,7 +413,12 @@ function checkGap5() {
       const body = text.slice(brace, end + 1);
       const base = lineAt(text, brace) - 1;
       body.split('\n').forEach((line, i) => {
-        if (/\.includes\(/.test(line)) hits.push({ line: base + i, text: line.trim() });
+        // A comment that *describes* the removed defect is not the defect. Grepping raw lines counted the
+        // explanatory comment at curated.ts:85 as a live `includes(` call and kept gap5 falsely OPEN (DV-07).
+        // Strip line comments before testing, so the instrument measures code rather than prose — deleting the
+        // comment to make the checker green would have been gaming it.
+        const code = line.replace(/\/\/.*$/, '');
+        if (/\.includes\(/.test(code)) hits.push({ line: base + i + 1, text: code.trim() });
         scanned += 1;
       });
     }
