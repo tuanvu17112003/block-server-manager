@@ -1,0 +1,91 @@
+{
+  "harness": "verify-adapter-ftb.mjs",
+  "startedAt": "2026-10-29T10:15:05.530Z",
+  "packId": 5,
+  "versionId": null,
+  "detected": "ftb.app",
+  "candidates": [
+    "ftb.app"
+  ],
+  "recipe": {
+    "formatId": "ftb.app",
+    "name": "FTB Interactions",
+    "mc": "1.12.2",
+    "loader": "forge",
+    "loaderVersion": "14.23.5.2847",
+    "javaMajor": 8,
+    "launchShape": "generated-args",
+    "overrides": [],
+    "fileCount": 3482,
+    "sideCounts": {
+      "required": 3482
+    },
+    "sampleFiles": [
+      {
+        "path": "mods/roughmobsrevamped-1.12.2-2.3.17.jar",
+        "side": "required",
+        "size": 387900,
+        "sha1": "0aa1a8400ef94b768b1b49b7724e5428e32a4976",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      },
+      {
+        "path": "mods/EmberRootZoo-1.12.2-1.3.10.jar",
+        "side": "required",
+        "size": 1253567,
+        "sha1": "036d673b7b3fb38ab8f46f3aa3371fa7f1f7d4c4",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      },
+      {
+        "path": "mods/Botania r1.10-363.jar",
+        "side": "required",
+        "size": 13814617,
+        "sha1": "54b0b10d5a01a17dba2b50d2104f2ff970c98f84",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      },
+      {
+        "path": "mods/togetherforever-1.12.2-1.0.12-22.jar",
+        "side": "required",
+        "size": 75451,
+        "sha1": "ed5745ae5436969f65e22736582014202fa6cb30",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      },
+      {
+        "path": "mods/wizardry-0.11.0.jar",
+        "side": "required",
+        "size": 12344507,
+        "sha1": "f953752e92b25716cc733d0f9cdb96551883208c",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      }
+    ],
+    "warnings": [],
+    "resolution": [
+      {
+        "field": "mc",
+        "source": "ftb target \"minecraft\""
+      },
+      {
+        "field": "loader",
+        "source": "ftb target \"forge\""
+      },
+      {
+        "field": "javaMajor",
+        "source": "ftb target \"java\""
+      }
+    ]
+  },
+  "validation": "passed",
+  "error": null,
+  "verdict": "PASS",
+  "download": {
+    "path": "mods/roughmobsrevamped-1.12.2-2.3.17.jar",
+    "status": 200,
+    "bytes": 387900,
+    "expectedSize": 387900,
+    "sizeMatch": true,
+    "sha1": "0aa1a8400ef94b768b1b49b7724e5428e32a4976",
+    "expectedSha1": "0aa1a8400ef94b768b1b49b7724e5428e32a4976",
+    "sha1Match": true
+  },
+  "finishedAt": "2026-10-29T10:15:06.150Z",
+  "durationSeconds": 0.6
+}

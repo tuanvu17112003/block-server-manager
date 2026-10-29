@@ -1,0 +1,92 @@
+{
+  "harness": "verify-adapter-ftb.mjs",
+  "startedAt": "2026-10-29T10:15:07.123Z",
+  "packId": 8,
+  "versionId": null,
+  "detected": "ftb.app",
+  "candidates": [
+    "ftb.app"
+  ],
+  "recipe": {
+    "formatId": "ftb.app",
+    "name": "FTB Sky Odyssey",
+    "mc": "1.12.2",
+    "loader": "forge",
+    "loaderVersion": "14.23.5.2847",
+    "javaMajor": 8,
+    "launchShape": "generated-args",
+    "overrides": [],
+    "fileCount": 1733,
+    "sideCounts": {
+      "required": 1732,
+      "unsupported": 1
+    },
+    "sampleFiles": [
+      {
+        "path": "mods/SmoothFont-mc1.12.2-2.1.2.jar",
+        "side": "required",
+        "size": 283513,
+        "sha1": "f904ba15339103acb898b6a618b87f6498b3d8bc",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      },
+      {
+        "path": "mods/inventorysorter-1.12.2-1.13.3+57.jar",
+        "side": "required",
+        "size": 47765,
+        "sha1": "963c9943f0df194c0484ef038f2f7a7684b2d0e2",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      },
+      {
+        "path": "mods/JustEnoughResources-1.12.2-0.9.2.60.jar",
+        "side": "required",
+        "size": 222270,
+        "sha1": "3d4c9b8bb4ad948c7e26b7becd1c836f8cb34d07",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      },
+      {
+        "path": "mods/BetterBuildersWands-1.12.2-0.13.2.271+5997513.jar",
+        "side": "required",
+        "size": 77866,
+        "sha1": "3505169dfeea40d726b23072cb695d3c0e5014da",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      },
+      {
+        "path": "mods/bedpatch-2.2-1.12.2.jar",
+        "side": "required",
+        "size": 21613,
+        "sha1": "0c54d926ef72088e5f213a89e220d55a2284e44b",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      }
+    ],
+    "warnings": [],
+    "resolution": [
+      {
+        "field": "mc",
+        "source": "ftb target \"minecraft\""
+      },
+      {
+        "field": "loader",
+        "source": "ftb target \"forge\""
+      },
+      {
+        "field": "javaMajor",
+        "source": "ftb target \"java\""
+      }
+    ]
+  },
+  "validation": "passed",
+  "error": null,
+  "verdict": "PASS",
+  "download": {
+    "path": "mods/SmoothFont-mc1.12.2-2.1.2.jar",
+    "status": 200,
+    "bytes": 283513,
+    "expectedSize": 283513,
+    "sizeMatch": true,
+    "sha1": "f904ba15339103acb898b6a618b87f6498b3d8bc",
+    "expectedSha1": "f904ba15339103acb898b6a618b87f6498b3d8bc",
+    "sha1Match": true
+  },
+  "finishedAt": "2026-10-29T10:15:07.769Z",
+  "durationSeconds": 0.6
+}

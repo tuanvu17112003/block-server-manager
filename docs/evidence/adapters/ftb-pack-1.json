@@ -1,0 +1,92 @@
+{
+  "harness": "verify-adapter-ftb.mjs",
+  "startedAt": "2026-10-29T10:15:03.325Z",
+  "packId": 1,
+  "versionId": null,
+  "detected": "ftb.app",
+  "candidates": [
+    "ftb.app"
+  ],
+  "recipe": {
+    "formatId": "ftb.app",
+    "name": "FTB Academy 1.12",
+    "mc": "1.12.2",
+    "loader": "forge",
+    "loaderVersion": "14.23.5.2846",
+    "javaMajor": 8,
+    "launchShape": "generated-args",
+    "overrides": [],
+    "fileCount": 1480,
+    "sideCounts": {
+      "unsupported": 59,
+      "required": 1421
+    },
+    "sampleFiles": [
+      {
+        "path": "animation/08.jpg",
+        "side": "unsupported",
+        "size": 18988,
+        "sha1": "78c25d57101bcbb8a837ba828b93cbd7eab7baa0",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      },
+      {
+        "path": "animation/02.jpg",
+        "side": "unsupported",
+        "size": 18988,
+        "sha1": "78c25d57101bcbb8a837ba828b93cbd7eab7baa0",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      },
+      {
+        "path": "animation/29.jpg",
+        "side": "unsupported",
+        "size": 42762,
+        "sha1": "3ead06944aa00fdcdbe8f400f4ce7e6daac2bc47",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      },
+      {
+        "path": "animation/46.jpg",
+        "side": "unsupported",
+        "size": 42727,
+        "sha1": "bc6fc77316f6d20bec32c17fb33187164b1d0a56",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      },
+      {
+        "path": "animation/10.jpg",
+        "side": "unsupported",
+        "size": 18988,
+        "sha1": "78c25d57101bcbb8a837ba828b93cbd7eab7baa0",
+        "provenance": "ftb.clientonly/serveronly/optional"
+      }
+    ],
+    "warnings": [],
+    "resolution": [
+      {
+        "field": "mc",
+        "source": "ftb target \"minecraft\""
+      },
+      {
+        "field": "loader",
+        "source": "ftb target \"forge\""
+      },
+      {
+        "field": "javaMajor",
+        "source": "ftb target \"java\""
+      }
+    ]
+  },
+  "validation": "passed",
+  "error": null,
+  "verdict": "PASS",
+  "download": {
+    "path": "animation/08.jpg",
+    "status": 200,
+    "bytes": 18988,
+    "expectedSize": 18988,
+    "sizeMatch": true,
+    "sha1": "78c25d57101bcbb8a837ba828b93cbd7eab7baa0",
+    "expectedSha1": "78c25d57101bcbb8a837ba828b93cbd7eab7baa0",
+    "sha1Match": true
+  },
+  "finishedAt": "2026-10-29T10:15:04.256Z",
+  "durationSeconds": 0.9
+}
