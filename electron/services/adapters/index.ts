@@ -1,7 +1,7 @@
 ﻿// Adapter layer entry point: the registered adapters + helpers the pipeline uses.
 //
 // Registration order does not matter (the registry sorts by `priority` descending), but the priorities are the
-// detection order derived in docs/research/2026-10-29-p1c-format-census.md Â§5: formats with machine-readable
+// detection order derived in docs/research/2026-10-29-p1c-format-census.md §5: formats with machine-readable
 // metadata first, payload-only archives last. `instance.json` is claimed by three formats, which is why every
 // detector validates keys and the order is explicit rather than incidental.
 import { fetchTrusted } from '../installer/core';
@@ -23,10 +23,10 @@ export const ADAPTERS = [
   curseForgeClientAdapter,     // 88 — manifest.json with manifestType/manifestVersion/minecraft.modLoaders[]
   curseForgeServerPackAdapter, // 87 — author server pack: engine-readable artifacts, or declared variables.txt
   packwizAdapter,      // 60 — declarative, the only archive format with per-file side data
-  prismAdapter,        // 55 â€” mmc-pack.json
-  atlauncherAdapter,   // 50 â€” instance.json carrying a `launcher` object
-  ftbAdapter,          // 45/20 â€” instance.json with numeric pack ids, or the provider API
-  serverZipAdapter,    // 20 â€” no metadata at all, deliberately last
+  prismAdapter,        // 55 — mmc-pack.json
+  atlauncherAdapter,   // 50 — instance.json carrying a `launcher` object
+  ftbAdapter,          // 45/20 — instance.json with numeric pack ids, or the provider API
+  serverZipAdapter,    // 20 — no metadata at all, deliberately last
 ];
 
 /** The shared registry instance used by the pipeline. */

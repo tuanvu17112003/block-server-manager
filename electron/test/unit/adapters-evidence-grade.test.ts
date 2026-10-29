@@ -1,7 +1,7 @@
 ﻿// C6 tests: every format must declare its evidence grade, and a below-E2 grade may never look "supported".
 //
 // This is the structural answer to the original error the whole remediation plan exists for: the pre-implementation
-// research claimed format coverage as proven while all of it rested on hand-built fixtures (docs/audit/19 Â§2,
+// research claimed format coverage as proven while all of it rested on hand-built fixtures (docs/audit/19 §2,
 // docs/audit/22 RC-4). A required field on the recipe means that mistake cannot recur silently.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -64,7 +64,7 @@ test('every registered adapter declares an evidence grade from the allowed set',
   }
 });
 
-test('the E2 set is exactly: modrinth, packwiz, ftb, prism â€” each backed by a real artefact in docs/evidence', () => {
+test('the E2 set is exactly: modrinth, packwiz, ftb, prism — each backed by a real artefact in docs/evidence', () => {
   // Documentation-as-test: raising a grade must be accompanied by changing this list AND the evidence file that
   // justifies it, so a grade cannot be quietly raised. History: prism moved E3 -> E2 on 2026-10-29 when a real
   // third-party PrismLauncher instance export was obtained (docs/audit/24 DV-37,
@@ -84,7 +84,7 @@ test('the E2 set is exactly: modrinth, packwiz, ftb, prism â€” each backed 
 test('ATLauncher remains E3 because no real ATLauncher instance export exists', () => {
   // This is the honest half of the Prism/ATLauncher pair. Prism could be upgraded to E2 because a third party
   // publishes CI-built instance exports; ATLauncher publishes no equivalent, and an instance.json we wrote
-  // ourselves would be a fixture, i.e. E3 â€” so the grade stays E3 rather than being raised to match Prism.
+  // ourselves would be a fixture, i.e. E3 — so the grade stays E3 rather than being raised to match Prism.
   const atlauncher = ADAPTERS.find(candidate => candidate.id === 'atlauncher');
   assert.ok(atlauncher, 'atlauncher must be registered');
   assert.deepEqual([...atlauncher.shapes], ['archive']);

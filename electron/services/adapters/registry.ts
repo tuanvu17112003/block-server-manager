@@ -1,6 +1,6 @@
 // Archive index + adapter registry.
 //
-// One zip listing per input, shared by every adapter â€” adapters never touch the filesystem or yauzl
+// One zip listing per input, shared by every adapter — adapters never touch the filesystem or yauzl
 // directly, which keeps them pure and unit-testable from fixtures.
 import { listZip, readZipEntry } from '../installer/core';
 import { appError } from '../store';
@@ -152,12 +152,12 @@ export function validateRecipe(recipe: PackRecipe): void {
   if (recipe.loader === 'hybrid') {
     throw appError('validation', `Adapter ${recipe.formatId}: hybrid loaders are not supported for new installs.`);
   }
-  // C6: every recipe must state its evidence grade. This is the structural guard against the original error â€”
+  // C6: every recipe must state its evidence grade. This is the structural guard against the original error —
   // claiming a format works because a schema was implemented, with no real artefact ever installed.
   if (!recipe.evidenceGrade) {
     throw appError('validation',
       `Adapter ${recipe.formatId} produced a recipe with no evidence grade. `
-      + 'Every format must state E1/E2/E3/E4 (docs/audit/19 Â§2) so a schema-derived adapter is never presented as supported.');
+      + 'Every format must state E1/E2/E3/E4 (docs/audit/19 §2) so a schema-derived adapter is never presented as supported.');
   }
   if (recipe.evidenceGrade !== 'E1' && recipe.evidenceGrade !== 'E2' && recipe.evidenceNote.trim() === '') {
     throw appError('validation',

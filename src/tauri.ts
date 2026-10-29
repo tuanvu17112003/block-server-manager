@@ -641,7 +641,7 @@ async function invokeRequired<T>(command: string, args?: Record<string, unknown>
   return invokeHttp<T>(command, args);
 }
 
-/** Phase 0 smoke command: UIâ†’Rustâ†’UI round-trip (`ping` â†’ `"pong"`). */
+/** Phase 0 smoke command: UI→Rust→UI round-trip (`ping` → `"pong"`). */
 export function ping(): Promise<string | null> {
   return invokeOrStub<string>('ping');
 }
@@ -742,7 +742,7 @@ export interface StorageInfoDto {
   overrideUnavailable: boolean;
 }
 
-/** Download location (Settings â†’ Downloads & storage): cache/archives/installers/Java zips. */
+/** Download location (Settings → Downloads & storage): cache/archives/installers/Java zips. */
 export const tauriStorage = {
   get: () => invokeRequired<StorageInfoDto>('storage_get'),
   set: (path: string | null) => invokeRequired<StorageInfoDto>('storage_set', { path }),
@@ -954,7 +954,7 @@ export function onServerMetrics(
 export const tauriServer = {
   // backend-wired (Phase 2): real `invoke()` under Tauri with error
   // propagation (see invokeStrict), mock fallback in browser.
-  // (backup_now/restore in Phase 8 â€” until then these fall back to mocks.)
+  // (backup_now/restore in Phase 8 — until then these fall back to mocks.)
   start: (id: string) => invokeStrict<void>('server_start', { id }),
   stop: (id: string) => invokeStrict<void>('server_stop', { id }),
   kill: (id: string) => invokeStrict<void>('server_kill', { id }),

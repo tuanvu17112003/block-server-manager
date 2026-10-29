@@ -44,11 +44,11 @@
       },
       {
         "field": "files",
-        "source": "index.toml [[files]] metafile Ã¢â€ â€™ *.pw.toml [download].url"
+        "source": "index.toml [[files]] metafile → *.pw.toml [download].url"
       },
       {
         "field": "side",
-        "source": "*.pw.toml side (both/client/server), absent Ã¢â€¡â€™ both"
+        "source": "*.pw.toml side (both/client/server), absent ⇒ both"
       }
     ]
   },

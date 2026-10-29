@@ -1,9 +1,9 @@
 ﻿// Live verification of the P1c packwiz adapter: build a REAL `.zip` in the exact shape packwiz writes
-// (schema from docs/research/2026-10-29-p1c-format-census.md Â§3), run it through the adapter registry, then
+// (schema from docs/research/2026-10-29-p1c-format-census.md §3), run it through the adapter registry, then
 // install it through the real recipe installer with a real Modrinth CDN download.
 //
-// This proves the archive path end-to-end: detection by content â†’ canonical recipe â†’ override extraction â†’
-// hash-verified download â†’ real file on disk. It deliberately uses a real jar URL so the network path is
+// This proves the archive path end-to-end: detection by content → canonical recipe → override extraction →
+// hash-verified download → real file on disk. It deliberately uses a real jar URL so the network path is
 // exercised, not mocked.
 //
 // Usage: node scripts/verify-packwiz-archive.mjs

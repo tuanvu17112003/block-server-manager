@@ -59,7 +59,7 @@ export function modrinthLoaderOptions(version: { loaders: string[] } | null): Mo
     return {
       id,
       loader: null,
-      label: `${name} â€” unsupported for new server installs`,
+      label: `${name} — unsupported for new server installs`,
       reason: id === 'quilt' ? 'Quilt pack installs are not supported.' : `The ${name} loader is not supported for new server installs.`,
     };
   });
@@ -105,7 +105,7 @@ export function serverFromInstall(dto: ServerDto, recommended: number, modpack?:
     seed: '',
     worldName: 'world',
     worldSizeMb: 0,
-    worldLastPlayed: 'â€”',
+    worldLastPlayed: '—',
     version: dto.mcVersion + ' ' + dto.loader,
   };
 }
@@ -152,7 +152,7 @@ export function curseforgeProjectInputError(rawInput: string): string | null {
 }
 
 export function javaCandidateLabel(candidate: JavaCandidate): string {
-  return `Java ${candidate.major} Â· ${candidate.architectureBits}-bit Â· ${candidate.source}`;
+  return `Java ${candidate.major} · ${candidate.architectureBits}-bit · ${candidate.source}`;
 }
 
 export type { Modpack };

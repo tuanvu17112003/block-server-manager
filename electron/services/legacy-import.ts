@@ -1,7 +1,7 @@
 // One-shot legacy Tauri (SQLite `app.db`) -> Electron JSON store importer (task WP-1.6 / finding B-13).
 //
 // PURE NODE MODULE: this file must never import `electron` (or `./paths`, which does) so it can be
-// unit-tested with plain `node --test` â€” see electron/test/unit/legacy-import.test.ts. The Electron
+// unit-tested with plain `node --test` — see electron/test/unit/legacy-import.test.ts. The Electron
 // startup hook is wired in main.ts by the Lead via `detectLegacy` / `planImport` / `runImport`.
 //
 // Legacy layout (Tauri identifier `com.blockserver.manager`, Rust reference legacy/src-tauri/src/db/mod.rs):
@@ -30,7 +30,7 @@ export const LEGACY_ROOT_ENV = 'MSM_LEGACY_ROOT';
 /** Marker file written under the Electron data root after an import attempt. */
 export const LEGACY_IMPORT_MARKER = 'legacy-import.json';
 export const LEGACY_IMPORT_MARKER_VERSION = 1;
-/** Rust `MAX_COMMAND_HISTORY` â€” keep the same per-server history retention at import time. */
+/** Rust `MAX_COMMAND_HISTORY` — keep the same per-server history retention at import time. */
 const MAX_HISTORY_PER_SERVER = 100;
 const DEFAULT_PORT = 25565;
 const DEFAULT_RAM_MB = 2048;
@@ -723,7 +723,7 @@ function legacyServerFolder(legacyRoot: string, server: MappedLegacyServer): str
 
 /**
  * Copy a legacy folder to a hidden temp sibling inside the target parent, then rename it into place.
- * `renameSync` is atomic per volume and fails if the target appeared meanwhile â€” never overwriting it.
+ * `renameSync` is atomic per volume and fails if the target appeared meanwhile — never overwriting it.
  */
 async function copyFolderAtomic(source: string, target: string): Promise<void> {
   const parent = path.dirname(target);

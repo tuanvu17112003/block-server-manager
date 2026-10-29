@@ -1,4 +1,4 @@
-// ATLauncher adapter â€” `instance.json`.
+// ATLauncher adapter — `instance.json`.
 //
 // Schema read from ATLauncher's own serializer (`data/Instance.java` @Json + Gson `save()` at L1994-2001, and
 // `data/InstanceLauncher.java`), commit 8e9a713:
@@ -6,7 +6,7 @@
 //   launcher  : name, pack, description, packId, externalPackId, version, hash, java, loaderVersion,
 //               requiredMemory, maximumMemory, javaPath, javaArguments, ...
 //
-// **Three different formats write a file named `instance.json`** (census Â§2): ATLauncher (`uuid` + `launcher`),
+// **Three different formats write a file named `instance.json`** (census §2): ATLauncher (`uuid` + `launcher`),
 // FTB App (`id`/`versionId`/`mcVersion`/`modLoader`) and the vanilla Minecraft launcher (`profiles`). Filename
 // alone is meaningless, so detection validates keys and the priority order decides.
 //

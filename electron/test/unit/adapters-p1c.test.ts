@@ -15,7 +15,7 @@ import { AdapterRegistry, validateRecipe } from '../../services/adapters/registr
 import { ADAPTERS } from '../../services/adapters/index';
 import type { ArchiveIndex, DetectContext, PackRecipe } from '../../services/adapters/types';
 
-/** Build a fake archive index from a nameâ†’content map (content strings are what the adapters read). */
+/** Build a fake archive index from a name→content map (content strings are what the adapters read). */
 function fakeArchive(files: Record<string, string | object>): ArchiveIndex {
   const names = Object.keys(files);
   const asText = (name: string): string | null => {
@@ -104,7 +104,7 @@ test('packwiz: side mapping is exact and an absent side means both', () => {
   assert.deepEqual(packwizFileSide('client').side, 'unsupported');
   assert.deepEqual(packwizFileSide('server').side, 'required');
   assert.deepEqual(packwizFileSide('both').side, 'required');
-  assert.deepEqual(packwizFileSide(null).side, 'required', 'absent side â‡’ both â‡’ required');
+  assert.deepEqual(packwizFileSide(null).side, 'required', 'absent side ⇒ both ⇒ required');
   assert.equal(packwizFileSide('weird').side, 'unknown', 'an unrecognised side is never guessed');
 });
 
@@ -211,7 +211,7 @@ test('atlauncher: distinguishes its instance.json from FTB and from the vanilla 
   assert.equal(readAtlMc(readAtlInstance(atl)!.launcher), '1.20.1');
   assert.deepEqual(readAtlLoader(readAtlInstance(atl)!.launcher), { loader: 'forge', loaderVersion: '47.2.0' });
 
-  // FTB App instance.json â€” numeric ids, mcVersion, modLoader. Must NOT be claimed by ATLauncher.
+  // FTB App instance.json — numeric ids, mcVersion, modLoader. Must NOT be claimed by ATLauncher.
   const ftb = { uuid: 'x', id: 1, versionId: 2, mcVersion: '1.12.2', modLoader: 'forge-14.23.5.2846' };
   assert.equal(readAtlInstance(ftb), null);
 

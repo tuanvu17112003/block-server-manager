@@ -1,4 +1,4 @@
-﻿// Pipeline file review (optional defaults + conflicting signals) â€” extracted from Create.tsx (WP-6.5).
+﻿// Pipeline file review (optional defaults + conflicting signals) — extracted from Create.tsx (WP-6.5).
 import { Badge, Button } from '../../components/ui';
 import type { PipelineFileChoice, PipelineFileDecision, PipelinePreviewDto } from '../../tauri';
 import { MAX_REPORT_DETAIL_ROWS, decisionReasonLabel, describeEvidence, isReviewableDecision, type PipelineFileReason } from './helpers';
@@ -33,7 +33,7 @@ export function PipelineReview(props: PipelineReviewProps) {
           <h4 id="pipeline-review-heading" className="text-sm font-semibold text-emerald-200">Review server files</h4>
           <p className="mt-1 break-all text-xs text-zinc-300">{props.preview.sourceName}</p>
         </div>
-        <Badge tone="green">Minecraft {props.preview.plan.loader.minecraftVersion} Â· {props.preview.plan.loader.kind}</Badge>
+        <Badge tone="green">Minecraft {props.preview.plan.loader.minecraftVersion} · {props.preview.plan.loader.kind}</Badge>
       </div>
       {props.preview.evidence && (() => {
         const evidence = describeEvidence(props.preview.evidence);
@@ -54,7 +54,7 @@ export function PipelineReview(props: PipelineReviewProps) {
         );
       })()}
       <p role="status" className="text-xs text-zinc-300">
-        {includedCount} files included Â· {skipped.length} skipped Â· {reviewChoices.length} choices to review.
+        {includedCount} files included · {skipped.length} skipped · {reviewChoices.length} choices to review.
       </p>
       {props.preview.plan.loader.kind === 'quilt' && (
         <p role="alert" className="rounded border border-amber-900 bg-amber-950/30 p-2 text-xs text-amber-100">
@@ -83,7 +83,7 @@ export function PipelineReview(props: PipelineReviewProps) {
               <div key={decision.path} className="rounded border border-zinc-800 bg-zinc-950 p-2">
                 <p className="break-all text-xs font-medium text-zinc-200">{decision.path}</p>
                 <p className="mt-0.5 text-xs text-zinc-500">
-                  {isConflict ? 'The pack has conflicting client/server declarations. Choose the server action.' : 'Optional server file Â· included by default.'}
+                  {isConflict ? 'The pack has conflicting client/server declarations. Choose the server action.' : 'Optional server file · included by default.'}
                 </p>
                 {isConflict ? (
                   <fieldset className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
@@ -119,7 +119,7 @@ export function PipelineReview(props: PipelineReviewProps) {
           {pageCount > 1 && (
             <nav aria-label="Optional and conflict file choice pages" className="flex flex-wrap items-center justify-between gap-2">
               <p role="status" className="text-xs text-zinc-400">
-                Choices {props.choicePage * MAX_REPORT_DETAIL_ROWS + 1}â€“{Math.min((props.choicePage + 1) * MAX_REPORT_DETAIL_ROWS, reviewChoices.length)} of {reviewChoices.length}
+                Choices {props.choicePage * MAX_REPORT_DETAIL_ROWS + 1}–{Math.min((props.choicePage + 1) * MAX_REPORT_DETAIL_ROWS, reviewChoices.length)} of {reviewChoices.length}
               </p>
               <div className="flex gap-2">
                 <Button size="sm" variant="secondary" disabled={props.choicePage === 0} onClick={() => props.onPageChange(Math.max(0, props.choicePage - 1))}>Previous</Button>
@@ -137,7 +137,7 @@ export function PipelineReview(props: PipelineReviewProps) {
           <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto text-xs text-zinc-400">
             {skipped.slice(0, MAX_REPORT_DETAIL_ROWS).map((decision) => (
               <li key={decision.path} className="break-all">
-                {decision.path} <span className="text-zinc-600">Â· {decisionReasonLabel(decision.reason as PipelineFileReason)}</span>
+                {decision.path} <span className="text-zinc-600">· {decisionReasonLabel(decision.reason as PipelineFileReason)}</span>
               </li>
             ))}
           </ul>

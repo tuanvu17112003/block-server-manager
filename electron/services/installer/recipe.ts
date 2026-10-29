@@ -88,7 +88,7 @@ async function fetchPlannedFile(
 
   // A downloaded jar that is actually an HTML error page is the classic silent poison. But a *declared*
   // zero-byte file is legitimate: empty config files exist in real packs (e.g. FTB Stoneblock 2 ships
-  // three of them, each with the SHA-1 of the empty string `da39a3eeâ€¦`). Only reject an empty result when
+  // three of them, each with the SHA-1 of the empty string `da39a3ee…`). Only reject an empty result when
   // the recipe said it should have bytes; the hash verification above already catches content lies.
   const stat = fs.statSync(dest);
   const expectsBytes = typeof file.size === 'number' && file.size > 0;

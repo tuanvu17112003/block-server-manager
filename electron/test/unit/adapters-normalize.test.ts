@@ -1,7 +1,7 @@
-﻿// C2 tests: shared archive normalization (research Â§6 pipeline step 2).
+﻿// C2 tests: shared archive normalization (research §6 pipeline step 2).
 //
 // The design requirement is quoted from docs/research/2026-10-29-universal-modpack-install.md line 305:
-//   "Normalize â€” list entries once; unwrap single nested zip; strip a single wrapping directory"
+//   "Normalize — list entries once; unwrap single nested zip; strip a single wrapping directory"
 //
 // These tests use real zip files written to a temp dir (via the same yauzl-backed reader the product uses),
 // because the behaviour under test is filesystem/archive behaviour, not pure logic.

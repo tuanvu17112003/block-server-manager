@@ -1,18 +1,18 @@
-// Modrinth adapter â€” shape A (archive) and shape B (provider), DELEGATING to the existing engine.
+// Modrinth adapter — shape A (archive) and shape B (provider), DELEGATING to the existing engine.
 //
-// Why this file exists at all is a QA finding, not a feature: research Â§8 line 347 said
+// Why this file exists at all is a QA finding, not a feature: research §8 line 347 said
 //   "First adapters: modrinth, curseforge, serverpack, bare (covers everything the app does today, via the new
 //    path, so no regression)"
-// and that order was inverted during P1c, which left the adapter layer with no Modrinth adapter at all â€” so
+// and that order was inverted during P1c, which left the adapter layer with no Modrinth adapter at all — so
 // both real `.mrpack` files in `.app-data/cache/mrpack/` were claimed by nothing (docs/audit/20 D1).
 //
-// Invariant I2 (docs/audit/23 Â§4.2): an adapter RECOGNISES and NORMALISES; it delegates execution to the
-// proven engine. So this module never parses a `.mrpack` itself â€” it calls `resolveMrpack` from
+// Invariant I2 (docs/audit/23 §4.2): an adapter RECOGNISES and NORMALISES; it delegates execution to the
+// proven engine. So this module never parses a `.mrpack` itself — it calls `resolveMrpack` from
 // `installer/modrinth.ts`, which is already exercised by the 12-pack matrix and the real end-to-end runs.
 //
 // Side mapping is the only real decision here, and it is deliberately conservative:
-//   `env.server` = 'required' | 'optional' | 'unsupported'  â†’ that exact value
-//   `env.server` absent                                     â†’ 'unknown'
+//   `env.server` = 'required' | 'optional' | 'unsupported'  → that exact value
+//   `env.server` absent                                     → 'unknown'
 // 'unknown' is a first-class value in the recipe (types.ts) precisely because collapsing "the manifest says
 // nothing" into either 'required' or 'unsupported' is what silently corrupts a server install.
 import { appError } from '../store';
@@ -31,7 +31,7 @@ import {
   type RecipeWarning,
 } from './types';
 
-/** mrpack loader keys â†’ canonical loader family (mirrors LOADER_OF in the engine, kept explicit here). */
+/** mrpack loader keys → canonical loader family (mirrors LOADER_OF in the engine, kept explicit here). */
 const MRPACK_LOADERS: readonly { key: string; loader: LoaderFamily }[] = [
   { key: 'neoforge', loader: 'neoforge' },
   { key: 'forge', loader: 'forge' },
@@ -41,15 +41,15 @@ const MRPACK_LOADERS: readonly { key: string; loader: LoaderFamily }[] = [
 
 /**
  * Map one mrpack `env.server` declaration onto the canonical side.
- * Absent/blank â‡’ `unknown` (never guessed). An unrecognised value â‡’ `unknown` too, with provenance.
+ * Absent/blank ⇒ `unknown` (never guessed). An unrecognised value ⇒ `unknown` too, with provenance.
  */
 export function mrpackFileSide(serverEnv: string | null | undefined): { side: FileSide; provenance: string } {
   const value = (serverEnv ?? '').trim().toLowerCase();
   if (value === 'required') return { side: 'required', provenance: 'mrpack env.server="required"' };
   if (value === 'optional') return { side: 'optional', provenance: 'mrpack env.server="optional"' };
   if (value === 'unsupported') return { side: 'unsupported', provenance: 'mrpack env.server="unsupported"' };
-  if (value === '') return { side: 'unknown', provenance: 'mrpack env.server absent â‡’ unknown' };
-  return { side: 'unknown', provenance: `mrpack env.server="${value}" (unrecognised) â‡’ unknown` };
+  if (value === '') return { side: 'unknown', provenance: 'mrpack env.server absent ⇒ unknown' };
+  return { side: 'unknown', provenance: `mrpack env.server="${value}" (unrecognised) ⇒ unknown` };
 }
 
 /**
@@ -143,7 +143,7 @@ export function buildMrpackRecipe(input: {
       { field: 'mc', source: 'modrinth.index.json dependencies.minecraft' },
       { field: 'loader', source: runtime.loader === 'vanilla' ? 'no loader dependency' : `modrinth.index.json dependencies (${runtime.loader})` },
       { field: 'files', source: 'modrinth.index.json files[] (downloads + hashes)' },
-      { field: 'side', source: 'files[].env.server, absent â‡’ unknown' },
+      { field: 'side', source: 'files[].env.server, absent ⇒ unknown' },
       ...(input.slug ? [{ field: 'project', source: `modrinth project ${input.slug}` }] : []),
     ],
     evidenceGrade: 'E2',
@@ -158,7 +158,7 @@ async function readIndexFromArchive(archiveIndex: ArchiveIndex | undefined): Pro
   return parsed ?? null;
 }
 
-/** Validate the mrpack signature keys, per research Â§2 row 3. */
+/** Validate the mrpack signature keys, per research §2 row 3. */
 export function isMrpackIndex(raw: unknown): raw is MrIndex {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return false;
   const candidate = raw as Partial<MrIndex>;

@@ -19,7 +19,7 @@
 
 /**
  * Every command the renderer may invoke through `window.electronAPI.invoke(command, args)`
- * (Electron â†’ `ipcMain.handle('cmd:' + command)`). Keep in sync with the handler map and the
+ * (Electron → `ipcMain.handle('cmd:' + command)`). Keep in sync with the handler map and the
  * renderer adapter; the contract gate enforces all three lists are identical.
  */
 export const COMMANDS = [
@@ -390,7 +390,7 @@ export interface MinecraftVersionDto {
   id: string;
   releaseTime: string;
   versionType: string;
-  /** Additive: Paper support status (`SUPPORTED`/`DEPRECATED`/â€¦); null/absent for non-Paper. */
+  /** Additive: Paper support status (`SUPPORTED`/`DEPRECATED`/…); null/absent for non-Paper. */
   support?: string | null;
 }
 

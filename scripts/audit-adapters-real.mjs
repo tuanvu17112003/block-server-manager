@@ -6,7 +6,7 @@
 //   A3. real .mrpack files cached on disk (sanity: the adapter layer must not regress the working path)
 //
 // For every artefact it records: which adapter claimed it, the canonical recipe, whether validateRecipe
-// passed, and every honest problem found. Nothing is "fixed" here â€” this harness only measures.
+// passed, and every honest problem found. Nothing is "fixed" here — this harness only measures.
 //
 // Usage: node scripts/audit-adapters-real.mjs [--packwiz N] [--skip-cf] [--skip-packwiz] [--skip-mrpack]
 import { createRequire } from 'node:module';
@@ -57,12 +57,12 @@ function describe(recipe) {
   };
 }
 
-/** Run one archive through normalization â†’ detection â†’ resolve, recording everything. */
+/** Run one archive through normalization → detection → resolve, recording everything. */
 async function auditArchive(label, archivePath) {
   const entry = { label, path: archivePath, sizeBytes: fs.statSync(archivePath).size, normalization: null, candidates: null, recipe: null, validation: null, error: null, ok: false };
   let normalized = null;
   try {
-    // C2: research Â§6 step 2 â€” normalize BEFORE detection (unwrap one nested zip, detect wrapper dir).
+    // C2: research §6 step 2 — normalize BEFORE detection (unwrap one nested zip, detect wrapper dir).
     normalized = await normalizeArchive(archivePath);
     entry.normalization = {
       unwrapped: normalized.unwrapped,
@@ -72,7 +72,7 @@ async function auditArchive(label, archivePath) {
       effectiveEntryCount: normalized.index.entries.length,
     };
     if (normalized.unwrapped) {
-      log(`${label}: unwrapped nested zip "${normalized.nestedZip}" (${normalized.outerEntryCount} â†’ ${normalized.index.entries.length} entries)`);
+      log(`${label}: unwrapped nested zip "${normalized.nestedZip}" (${normalized.outerEntryCount} → ${normalized.index.entries.length} entries)`);
     }
     const archive = normalized.index;
     entry.entryCount = archive.entries.length;
@@ -91,7 +91,7 @@ async function auditArchive(label, archivePath) {
     log(`${label}: ${recipe.formatId} | ${recipe.loader} ${recipe.loaderVersion ?? '(unpinned)'} MC ${recipe.mc} | ${recipe.files.length} files, layers ${entry.recipe.overrideLayers.join('+')}`);
   } catch (error) {
     entry.error = error instanceof Error ? error.message : String(error);
-    log(`${label}: FAILED â€” ${entry.error}`);
+    log(`${label}: FAILED — ${entry.error}`);
   } finally {
     if (normalized) cleanupNormalized(normalized);
   }
@@ -123,7 +123,7 @@ try {
   // ---------- A2: real packwiz packs over HTTP ----------
   if (!has('--skip-packwiz')) {
     log(`A2: fetching real packwiz packs over HTTP (target ${PACKWIZ_COUNT})`);
-    // Candidates discovered by GitHub code search `filename:pack.toml "packwiz:1.1.0"` â€” public, fetchable.
+    // Candidates discovered by GitHub code search `filename:pack.toml "packwiz:1.1.0"` — public, fetchable.
     const repos = [
       'GregTech-Odyssey/GregTech-Odyssey',
       'Laskyyy/Create-Astral',
@@ -138,7 +138,7 @@ try {
     for (const repo of repos) {
       const entry = { repo, packFile: null, packToml: null, indexToml: null, metafiles: [], recipe: null, validation: null, error: null, ok: false };
       try {
-        // The pack file may be `pack.toml` or `modpack.toml` â€” discovered from real data, not assumed.
+        // The pack file may be `pack.toml` or `modpack.toml` — discovered from real data, not assumed.
         let packFile = null;
         let packText = null;
         for (const candidate of ['pack.toml', 'modpack.toml', 'Packwiz/1.21/pack.toml', 'Packwiz/26.3/pack.toml', 'Packwiz/1.20.4/pack.toml']) {
@@ -186,7 +186,7 @@ try {
         log(`${repo}: ${recipe.loader} ${recipe.loaderVersion ?? '(unpinned)'} MC ${recipe.mc} | ${recipe.files.length} metafiles (${entry.metafiles.length} fetched)`);
       } catch (error) {
         entry.error = error instanceof Error ? error.message : String(error);
-        log(`${repo}: FAILED â€” ${entry.error}`);
+        log(`${repo}: FAILED — ${entry.error}`);
         report.defects.push({ source: 'packwiz', repo, defect: entry.error });
       }
       report.packwiz.push(entry);

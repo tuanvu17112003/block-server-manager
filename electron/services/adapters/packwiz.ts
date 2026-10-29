@@ -1,6 +1,6 @@
-﻿// packwiz adapter Ã¢â‚¬â€ `pack.toml` + `index.toml` + `*.pw.toml`.
+﻿// packwiz adapter — `pack.toml` + `index.toml` + `*.pw.toml`.
 //
-// Schema taken from packwiz's own struct tags (docs/research/2026-10-29-p1c-format-census.md Ã‚Â§3):
+// Schema taken from packwiz's own struct tags (docs/research/2026-10-29-p1c-format-census.md §3):
 //   pack.toml   : name, author, version, description, pack-format, [index]{file,hash-format,hash},
 //                 [versions]{minecraft,fabric,forge,quilt,...}, [export], [options]
 //   index.toml  : hash-format, [[files]]{file,hash,hash-format,alias,metafile,preserve}
@@ -57,13 +57,13 @@ export function isValidPackwizPack(pack: TomlTable | null): boolean {
   return Boolean(index && tomlString(pack, 'index', 'file'));
 }
 
-/** Map packwiz `side` onto the canonical value. Absent Ã¢â€¡â€™ both Ã¢â€¡â€™ required. */
+/** Map packwiz `side` onto the canonical value. Absent ⇒ both ⇒ required. */
 export function packwizFileSide(side: string | null): { side: FileSide; provenance: string } {
   const value = (side ?? '').trim().toLowerCase();
   if (value === 'client') return { side: 'unsupported', provenance: 'packwiz side="client"' };
   if (value === 'server') return { side: 'required', provenance: 'packwiz side="server"' };
   if (value === 'both') return { side: 'required', provenance: 'packwiz side="both"' };
-  if (value === '') return { side: 'required', provenance: 'packwiz side absent Ã¢â€¡â€™ both' };
+  if (value === '') return { side: 'required', provenance: 'packwiz side absent ⇒ both' };
   // An unknown side value must not be guessed either way.
   return { side: 'unknown', provenance: `packwiz side="${value}" (unrecognised)` };
 }
@@ -466,8 +466,8 @@ export const packwizAdapter: PackAdapter = {
       resolution: [
         { field: 'mc', source: 'pack.toml [versions].minecraft' },
         { field: 'loader', source: loader === 'vanilla' ? 'no loader key in [versions]' : `pack.toml [versions].${loader}` },
-        { field: 'files', source: 'index.toml [[files]] metafile Ã¢â€ â€™ *.pw.toml [download].url' },
-        { field: 'side', source: '*.pw.toml side (both/client/server), absent Ã¢â€¡â€™ both' },
+        { field: 'files', source: 'index.toml [[files]] metafile → *.pw.toml [download].url' },
+        { field: 'side', source: '*.pw.toml side (both/client/server), absent ⇒ both' },
       ],
     evidenceGrade: 'E2',
     evidenceNote: 'a real zipped packwiz pack installed end-to-end through installRecipe with a real CDN download; the HTTP-tree shape is resolve-only until a real tree is installed.',

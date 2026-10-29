@@ -1,4 +1,4 @@
-// Prism / MultiMC adapter â€” `mmc-pack.json`.
+// Prism / MultiMC adapter — `mmc-pack.json`.
 //
 // Schema read from Prism's own serializer (`launcher/minecraft/PackProfile.cpp`, commit 1814088):
 //   { formatVersion: 1, components: [ { uid, version, dependencyOnly?, important?, cachedName?, cachedVolatile? } ] }
@@ -11,7 +11,7 @@
 // Honest limitation established during the census: **Prism cannot export a server pack.** Its export menu only
 // offers zip / .mrpack / CurseForge pack. So an `mmc-pack.json` archive is a *client instance*: the loader and
 // MC version are authoritative, but the payload is the client's `.minecraft` tree. Converting it to a server
-// means using that tree as an override layer, which is inference â€” and it is reported as a warning, not sold as
+// means using that tree as an override layer, which is inference — and it is reported as a warning, not sold as
 // a recommended path.
 import { appError } from '../store';
 import {
@@ -28,7 +28,7 @@ import {
 /** `mmc-pack.json` format version this adapter understands (Prism hard-codes 1). */
 export const MMC_FORMAT_VERSION = 1;
 
-/** Component uid â†’ loader family. `net.minecraft` is handled separately (it is the MC version). */
+/** Component uid → loader family. `net.minecraft` is handled separately (it is the MC version). */
 const MMC_LOADERS: readonly { uid: string; loader: LoaderFamily }[] = [
   { uid: 'net.neoforged', loader: 'neoforge' },
   { uid: 'net.minecraftforge', loader: 'forge' },

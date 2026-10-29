@@ -1,4 +1,4 @@
-﻿// Plain server zip adapter â€” the last-resort format: a zip with no pack manifest at all.
+﻿// Plain server zip adapter — the last-resort format: a zip with no pack manifest at all.
 //
 // Real shapes (from the CurseForge work, docs/audit/11,12): a zip containing `mods/`, `config/`, optionally
 // `libraries/`, `run.sh` / `run.bat` / `startserver.sh`, `user_jvm_args.txt`, or a `forge-*-installer.jar`.
