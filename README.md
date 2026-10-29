@@ -7,6 +7,26 @@ Create and manage Minecraft servers (Vanilla, Paper, Fabric, Forge, NeoForge), i
 CurseForge modpacks with a client-mod defense, and operate them: console, players, worlds, backups,
 metrics and content management.
 
+## Supported modpack formats
+
+Formats are described by an **evidence grade** (`docs/audit/19`): how strongly the support is *proven*, not how
+good the format is. Only `E1`/`E2` are presented as verified in the UI; a lower grade is shown as unproven rather
+than hidden, and a format whose plan downloads no files is shown as a launcher instance rather than "verified".
+
+| Format | Grade | What the grade rests on |
+|---|---|---|
+| **Modrinth** `.mrpack` | E2 | Real packs installed end-to-end through the adapter layer with a verified boot |
+| **CurseForge** (key mode + author server pack) | E2 | Installed end-to-end with verified boots (part of the 12-pack matrix) |
+| **FTB** | E2 | Installed end-to-end against the live API |
+| **packwiz** (archive; HTTP tree) | E2 (archive) | A real zipped pack installed end-to-end; HTTP-tree shape resolves |
+| **Prism / MultiMC** instance | E2 (metadata) | A real third-party instance export resolves correctly; a Prism instance carries no server payload, so the UI labels it as a launcher instance |
+| **ATLauncher** instance | E2 (metadata) | A real user-published `instance.json` is recognised and distinguished from FTB |
+| **ServerPackCreator** output | E3 | Real 1 GB archive resolves from its declared manifest |
+| **Bare server zip** | E3 | Resolves and classifies; plans no downloads |
+
+Deferred with recorded reasons (`scripts/conformance-waivers.json`): MCBBS, HMCL server, GDLauncher, Technic.
+Supplying one of these produces an explanation naming the format and the reason, not a generic error.
+
 ## Requirements
 
 - Windows 10/11 x64 (primary target), Node.js 20+ and npm.
@@ -33,9 +53,17 @@ $env:VITE_MOCK_BACKEND='1'; npm run dev:web
 
 ```powershell
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue   # agent/DSH shells only
-npm run verify       # build + unit + contract + services + lifecycle + management + IPC + real-UI E2E
+npm run verify       # 15 steps: build, unit, conformance, adapter audit, real-artefact E2 checks, encoding,
+                     #   contract, services, lifecycle, management, IPC, real-UI E2E
 npm run verify:full  # adds the live engine E2E install matrix (network + Java)
 ```
+
+Two of those steps exist because unit tests cannot catch their failure mode:
+
+- **`conformance`** (`scripts/conformance-spec.mjs`) reads the design document and fails when the code disagrees
+  with it, attributing every finding to a `file:line`.
+- **`encoding`** (`scripts/check-encoding.mjs`) fails when a source file contains double-encoded UTF-8. Mojibake
+  inside a string literal compiles and passes every test, so only an explicit check catches it.
 
 Layers, artifacts and manual acceptance: [docs/verification.md](docs/verification.md). UI E2E writes
 screenshots under `artifacts/<timestamp>/`.
@@ -92,6 +120,9 @@ legacy/src-tauri/  ARCHIVED Tauri/Rust reference (not built; parity reference)
 - [Packaging guide (NSIS)](docs/packaging.md) · [Security audit](docs/audit/08-security-audit.md)
 - [Architecture overview](docs/architecture/overview.md) · [ADRs](docs/architecture/adr/)
 - [Audit reports (evidence + parity)](docs/audit/01-backend-runtime.md)
+- [Deviations register — 47 recorded deviations](docs/audit/24-deviations-register.md)
+- [Final synthesis — what was actually broken, ranked](docs/audit/25-final-synthesis-bottlenecks.md)
+- [Evidence standard (E1–E4 grades)](docs/audit/19-stop-and-analyse-evidence-standard.md)
 
 ## Troubleshooting
 
