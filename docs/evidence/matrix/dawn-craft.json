@@ -8,8 +8,8 @@
     "java": 17,
     "route": "A/B"
   },
-  "startedAt": "2026-10-29T07:11:19.825Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T06-56-29-547Z\\dawn-craft",
+  "startedAt": "2026-10-29T15:50:59.390Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T15-29-56-412Z\\dawn-craft",
   "sourceKind": "curseforgeProject 829758 (official API key mode)",
   "preview": {
     "sourceName": "DawnCraft - 2.0.16_hf",
@@ -40,7 +40,7 @@
       {
         "stage": "verify-boot",
         "outcome": "complete",
-        "detail": "1 auto-fix(es) in 2 round(s)"
+        "detail": "first boot"
       },
       {
         "stage": "publish",
@@ -55,32 +55,22 @@
       {
         "path": "0 client-only",
         "outcome": "skipped-client-only"
-      },
-      {
-        "path": "mods/ItemPhysic_v1.4.23_mc1.18.2.jar",
-        "outcome": "disabled-by-autofix",
-        "detail": "round 1: disabled itemphysic"
       }
     ],
-    "warningCount": 1,
-    "warnings": [
-      "auto-fix applied 1 change(s) across 2 boot round(s) before verification passed"
-    ],
+    "warningCount": 0,
+    "warnings": [],
     "errors": []
   },
   "published": {
-    "serverId": "d02f5ca3-0183-4fc9-ba36-997de8e2e554",
-    "jarsEnabled": 249,
-    "jarsDisabled": 2,
-    "disabled": [
-      "CreativeCore_FORGE_v2.6.17_mc1.18.2.jar",
-      "ItemPhysic_v1.4.23_mc1.18.2.jar"
-    ],
+    "serverId": "df21aeae-ae72-4fe0-b497-771a2c2288ca",
+    "jarsEnabled": 251,
+    "jarsDisabled": 0,
+    "disabled": [],
     "verifiedBoot": "complete",
-    "verifyDetail": "1 auto-fix(es) in 2 round(s)"
+    "verifyDetail": "first boot"
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T07:14:31.314Z",
-  "durationSeconds": 191.5
+  "finishedAt": "2026-10-29T15:54:09.370Z",
+  "durationSeconds": 190
 }

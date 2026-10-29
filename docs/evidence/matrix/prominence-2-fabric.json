@@ -7,8 +7,8 @@
     "loader": "fabric",
     "java": 17
   },
-  "startedAt": "2026-10-29T07:00:33.842Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T06-56-29-547Z\\prominence-2-fabric",
+  "startedAt": "2026-10-29T15:34:48.229Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T15-29-56-412Z\\prominence-2-fabric",
   "sourceKind": "modrinthRemote (project EGs3lC8D \"Prominence™ II: Hasturian Era\", version saJCoKDZ)",
   "preview": {
     "sourceName": "Prominence™ II: Hasturian Era",
@@ -92,7 +92,7 @@
       "mods/blur-3.1.0.jar: community exclude: blur",
       "mods/entity_model_features_1.20.1-fabric-3.0.12.jar: community exclude: entity_model_features",
       "mods/ae2-emi-crafting-1.3.1.jar: community exclude: ae2-emi-crafting",
-      "mods/welcomescreen-fabric-1.0.0-1.20.1.jar: learned: auto: Prominence™ II: Hasturian Erav crashed with this mod loaded (welcomescreen-fabric-1.0.0-1.20.1.jar)",
+      "mods/welcomescreen-fabric-1.0.0-1.20.1.jar: learned[welcomescreen] auto: Prominence™ II: Hasturian Erav crashed with this mod loaded (welcomescreen-fabric-1.0.0-1.20.1.jar)",
       "mods/sorted_enchantments-2.0.0+1.19.3+fabric.jar: community exclude: sorted_enchantments",
       "mods/BHMenu-Fabric-1.20.1-2.4.2.jar: community exclude: BHMenu",
       "mods/mousetweaks-x-accessories-fix-1.4.0.jar: community exclude: MouseTweaks",
@@ -106,7 +106,7 @@
       "mods/Searchables-fabric-1.20.1-1.0.3.jar: community exclude: Searchables",
       "mods/distraction_free_recipes-fabric-1.2.1-1.20.1.jar: community exclude: distraction_free_recipes",
       "mods/fallingleaves-1.15.6+1.20.1.jar: community exclude: fallingleaves",
-      "mods/LegendaryTooltips-1.20.1-fabric-1.4.5.jar: learned: auto: DawnCraft crashed with this mod loaded (LegendaryTooltips-1.18.2-1.3.1.jar)",
+      "mods/LegendaryTooltips-1.20.1-fabric-1.4.5.jar: learned[legendarytooltips] auto: DawnCraft crashed with this mod loaded (LegendaryTooltips-1.18.2-1.3.1.jar)",
       "mods/colorwheel_patcher-fabric-1.0.5+mc1.20.1.jar: community exclude: colorwheel",
       "mods/indium-1.0.36+mc1.20.1.jar: community exclude: indium",
       "mods/ItemBorders-1.20.1-fabric-1.2.2.jar: community exclude: ItemBorders",
@@ -119,13 +119,12 @@
     "errors": []
   },
   "published": {
-    "serverId": "e6a41241-20fe-4c01-9c6f-998f81de5379",
-    "jarsEnabled": 348,
-    "jarsDisabled": 15,
+    "serverId": "3cb5885d-3983-4fe6-9950-d12ff5c9328f",
+    "jarsEnabled": 349,
+    "jarsDisabled": 14,
     "disabled": [
       "attribute_tooltip_order-1.0.1+1.20.1.jar",
       "chipped-fabric-1.20.1-3.0.7.jar",
-      "class_nametags-1.0.1+1.20.1.jar",
       "clientfixes-fabric-1.20.1-1.0.jar",
       "drb_formatting-1.0.0+1.20.1.jar",
       "icaruswings_transmog_compat-1.0.1.jar",
@@ -144,6 +143,6 @@
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T07:04:15.172Z",
-  "durationSeconds": 221.3
+  "finishedAt": "2026-10-29T15:39:36.048Z",
+  "durationSeconds": 287.8
 }

@@ -8,8 +8,8 @@
     "java": 8,
     "route": "A/B"
   },
-  "startedAt": "2026-10-29T07:08:10.188Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T06-56-29-547Z\\rlcraft",
+  "startedAt": "2026-10-29T15:46:29.734Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T15-29-56-412Z\\rlcraft",
   "sourceKind": "curseforgeProject 285109 (official API key mode)",
   "preview": {
     "sourceName": "RLCraft 1.12.2 - Release v2.9.3.zip",
@@ -62,7 +62,7 @@
     "errors": []
   },
   "published": {
-    "serverId": "cbb1ef0e-0473-41df-803d-b8569e1aa829",
+    "serverId": "088544b9-44d5-428a-977f-c6ff89c13caf",
     "jarsEnabled": 178,
     "jarsDisabled": 0,
     "disabled": [],
@@ -71,6 +71,6 @@
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T07:09:24.005Z",
-  "durationSeconds": 73.8
+  "finishedAt": "2026-10-29T15:48:21.024Z",
+  "durationSeconds": 111.3
 }

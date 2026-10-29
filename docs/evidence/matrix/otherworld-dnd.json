@@ -8,8 +8,8 @@
     "java": 17,
     "route": "A/B"
   },
-  "startedAt": "2026-10-29T07:14:32.325Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T06-56-29-547Z\\otherworld-dnd",
+  "startedAt": "2026-10-29T15:54:10.480Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T15-29-56-412Z\\otherworld-dnd",
   "sourceKind": "curseforgeProject 1418133 (official API key mode)",
   "preview": {
     "sourceName": "Otherworld v8 HF2",
@@ -62,7 +62,7 @@
     "errors": []
   },
   "published": {
-    "serverId": "d9e15d2f-f29f-4410-8890-f67130a3495e",
+    "serverId": "68db177c-b664-4ce8-a122-72686b36fd5e",
     "jarsEnabled": 356,
     "jarsDisabled": 0,
     "disabled": [],
@@ -71,6 +71,6 @@
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T07:18:10.255Z",
-  "durationSeconds": 217.9
+  "finishedAt": "2026-10-29T15:58:08.324Z",
+  "durationSeconds": 237.8
 }

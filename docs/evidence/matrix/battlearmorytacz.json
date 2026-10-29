@@ -7,8 +7,8 @@
     "loader": "forge",
     "java": 17
   },
-  "startedAt": "2026-10-29T06:58:56.103Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T06-56-29-547Z\\battlearmorytacz",
+  "startedAt": "2026-10-29T15:32:57.729Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T15-29-56-412Z\\battlearmorytacz",
   "sourceKind": "modrinthRemote (project rQiXwLhB \"BattleArmory TACZ\", version TX0XBjIG)",
   "preview": {
     "sourceName": "BattleArmory TACZ",
@@ -68,20 +68,20 @@
     "warningCount": 18,
     "warnings": [
       "mods/BadOptimizations-2.4.1-1.20.1.jar: community exclude: BadOptimizations",
-      "mods/chatanimation-forge-1.3.0+mc1.20.1.jar: hand-override: chatanimation",
-      "mods/combatsense-1.0.1.jar: hand-override: combatsense",
+      "mods/chatanimation-forge-1.3.0+mc1.20.1.jar: hand-override[chatanimation]",
+      "mods/combatsense-1.0.1.jar: hand-override[combatsense]",
       "mods/entityculling-forge-1.10.5-mc1.20.1.jar: community exclude: entityculling",
       "mods/fast-ip-ping-v1.0.11-mc1.20.4-forge.jar: community exclude: fast-ip-ping",
-      "mods/ForgeConfigScreens-v8.0.2-1.20.1-Forge.jar: hand-override: forgeconfigscreens",
+      "mods/ForgeConfigScreens-v8.0.2-1.20.1-Forge.jar: hand-override[forgeconfigscreens]",
       "mods/ImmediatelyFast-Forge-1.5.5+1.20.4.jar: community exclude: ImmediatelyFast",
-      "mods/ItemPhysicLite_FORGE_v1.6.11_mc1.20.1.jar: hand-override: itemphysiclite",
-      "mods/jecharacters-1.20.1-forge-4.6.9.jar: hand-override: jecharacters",
+      "mods/ItemPhysicLite_FORGE_v1.6.11_mc1.20.1.jar: hand-override[itemphysiclite]",
+      "mods/jecharacters-1.20.1-forge-4.6.9.jar: hand-override[jecharacters]",
       "mods/MouseTweaks-forge-mc1.20.1-2.25.1.jar: community exclude: MouseTweaks",
       "mods/ShoulderSurfing-Forge-1.20.1-5.0.10.jar: community exclude: ShoulderSurfing",
       "mods/skinlayers3d-forge-1.11.2-mc1.20.1.jar: community exclude: skinlayers3d",
       "mods/YeetusExperimentus-Forge-2.3.0-build.4+mc1.20.1.jar: community exclude: YeetusExperimentus",
-      "mods/[平滑转移] smoothswapping-0.9.2-1.20.1-forge.jar: hand-override: smoothswapping",
-      "mods/[异步粒子] AsyncParticles-20.1.3.2+1.20.1.jar: hand-override: asyncparticles",
+      "mods/[平滑转移] smoothswapping-0.9.2-1.20.1-forge.jar: hand-override[smoothswapping]",
+      "mods/[异步粒子] AsyncParticles-20.1.3.2+1.20.1.jar: hand-override[asyncparticles]",
       "mods/mekalus-mc1.20.1-1.8.0.1.jar: excluded",
       "mods/[钌] ruok-forge_1.20.1_Pre-Release_6-1.7.4.jar: excluded",
       "auto-fix applied 1 change(s) across 2 boot round(s) before verification passed"
@@ -89,18 +89,15 @@
     "errors": []
   },
   "published": {
-    "serverId": "b1c4f593-5fa0-4670-9fa1-d4fbf1415c34",
-    "jarsEnabled": 60,
-    "jarsDisabled": 20,
+    "serverId": "5b9eb4bb-d3f8-4e19-a6b5-34b5df4071b3",
+    "jarsEnabled": 62,
+    "jarsDisabled": 18,
     "disabled": [
       "appleskin-forge-mc1.20.1-2.5.1.jar",
       "chloride-FORGE-mc1.20.1-v1.8.1.jar",
       "CustomSkinLoader_Universal-15.0.1.jar",
-      "embeddium-0.3.31+mc1.20.1.jar",
-      "emi-1.1.24+1.20.1+forge.jar",
       "legendaryblockentities-0.10.0.jar",
       "libIPN-forge-1.20-4.0.2.jar",
-      "mru-1.0.33+1.20.1-forge.jar",
       "particle_core-0.3.3+1.20.1+forge.jar",
       "tp_shooting-forge-1.20.1-tacz1.1.8-ssr5-6.0.1.jar",
       "[Lambd的动态光源] lambdynamiclights-4.4.0+1.20.1.jar",
@@ -112,13 +109,14 @@
       "[游戏内输入法续更版 ／ 游戏内输入法 Forge 重置版] ContingameIME-1.0.7-1.20.1-forge.jar",
       "[物品栏HUD+] inventoryhud.forge.1.20.1-3.4.26.jar",
       "[自动汉化更新] I18nUpdateMod-3.7.0-all.jar",
-      "[自定义局域网联机] lanserverproperties-1.11.1-forge.jar"
+      "[自定义局域网联机] lanserverproperties-1.11.1-forge.jar",
+      "[试验假人] dummmmmmy-1.20-2.0.12-forge.jar"
     ],
     "verifiedBoot": "complete",
     "verifyDetail": "1 auto-fix(es) in 2 round(s)"
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T07:00:33.018Z",
-  "durationSeconds": 96.9
+  "finishedAt": "2026-10-29T15:34:47.211Z",
+  "durationSeconds": 109.5
 }

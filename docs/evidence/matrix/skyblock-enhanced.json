@@ -6,8 +6,8 @@
     "loader": "fabric",
     "java": 25
   },
-  "startedAt": "2026-10-29T06:56:29.548Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T06-56-29-547Z\\skyblock-enhanced",
+  "startedAt": "2026-10-29T15:29:56.413Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T15-29-56-412Z\\skyblock-enhanced",
   "sourceKind": "modrinthRemote (project e0oMrxjp \"SkyBlock Enhanced\", version C4s9ZcoW)",
   "preview": {
     "sourceName": "SkyBlock Enhanced",
@@ -61,7 +61,7 @@
     ],
     "warningCount": 16,
     "warnings": [
-      "mods/AsyncParticles-26.2.2.11+26.2.jar: hand-override: asyncparticles",
+      "mods/AsyncParticles-26.2.2.11+26.2.jar: hand-override[asyncparticles]",
       "mods/bobby-5.2.15+mc26.2.jar: community exclude: bobby",
       "mods/Controlling-fabric-26.2-26.2.4.jar: community exclude: controlling",
       "mods/CrashAssistant-fabric-26.2-26.3-1.11.14.jar: community exclude: CrashAssistant",
@@ -81,7 +81,7 @@
     "errors": []
   },
   "published": {
-    "serverId": "50069fb8-e3b1-4a86-a660-1c6c8867d8b5",
+    "serverId": "0632e128-a251-4962-84ab-4878edcf4467",
     "jarsEnabled": 13,
     "jarsDisabled": 2,
     "disabled": [
@@ -93,6 +93,6 @@
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T06:56:56.617Z",
-  "durationSeconds": 27.1
+  "finishedAt": "2026-10-29T15:30:20.392Z",
+  "durationSeconds": 24
 }
