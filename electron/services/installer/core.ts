@@ -1,4 +1,4 @@
-// Installer engine — TypeScript port of the proven spike (H:\TestAI\modrinth-curseforge\sample\core.mjs).
+﻿// Installer engine â€” TypeScript port of the proven spike (H:\TestAI\modrinth-curseforge\sample\core.mjs).
 // Live-validated there: 12/12 packs, 4-layer client-mod defense, old-Forge 1.12.2/Java 8,
 // Mojang-metadata java mapping, CF keyless + key-mode. Keep this file logic-identical; changes
 // need re-validation against the spike's acceptance packs.
@@ -98,7 +98,7 @@ export function isHostAllowed(host: string, allowlist: HostAllowlist): boolean {
 export interface TrustedFetchOptions extends RequestInit { maxRedirects?: number }
 
 /**
- * Fetch with provider policy: HTTPS only, manual redirect following (≤5 hops by default) where
+ * Fetch with provider policy: HTTPS only, manual redirect following (â‰¤5 hops by default) where
  * EVERY hop must be one of `allowedHosts`; a redirect to any other host/protocol is rejected.
  * Network errors/5xx are retried up to 3 times (never on abort).
  */
@@ -539,7 +539,7 @@ export async function extractZip(zipPath: string, destDir: string, opts: Extract
 // ---------- java ----------
 interface Manifest { versions: { id: string; url: string }[] }
 let mcJavaCache: Manifest | null = null;
-// Mojang metadata first (MC 26.x has no 1.x shape — live-proven on SkyBlock Enhanced); D-08 table as fallback.
+// Mojang metadata first (MC 26.x has no 1.x shape â€” live-proven on SkyBlock Enhanced); D-08 table as fallback.
 export async function requiredJavaMajor(mc: string, opts: Cancelable = {}): Promise<number> {
   try {
     if (!mcJavaCache) {
@@ -672,13 +672,13 @@ export async function runInstaller(javaExe: string, installerJar: string, args: 
     }
     throwIfAborted(opts.signal);
     if (code === 0) return;
-    // installers are re-runnable; transient network failures (SSL/EOF mid-download) get one retry (§19.2)
+    // installers are re-runnable; transient network failures (SSL/EOF mid-download) get one retry (Â§19.2)
     if (attempt >= attempts) throw new Error(`${what} installer failed (exit ${code}):\n` + tail.split('\n').slice(-15).join('\n'));
     await abortableSleep(5000, opts.signal);
   }
 }
 // ---------- neoforge install coordinates ----------
-// Documented MC→artifact mapping only (ADR-0007; never numeric inference):
+// Documented MCâ†’artifact mapping only (ADR-0007; never numeric inference):
 // - MC 1.20.1 keeps the legacy `net/neoforged/forge` artifact with a `1.20.1-47.x` version.
 // - MC 1.20.2+ uses `net/neoforged/neoforge` with the full modern version and no MC prefix
 //   (e.g. 21.1.80 for MC 1.21.1, 20.4.253 for 1.20.4, 26.3.0.99 for MC 26.3).
@@ -883,7 +883,7 @@ export async function installLoader(kind: LoaderKind, dir: string, mc: string, v
     }
     log(`[paper] ${mc}: installing build ${artifact.buildId === -1 ? '?' : artifact.buildId} (${artifact.channel || 'unknown channel'}) ${artifact.name}`);
     await download(artifact.url, path.join(dir, 'server.jar'), { size: artifact.size, sha256: artifact.sha256, allowedHosts: LOADER_ALLOWED_HOSTS, signal });
-    log(`[paper] ${mc}: server.jar verified (${artifact.size} bytes, sha256 ${artifact.sha256.slice(0, 12)}…)`);
+    log(`[paper] ${mc}: server.jar verified (${artifact.size} bytes, sha256 ${artifact.sha256.slice(0, 12)}â€¦)`);
     return;
   }
   if (kind === 'vanilla') {
@@ -975,7 +975,7 @@ export function launchCommand(dir: string, javaExe: string): LaunchCommand {
   for (const jar of ['fabric-server-launch.jar', 'quilt-server-launch.jar']) {
     if (existsSync(path.join(dir, jar))) return { exe: javaExe, args: ['-jar', jar, 'nogui'] };
   }
-  // Old Forge (≤1.12.x): --installServer yields a runnable jar at the dir root, with or without "-universal".
+  // Old Forge (â‰¤1.12.x): --installServer yields a runnable jar at the dir root, with or without "-universal".
   const uni = readdirSync(dir).find(f => /^forge-.*\.jar$/i.test(f) && !/installer|client|sources|javadoc|launcher/i.test(f));
   if (uni) return { exe: javaExe, args: ['-jar', uni, 'nogui'] };
   if (existsSync(path.join(dir, 'server.jar'))) return { exe: javaExe, args: ['-jar', 'server.jar', 'nogui'] };
@@ -1055,7 +1055,7 @@ export function analyzeFailure(tail: string[]): { disable: string[]; add: string
   for (const m of text.matchAll(/Missing mandatory dependencies[^\]]*\[([^\]]+)\]/gi)) {
     for (const d of m[1].split(',')) { const id = d.trim().split(/[:@\s]/)[0]; if (id) add.add(id); }
   }
-  // Mixin-instrumented frames: `handler$<hash>$<mixinConfig>$<namespace>$<method>` — namespace names the mod.
+  // Mixin-instrumented frames: `handler$<hash>$<mixinConfig>$<namespace>$<method>` â€” namespace names the mod.
   for (const m of text.matchAll(/\b(?:handler|call)\$\w+\$([a-z0-9_-]+)\$/gi)) disable.add(m[1]);
   return { disable: [...disable], add: [...add] };
 }
@@ -1114,14 +1114,124 @@ export async function startWithAutoFix(dir: string, cmd: LaunchCommand, opts: { 
 }
 
 // ---------- L2: jar self-declaration scan ----------
+
+/**
+ * Dependency modIds that ARE the platform rather than another mod.
+ * Quoted from ServerPackCreator's `ForgeTomlScanner.kt:63-68` (`neoForgeMinecraft`): a mod declaring a `side`
+ * on one of these is stating its OWN sideness, not a dependency's.
+ */
+const FORGE_PLATFORM_MODIDS: readonly RegExp[] = [/^forge$/i, /^neoforge$/i, /^minecraft$/i];
+
+interface ForgeDependencyEntry { modId: string; side: string | null; type: string | null; optional: boolean }
+
+/**
+ * Parse the `[[dependencies.<modid>]]` blocks of a `mods.toml` into entries.
+ *
+ * The previous implementation scanned the whole file with a regex for `side = CLIENT|SERVER|BOTH` and treated a
+ * jar as client-only when EVERY occurrence was CLIENT. Research Â§3.1 showed that predicate is wrong: dependency
+ * blocks for OTHER mods also carry `side=`, so it both misses real client mods (a client mod with an unrelated
+ * BOTH dependency line) and can mis-disable server mods.
+ *
+ * ServerPackCreator's rule (`ForgeTomlScanner.kt:114-152`) is narrower and is what this implements:
+ *   - only `[[dependencies.<thisMod>]]` entries are considered;
+ *   - `type = "incompatible"` entries are skipped entirely;
+ *   - an entry whose modId is forge/neoforge/minecraft states THIS mod's sideness;
+ *   - if no such platform entry exists, the mod is treated as SERVER;
+ *   - any parse problem â‡’ SERVER (fail toward keeping the mod).
+ *
+ * This is a small hand parser rather than a TOML dependency because `mods.toml` is an untrusted file inside a
+ * mod jar and the subset needed here is four keys.
+ */
+export function parseForgeDependencies(text: string): Map<string, ForgeDependencyEntry[]> {
+  const byMod = new Map<string, ForgeDependencyEntry[]>();
+  let inDependencies = false;
+  let currentOwner: string | null = null;
+  let entry: Partial<ForgeDependencyEntry> | null = null;
+
+  const flushEntry = (): void => {
+    if (!entry || currentOwner === null) { entry = null; return; }
+    if (typeof entry.modId === 'string' && entry.modId.trim() !== '') {
+      // Push into the owner's array in the map (not a local array, which would be discarded).
+      const bucket = byMod.get(currentOwner) ?? [];
+      bucket.push({
+        modId: entry.modId.trim(),
+        side: typeof entry.side === 'string' ? entry.side : null,
+        type: typeof entry.type === 'string' ? entry.type : null,
+        optional: entry.optional === true,
+      });
+      byMod.set(currentOwner, bucket);
+    }
+    entry = null;
+  };
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.replace(/#.*$/, '').trim();
+    if (line === '') continue;
+
+    // `[[dependencies.<modid>]]` (array of tables) or `[dependencies]` (plain table).
+    const tableHeader = line.match(/^\[\[?\s*([^\]]+?)\s*\]\]?$/);
+    if (tableHeader) {
+      // Flush the previous dependency entry before starting a new table; a new [[...]] header begins a new entry.
+      flushEntry();
+      const path = tableHeader[1]!.split('.').map(part => part.trim().replace(/^["']|["']$/g, ''));
+      inDependencies = path[0] === 'dependencies' && path.length >= 2;
+      currentOwner = inDependencies ? path[1]! : null;
+      if (inDependencies && currentOwner !== null && !byMod.has(currentOwner)) byMod.set(currentOwner, []);
+      entry ??= {};
+      continue;
+    }
+    if (!inDependencies) continue;
+
+    const assignment = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*(.+)$/);
+    if (!assignment) continue;
+    const key = assignment[1]!.trim();
+    const rawValue = assignment[2]!.trim();
+    if (key === 'modId' || key === 'side' || key === 'type') {
+      entry ??= {};
+      entry[key] = rawValue.replace(/^["']|["']$/g, '');
+    } else if (key === 'mandatory') {
+      entry ??= {};
+      entry.optional = rawValue === 'false';
+    }
+  }
+  flushEntry();
+  return byMod;
+}
+
+/**
+ * Decide whether a Forge/NeoForge jar declares itself client-only, using ServerPackCreator's platform-dependency
+ * rule (research Â§3.1). Fails toward SERVER: no dependencies, no platform entry, or unparseable text â‡’ not client.
+ */
+export function forgeTomlIsClientOnly(text: string): { client: boolean; reason: string | null } {
+  let byMod: Map<string, ForgeDependencyEntry[]>;
+  try {
+    byMod = parseForgeDependencies(text);
+  } catch {
+    return { client: false, reason: null };
+  }
+  // The mod's own id is the owner with a dependencies block. If several exist, examine each.
+  for (const [, entries] of byMod) {
+    const platformEntries = entries.filter(entry =>
+      entry.type?.toLowerCase() !== 'incompatible'
+      && FORGE_PLATFORM_MODIDS.some(pattern => pattern.test(entry.modId)));
+    if (platformEntries.length === 0) continue;
+    // A single CLIENT demand on the platform marks the mod clientside; anything else keeps it SERVER.
+    if (platformEntries.every(entry => (entry.side ?? '').toUpperCase() === 'CLIENT')) {
+      return { client: true, reason: `mods.toml platform dependency side=CLIENT (${platformEntries.length})` };
+    }
+    return { client: false, reason: null };
+  }
+  return { client: false, reason: null };
+}
+
 export async function scanJarSideness(jarPath: string): Promise<{ client: boolean; reasons: string[] }> {
   const reasons: string[] = [];
   try {
     const toml = await readZipEntry(jarPath, 'META-INF/mods.toml').catch(() => null)
       ?? await readZipEntry(jarPath, 'META-INF/neoforge.mods.toml').catch(() => null);
     if (toml) {
-      const sides = [...toml.toString('utf8').matchAll(/side\s*=\s*["']?(CLIENT|SERVER|BOTH)["']?/gi)].map(m => m[1].toUpperCase());
-      if (sides.length && sides.every(s => s === 'CLIENT')) reasons.push(`mods.toml all sides CLIENT (${sides.length})`);
+      const verdict = forgeTomlIsClientOnly(toml.toString('utf8'));
+      if (verdict.client && verdict.reason) reasons.push(verdict.reason);
     }
   } catch { /* unreadable */ }
   try {
@@ -1152,13 +1262,13 @@ export async function applyJarSideness(modsDir: string, protect: Set<string> = n
     mkdirSync(disabledDir, { recursive: true });
     renameSync(path.join(modsDir, jar), path.join(disabledDir, jar));
     out.push({ jar, reasons });
-    log(`[L2] ${jar} → mods-disabled (${reasons.join('; ')})`);
+    log(`[L2] ${jar} â†’ mods-disabled (${reasons.join('; ')})`);
   }
   return out;
 }
 
 // ---------- EULA / properties ----------
-// EULA is written ONLY on explicit user consent (C-3/M-6) — the caller must gate this.
+// EULA is written ONLY on explicit user consent (C-3/M-6) â€” the caller must gate this.
 export function writeEula(dir: string): void {
   if (!existsSync(path.join(dir, 'eula.txt'))) {
     writeFileSync(path.join(dir, 'eula.txt'), '# accepted in Block Server Manager\neula=true\n');
@@ -1170,3 +1280,4 @@ export function ensureServerProperties(dir: string, port: number): void {
   const text = readFileSync(f, 'utf8');
   if (!/^server-port=/m.test(text)) writeFileSync(f, text + `\nserver-port=${port}\n`);
 }
+

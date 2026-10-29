@@ -41,12 +41,21 @@ export function makeCuratedResolver(opts: { platform: 'modrinth' | 'curseforge';
   const excludes = [...(itzg.globalExcludes ?? []), ...(opts.packSlug ? itzg.modpacks?.[opts.packSlug]?.excludes ?? [] : [])];
 
   const resolve = (filePath: string, declared: string): CuratedVerdict => {
-    const n = norm(filePath);
-    const hitHand = hand.find(o => n.includes(norm(o.match))
-      && (!o.unlessPresent || ![...present].some(p => p.includes(norm(o.unlessPresent ?? '')))));
-    if (hitHand) return { env: hitHand.server, why: `hand-override: ${hitHand.match}`, protect: hitHand.server === 'required' };
-    const hitLearned = learned.find(o => n.includes(norm(o.match)));
-    if (hitLearned) return { env: hitLearned.server, why: `learned: ${hitLearned.why ?? ''}`, protect: false };
+    // Anchored matching for the hand and learned lists (research §7 gap 5).
+    //
+    // These previously used bare `n.includes(norm(match))`, which is the itzg `figura`/`configurable` defect
+    // class (itzg issue #4234: the deny pattern `figura` substring-matched `configurable` and silently dropped a
+    // server-required mod across 24/24 paths with no log line). A hand or learned entry names a mod, so it must
+    // match a whole path segment; `entryTest` already encodes those boundary rules and the `/regex/` form, so it
+    // is reused rather than duplicating a second matcher.
+    const hitHand = hand.find(o => entryTest(o.match, filePath)
+      && (!o.unlessPresent || ![...present].some(p => entryTest(o.unlessPresent ?? '', p))));
+    if (hitHand) {
+      // Rule id in the reason so every exclusion is auditable and revocable.
+      return { env: hitHand.server, why: `hand-override[${hitHand.match}]`, protect: hitHand.server === 'required' };
+    }
+    const hitLearned = learned.find(o => entryTest(o.match, filePath));
+    if (hitLearned) return { env: hitLearned.server, why: `learned[${hitLearned.match}] ${hitLearned.why ?? ''}`.trim(), protect: false };
     const hitForce = force.find(e => entryTest(e, filePath));
     if (hitForce !== undefined) return { env: 'required', why: `community force-include: ${String(hitForce)}`, protect: true };
     const hitEx = excludes.find(e => entryTest(e, filePath));
