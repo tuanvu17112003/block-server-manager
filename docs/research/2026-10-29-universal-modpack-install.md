@@ -178,9 +178,10 @@ the **same four stages**, with format only a parser at stage 1:
 
 Two decisive facts follow:
 
-- **Only mrpack-install and our app read `server-overrides/`.** Prism, HMCL's mrpack importer and
-  ATLauncher's mrpack path read `overrides/` (+ `client-overrides/`) and **silently drop the server layer**
-   — a correctness bug in those tools that we do not have.
+- **`server-overrides/` is honoured by mrpack-install, mc-image-helper and ATLauncher; packwiz writes it;
+  Prism and HMCL ignore it.** (An earlier draft of this file claimed only mrpack-install reads it — that was
+  wrong; the offline full-repo grep in [2026-10-29-claim-verification.md](2026-10-29-claim-verification.md)
+  §7 corrects it. Our app is in the correct majority, not unique.)
 - **None of the five validates `env.server` against what the jar actually declares.** They trust the
   declared flag. Our L2 jar self-declaration scan plus the L3 boot loop is *strictly more capable* than any
   tool in this survey on exactly the axis that matters for unseen packs. That is the asset to build on, not
@@ -411,19 +412,38 @@ support this shape yet" from "we patched this one pack".
    server packs… you must still test them."* Our promise should be: **every pack is either installed and
    verified, or rejected with a rule-attributed reason** — never silently wrong.
 
-### Claims from this research that are explicitly NOT verified
-- `CF_IGNORE_JAVA_VERSION`, `CF_SKIP_UPGRADE`, `MODPACK_TYPE`, `CF_OVERRIDES_EXCLUDES`,
-  `CF_OVERRIDES_INCLUDES`: **zero occurrences** in the repo and absent from docs. itzg has no Java gate at all;
-  wrong Java is a documented symptom class only (`java.md`). Absence rests on searches, not on a positive
-  statement — treat as UNVERIFIED.
-- `CF_PARALLEL_DOWNLOADS` is documented (default 4) but appears **dead** in master; the live knob is
-  `CF_MAX_CONCURRENT_DOWNLOADS` (default 10). We should copy the live one, not the documented one.
-- `preset` is **not** a packwiz key (absent from all Go sources, the installer's Kotlin models, and the docs).
-- SPC has **no FTB reader**; FTB support there is UNVERIFIED.
-- Prism's "Export as Server Pack" does **not** exist (open request #5475); its exporter writes *client* packs and
-  only sets `env.server="unsupported"` for client-side mods.
-- `ServerDownloader` / `AbstractServerInstaller` no longer exist in ATLauncher; it is `InstanceInstaller`
-  with an `isServer` flag.
+### Claims from this research — now verified offline against full checkouts
+All previously UNVERIFIED items were re-checked by shallow-cloning the eight repositories and grepping the
+**complete working trees** (not the rate-limited search API). Full evidence, commit hashes and reproduction
+commands: [2026-10-29-claim-verification.md](2026-10-29-claim-verification.md).
+
+**Confirmed absent** (0 hits across scripts, source and docs): `CF_IGNORE_JAVA_VERSION`,
+`CF_SKIP_UPGRADE`, `MODPACK_TYPE`, `CF_OVERRIDES_EXCLUDES`, `CF_OVERRIDES_INCLUDES`. itzg therefore has
+**no Java gate at all** — wrong Java is a documented symptom class only.
+
+**Confirmed dead:** `CF_PARALLEL_DOWNLOADS` appears **only in docs** (2 hits) and is assigned in
+`start-deployAutoCF:11` but never forwarded to the helper's `args` array. The live knob is
+`--max-concurrent-downloads` / `CF_MAX_CONCURRENT_DOWNLOADS`, default **10**
+(`InstallCurseForgeCommand.java:197`, `CurseForgeInstaller.java:589`); Modrinth's is
+`MODRINTH_MAX_CONCURRENT_DOWNLOADS`, default 10. Copy the live one, not the documented one.
+
+**Confirmed:** `preset` is not a packwiz key (0 hits in the whole repo; the real index-entry schema is
+`file, hash, hash-format, alias, metafile, preserve`, and `side` lives on the mod metafile). SPC has no FTB
+reader (0 hits for `FTB`; `ModpackSource` = `ZIP | MODRINTH | CURSEFORGE | DIRECTORY`). Prism has no server
+export (three export actions, 0 hits for `ServerPack`; its mrpack exporter only *marks*
+`env.server="unsupported"` for client mods). itzg never uses the server pack — the code comment says why:
+*"even though we're preparing a server, we need client modpack to get deterministic manifest layout"*
+(`CurseForgeApiClient.java:200-215`). ATLauncher does use it (`isServerPack && isAvailable`,
+`InstanceInstallerDialog.java:466-485`).
+
+**Also found:** `REMOVE_OLD_MODS` is force-disabled for modpack platforms — `ensureRemoveAllModsOff()` in
+`start-utils:749` logs *"interferes with … it is now disabled"* and resets it. And `REMOVE_OLD_MODS_DEPTH`
+is documented as 16 in prose but defaults to **1** in `start-setupModpack:10`, while the same doc's own
+example uses 1 — an upstream doc bug.
+
+**Still open (2, both need more than a grep):** whether `CF_PARALLEL_DOWNLOADS` was *ever* wired in an
+earlier release (needs full history: `git log -S`, not a shallow clone), and real end-to-end FTB runs in any
+tool (no live FTB pack was installed in this session).
 
 ---
 
