@@ -13,6 +13,7 @@
 // that supported is the unfalsifiable-claim error the C0–C8 remediation existed to remove (doc 22 RC-4).
 
 export interface EvidenceGradeView {
+  /** True only when the format is proven AND the plan will actually populate the server. */
   supported: boolean;
   tone: 'green' | 'amber';
   label: string;
@@ -24,9 +25,19 @@ export interface EvidenceGradeView {
  * Fails closed: any grade not exactly `E1`/`E2` — including an empty string, a lowercase `e2`, or a future grade
  * — is treated as unsupported, so it cannot be optimistically displayed as verified.
  */
-export function describeEvidence(evidence: { grade: string }): EvidenceGradeView {
-  const supported = evidence.grade === 'E1' || evidence.grade === 'E2';
-  return supported
-    ? { supported, tone: 'green', label: `Verified format (${evidence.grade})` }
-    : { supported, tone: 'amber', label: `Format not yet proven (${evidence.grade})` };
+export function describeEvidence(evidence: { grade: string; selfContained?: boolean; plannedFileCount?: number }): EvidenceGradeView {
+  const proven = evidence.grade === 'E1' || evidence.grade === 'E2';
+  if (!proven) {
+    return { supported: false, tone: 'amber', label: `Format not yet proven (${evidence.grade})` };
+  }
+  // DV-44: a proven format whose plan downloads nothing is NOT "verified and ready". A Prism/MultiMC instance is
+  // recognised correctly yet carries its payload in the launcher, so the server this produces would be empty.
+  if (evidence.selfContained === false) {
+    return {
+      supported: false,
+      tone: 'amber',
+      label: `Launcher instance (${evidence.grade}) — no files to install`,
+    };
+  }
+  return { supported: true, tone: 'green', label: `Verified format (${evidence.grade})` };
 }

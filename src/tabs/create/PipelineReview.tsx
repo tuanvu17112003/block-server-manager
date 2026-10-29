@@ -36,7 +36,12 @@ export function PipelineReview(props: PipelineReviewProps) {
         <Badge tone="green">Minecraft {props.preview.plan.loader.minecraftVersion} · {props.preview.plan.loader.kind}</Badge>
       </div>
       {props.preview.evidence && (() => {
-        const evidence = describeEvidence(props.preview.evidence);
+        // DV-44: hand the payload facts to the label rule so a launcher-instance format cannot render green.
+        const evidence = describeEvidence({
+          grade: props.preview.evidence.grade,
+          selfContained: props.preview.evidence.selfContained,
+          plannedFileCount: props.preview.evidence.plannedFileCount,
+        });
         return (
           <div className="rounded border border-zinc-800 bg-zinc-950 p-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -45,8 +50,9 @@ export function PipelineReview(props: PipelineReviewProps) {
             </div>
             {!evidence.supported && (
               <p role="alert" className="mt-1 text-xs text-amber-100">
-                This format works from its specification, but has not been installed and started end-to-end
-                with a real pack yet. Review the files carefully.
+                {props.preview.evidence.selfContained === false
+                  ? 'This is a launcher instance: its metadata was read correctly, but the pack\u2019s content lives inside the launcher, so installing it here would produce a server with no mods. Export a full pack (Modrinth, CurseForge, packwiz) instead.'
+                  : 'This format works from its specification, but has not been installed and started end-to-end with a real pack yet. Review the files carefully.'}
               </p>
             )}
             <p className="mt-1 text-xs text-zinc-400">{props.preview.evidence.note}</p>

@@ -624,5 +624,13 @@ export interface EvidenceGradeDto {
   grade: string;
   note: string;
   formatId: string;
+  /**
+   * True when the recipe plans downloadable files of its own. A Prism/MultiMC instance is E2 (a real artefact was
+   * recognised) yet legitimately plans ZERO files, because it ships launcher metadata and an updater jar rather
+   * than mods — so E2 alone must not be rendered as "verified and ready to install".
+   */
+  selfContained: boolean;
+  /** How many files the plan will download; 0 for launcher-instance formats. */
+  plannedFileCount: number;
 }
 

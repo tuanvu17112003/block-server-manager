@@ -613,8 +613,18 @@ export class Pipeline {
     // schema-derived (E3) looked identical to one with a real verified install (E2). Only the code knowing that
     // difference does not complete the "no unsupported claim" principle. Key-mode/legacy paths have no recipe,
     // hence null rather than a guessed grade.
+    // DV-44: an E2 grade means "a real artefact was resolved", which is NOT the same as "this install will
+    // contain mods". A Prism/MultiMC instance ships launcher metadata plus an updater jar and no payload of its
+    // own, so its recipe legitimately plans zero files; without this flag the UI showed a green "Verified format"
+    // badge for a plan that would produce an empty server.
     const evidence = held.recipe
-      ? { grade: held.recipe.evidenceGrade, note: held.recipe.evidenceNote, formatId: held.recipe.formatId }
+      ? {
+        grade: held.recipe.evidenceGrade,
+        note: held.recipe.evidenceNote,
+        formatId: held.recipe.formatId,
+        selfContained: held.recipe.files.length > 0,
+        plannedFileCount: held.recipe.files.length,
+      }
       : null;
     return { previewId, sourceName: held.sourceName, warnings, plan, evidence };
   }

@@ -167,15 +167,27 @@ export type { Modpack };
  * (`electron/services/validate-ipc.ts:9-18`). Keep the two in step: the test fails if this rule drifts.
  */
 export interface EvidenceGradeView {
+  /** True only when the format is proven AND the plan will actually populate the server. */
   supported: boolean;
   tone: 'green' | 'amber';
   label: string;
 }
 
 /** A grade below E2 is never presented as supported; unrecognised grades fail closed. */
-export function describeEvidence(evidence: { grade: string }): EvidenceGradeView {
-  const supported = evidence.grade === 'E1' || evidence.grade === 'E2';
-  return supported
-    ? { supported, tone: 'green', label: `Verified format (${evidence.grade})` }
-    : { supported, tone: 'amber', label: `Format not yet proven (${evidence.grade})` };
+export function describeEvidence(evidence: { grade: string; selfContained?: boolean; plannedFileCount?: number }): EvidenceGradeView {
+  const proven = evidence.grade === 'E1' || evidence.grade === 'E2';
+  if (!proven) {
+    return { supported: false, tone: 'amber', label: `Format not yet proven (${evidence.grade})` };
+  }
+  // DV-44: a proven format whose plan downloads nothing is NOT "verified and ready". A Prism/MultiMC instance is
+  // recognised correctly, but its payload lives in the launcher, so installing it here would produce an empty
+  // server. Saying "Verified format" in that case is the overclaim this whole session exists to remove.
+  if (evidence.selfContained === false) {
+    return {
+      supported: false,
+      tone: 'amber',
+      label: `Launcher instance (${evidence.grade}) — no files to install`,
+    };
+  }
+  return { supported: true, tone: 'green', label: `Verified format (${evidence.grade})` };
 }

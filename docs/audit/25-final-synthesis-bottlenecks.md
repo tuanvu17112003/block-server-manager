@@ -52,7 +52,7 @@ Grades are from doc 19. **Only E2+ may be called "supported".** This table is th
 | **FTB** | **E2** | Installs exercised end-to-end against the live API earlier this session; loader-build escalation fault-injected and recovered. |
 | **CurseForge (client + server pack)** | **E2 on its own engine; E3 for the shape-A adapters** | The 12-pack acceptance matrix installed **6 CurseForge packs end-to-end with verified boots** (Dungeon Heroes, RLCraft, SkyFactory 5, DawnCraft, Otherworld D&D, Prominence II CF) through the key-mode provider path, which is **shape B** and needs no adapter (DV-43). The two `curseforge.*` adapters serve **shape A** — a zip the user supplies — and are E3 because that path has resolve parity only. |
 | **ServerPackCreator output** | **E3** | The real 1 GB wrapper resolves from its declared `manifest.json` (fabric 0.19.3 / 1.20.1, corroborated by three independent sources). Not installed. |
-| **Prism / ATLauncher** | **E2** | Both now rest on real third-party artefacts, not schemas: a CI-built PrismLauncher instance export (`mmc-pack.json`, sha256 `15456AB9…`) resolving **forge 47.4.0 / MC 1.20.1**, and a user-published ATLauncher `instance.json` from issue #875 (sha256 `0E2DD9DC…`) resolving **"eTards Create++" / Forge 47.2.17 / 1.20.1 / 290 mods**. Both preserved under `docs/evidence/adapters/` and checked by checksum in gate steps. Not E1: one instance each is not the population, and neither carries a server payload, so no boot was performed. |
+| **Prism / ATLauncher** | **E2** | Both now rest on real third-party artefacts, not schemas: a CI-built PrismLauncher instance export (`mmc-pack.json`, sha256 `15456AB9…`) resolving **forge 47.4.0 / MC 1.20.1**, and a user-published ATLauncher `instance.json` from issue #875 (sha256 `0E2DD9DC…`) resolving **"eTards Create++" / Forge 47.2.17 / 1.20.1 / 290 mods**. Both preserved under `docs/evidence/adapters/` and checked by checksum in gate steps. Not E1: one instance each is not the population, and neither carries a server payload, so no boot was performed. **DV-44 added a UI rule so this is not overpromised: a plan with zero files renders as amber "Launcher instance — no files to install", never as a green verified badge.** |
 | **Bare server zip** | **E3** | Two real archives resolve, but it plans no downloads and was not installed via the adapter path. |
 
 Real-artefact coverage: **6/6** cached archives resolve (was 0/6 when the session's adapter work began).
@@ -90,7 +90,11 @@ Real-artefact coverage: **6/6** cached archives resolve (was 0/6 when the sessio
   "claims and classifies", not "installs". Recorded, not hidden.
 - **Four formats carry explicit waivers** (MCBBS, HMCL server, GDLauncher, Technic) — deferred with reasons in
   `scripts/conformance-waivers.json`, never implemented. The checker reports C1 as closed *because* every
-  uncovered format is waived; "closed" there means "accounted for", not "working".
+  uncovered format is waived; "closed" there means "accounted for", not "working". **Audited the cost of leaving
+  them (DV-45): the create wizard exposes only four source kinds and none of these formats is reachable from the
+  UI, so no user path leads to them; a user who supplies such an archive gets the recorded reason instead of a
+  generic error.** GDLauncher is the one that is genuinely bigger than it looks — `gdlpack.json` is hash-only
+  resolution and needs a provider layer first.
 
 ## 6. QA findings about the process itself — the part worth keeping
 

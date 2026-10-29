@@ -483,7 +483,14 @@ export interface PipelinePreviewDto {
   plan: PipelineInstallPlan;
   warnings: string[];
   /** Evidence grade of the detected format; null when the source has no adapter recipe. */
-  evidence: { grade: string; note: string; formatId: string } | null;
+  evidence: {
+    grade: string;
+    note: string;
+    formatId: string;
+    /** DV-44: false when the recipe plans no files of its own (launcher-instance formats). */
+    selfContained: boolean;
+    plannedFileCount: number;
+  } | null;
 }
 
 export interface LocalMrpackSelection {
