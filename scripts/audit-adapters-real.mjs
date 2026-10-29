@@ -77,7 +77,7 @@ async function auditArchive(label, archivePath) {
     }
     const archive = normalized.index;
     entry.entryCount = archive.entries.length;
-    const ctx = { archive };
+    const ctx = { shape: 'archive', index: archive };
     entry.candidates = (await adapterRegistry.candidates(ctx)).map(adapter => adapter.id);
     log(`${label}: candidates = ${entry.candidates.join(', ') || '(none)'}`);
     if (entry.candidates.length === 0) throw new Error('no adapter claimed this real archive');
@@ -171,7 +171,7 @@ try {
         writeRealZip(zipPath, entries);
 
         const archive = await buildArchiveIndex(zipPath);
-        const ctx = { archive };
+        const ctx = { shape: 'archive', index: archive };
         entry.candidates = (await adapterRegistry.candidates(ctx)).map(adapter => adapter.id);
         if (entry.candidates[0] !== 'packwiz') {
           throw new Error(`packwiz must claim this real pack; got "${entry.candidates[0] ?? '(none)'}"`);
@@ -214,4 +214,5 @@ try {
   fs.writeFileSync(evidenceFile, `${JSON.stringify(report, null, 2)}\n`);
   console.log(`evidence written: ${evidenceFile}`);
 }
+
 

@@ -1,10 +1,10 @@
-// FTB (Feed The Beast) adapter — public API, no key required.
+﻿// FTB (Feed The Beast) adapter Ã¢â‚¬â€ public API, no key required.
 //
 // Why this adapter is the generality proof: FTB is a format this app could not open at all, it needs no
 // API key (unlike CurseForge), and it carries exactly the metadata a canonical recipe needs. Verified
-// live against the real API (docs/research/2026-10-29-claim-verification.md §13):
-//   GET api.modpacks.ch/public/modpack/{id}          → pack + versions + per-version targets
-//   GET api.modpacks.ch/public/modpack/{id}/{verId}  → files[] with clientonly/serveryonly/optional + sha1 + size
+// live against the real API (docs/research/2026-10-29-claim-verification.md Ã‚Â§13):
+//   GET api.modpacks.ch/public/modpack/{id}          Ã¢â€ â€™ pack + versions + per-version targets
+//   GET api.modpacks.ch/public/modpack/{id}/{verId}  Ã¢â€ â€™ files[] with clientonly/serveryonly/optional + sha1 + size
 // A real file download returned matching size and SHA-1 with no authentication.
 //
 // Detection note: FTB App *instances* on disk are identified by `instance.json` carrying
@@ -14,7 +14,7 @@ import { appError } from '../store';
 import {
   MANAGER_OWNED_PATHS, isSafeRelativePath,
   type AdapterIo,
-  type DetectContext,
+  type DetectInput,
   type FileSide,
   type LoaderFamily,
   type PackAdapter,
@@ -91,7 +91,7 @@ export function parseFtbModLoader(modLoader: string | undefined | null): { loade
 /**
  * Map FTB's three flags onto the canonical side value.
  * `serveronly` wins (server needs it, client does not); `clientonly` means a dedicated server must skip it.
- * Everything else is shared, and `optional` only downgrades a shared file — it never hides a server file.
+ * Everything else is shared, and `optional` only downgrades a shared file Ã¢â‚¬â€ it never hides a server file.
  */
 export function ftbFileSide(file: Pick<FtbFile, 'clientonly' | 'serveronly' | 'optional'>): FileSide {
   if (file.serveronly === true) return 'required';
@@ -110,7 +110,7 @@ export function normalizeFtbPath(path: string): string {
  *
  * **Census result (157,125 files across all 92 published FTB packs): `path` is ALWAYS the parent directory
  * and `name` is ALWAYS the file name.** Not once did `path` contain the filename. So the only correct rule is
- * to join them — every heuristic ("has a dot ⇒ it is a file", "endsWith(name)") was wrong in some pack and
+ * to join them Ã¢â‚¬â€ every heuristic ("has a dot Ã¢â€¡â€™ it is a file", "endsWith(name)") was wrong in some pack and
  * produced one of the bugs found during P1/P1b (155 mods dropped; EEXIST from a directory treated as a file).
  *
  * `path` may be empty (seen on a `default-server.properties` resource): those files have nowhere defined to
@@ -140,7 +140,7 @@ export function ftbJavaMajor(targets: FtbTarget[] | undefined): number | null {
  * Java majors this app can actually provision and launch (mirrors `SUPPORTED_MAJORS` in `java.ts`).
  * Census note: one published FTB pack declares Java **11** (`FTB Presents Integration by Parts DX`,
  * `11.0.19+7`). Treating that as a hard requirement would reject a pack that runs fine on 17, and the app
- * cannot install 11 anyway — so it is rounded up to the next supported major and reported, never dropped.
+ * cannot install 11 anyway Ã¢â‚¬â€ so it is rounded up to the next supported major and reported, never dropped.
  */
 export const APP_JAVA_MAJORS: readonly number[] = [8, 17, 21, 25];
 
@@ -172,11 +172,11 @@ export function isMinecraftVersionString(value: string): boolean {
 /**
  * Choose which version of a pack to install.
  *
- * **The FTB API returns `versions[]` in ASCENDING order (oldest first), and `id` is also ascending** —
+ * **The FTB API returns `versions[]` in ASCENDING order (oldest first), and `id` is also ascending** Ã¢â‚¬â€
  * verified against five real packs, where id order and `updated` order agree exactly. Taking `versions[0]`
  * therefore installs the *oldest* build, which is a serious correctness bug:
  *  - FTB Omnia's oldest version (`6`, 1.0.0, beta, 2020-04-01) declares **no modloader at all**, while every
- *    later release declares `forge 31.x` — so picking it made a Forge pack look vanilla.
+ *    later release declares `forge 31.x` Ã¢â‚¬â€ so picking it made a Forge pack look vanilla.
  *  - Two packages that "passed" were silently installed from outdated releases (Academy 1.1.0 instead of
  *    1.4.0; Stoneblock 2 1.20.0 instead of 1.23.0).
  *
@@ -208,7 +208,7 @@ export function isFtbPrerelease(version: FtbVersionRef): boolean {
  * Some FTB packs (e.g. FTB Omnia) ship 155 Forge mods but list only `minecraft` and `java` in `targets`.
  * Treating that as vanilla would install a vanilla server and fail at boot, so we look for the loader
  * token mod authors put in their jar names. This is inference from evidence, it is recorded in
- * `resolution`, and it is reported as a warning — never silently assumed.
+ * `resolution`, and it is reported as a warning Ã¢â‚¬â€ never silently assumed.
  * Returns null when the evidence is absent or contradictory, and the caller fails closed.
  */
 export function inferFtbLoaderFromFiles(files: FtbFile[]): { loader: LoaderFamily; evidence: string } | null {
@@ -260,7 +260,7 @@ export function buildFtbRecipe(input: {
 
   // A pack that ships mods but declares no modloader is self-contradictory metadata. Infer, or fail closed.
   // `type` is optional in the API (a jar can arrive with no type), so a `.jar` under a `mods` directory also
-  // counts — otherwise a resource-only archive could be misread as a modded pack and rejected.
+  // counts Ã¢â‚¬â€ otherwise a resource-only archive could be misread as a modded pack and rejected.
   const hasModFiles = (input.version.files ?? []).some((file) => {
     if (file.type === 'mod') return true;
     const path = resolveFtbDestPath(file).toLowerCase();
@@ -369,24 +369,24 @@ function detectFtbInstance(instance: FtbInstanceJson | null): boolean {
 export const ftbAdapter: PackAdapter = {
   id: 'ftb.app',
   displayName: 'Feed The Beast (FTB App / public API)',
-  inputs: ['providerApi', 'archive'],
+  shapes: ['archive', 'provider'],
   // Lowest priority among provider formats: its detector is generic, so it must never shadow a
   // more specific archive signature.
   priority: 20,
 
-  detect(ctx: DetectContext): boolean | Promise<boolean> {
-    if (ctx.provider?.kind === 'ftb') return true;
-    if (ctx.archive) {
-      // A local FTB instance is only recognizable by its instance.json carrying numeric pack ids.
-      return ctx.archive.names.has('instance.json');
-    }
-    return false;
+  async detect(input: DetectInput): Promise<boolean> {
+    if (input.shape === 'provider') return input.kind === 'ftb';
+    if (input.shape !== 'archive') return false;
+    // Validate keys, not the filename: three formats write `instance.json` (ATLauncher, FTB App, and the
+    // vanilla Minecraft launcher). Only FTB's carries numeric pack + version ids and an mcVersion string.
+    const instance = await input.index.readJson<FtbInstanceJson>('instance.json');
+    return detectFtbInstance(instance);
   },
 
-  async resolve(ctx: DetectContext, io: AdapterIo): Promise<PackRecipe> {
+  async resolve(input: DetectInput, io: AdapterIo): Promise<PackRecipe> {
     // ---- local FTB App instance ----
-    if (ctx.archive && ctx.provider?.kind !== 'ftb') {
-      const instance = await ctx.archive.readJson<FtbInstanceJson>('instance.json');
+    if (input.shape === 'archive') {
+      const instance = await input.index.readJson<FtbInstanceJson>('instance.json');
       if (!detectFtbInstance(instance)) {
         throw appError('validation',
           'This archive has an instance.json that is not an FTB App instance (missing numeric pack/version ids).');
@@ -400,8 +400,11 @@ export const ftbAdapter: PackAdapter = {
       return buildFtbRecipe({ packName: instance!.name ?? `FTB pack ${packId}`, version });
     }
 
+    if (input.shape !== 'provider') {
+      throw appError('validation', `FTB adapter cannot handle a "${input.shape}" input.`);
+    }
     // ---- remote FTB pack by id ----
-    const ids = ctx.provider?.ids ?? {};
+    const ids = input.ids;
     const packId = Number(ids.packId ?? '');
     if (!Number.isInteger(packId) || packId <= 0) {
       throw appError('validation', 'FTB install needs a numeric pack id (FTB_MODPACK_ID equivalent).');
@@ -429,3 +432,5 @@ export const ftbAdapter: PackAdapter = {
     });
   },
 };
+
+

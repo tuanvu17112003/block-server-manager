@@ -71,6 +71,7 @@ Evidence grades (from doc 19) — a claim may never exceed its grade:
 | DV-03 | QA | A recorded deviation must never be silently fixed | My own test zip writer declared **deflate (method 8)** while writing stored bytes, producing `invalid stored block lengths` and 3 failing tests that looked like product bugs. This is the same class as doc 20 D5 (a lying harness hides or invents defects) | First run of `adapters-normalize.test.ts` failed 3/8 with that error; fixed by declaring method 0; now 8/8 | No | none — recorded so the harness is trusted |
 | DV-04 | C2→C3 | Research §2 row 12: an SPC output archive is identified by `manifest.json` with `files[]` + `minecraftVersion` + `modloader` + `serverPackCreatorVersion`. C2 makes that manifest **visible** by unwrapping | After unwrapping, the 1 GB archive resolves to **3,553 entries including a root `manifest.json`**, yet `plain.serverzip` still fails with "no pack manifest and does not state its Minecraft version". The manifest is present with **exactly the fields research §2 row 12 predicts**: `{files, minecraftVersion, modloader, modloaderVersion, serverPackCreatorVersion}`, values `minecraftVersion="1.20.1"`, `modloader="Fabric"`, `modloaderVersion="0.19.3"`, 3,642 file entries. **No adapter reads it** — the SPC-output format has no adapter | `node scripts/audit-adapters-real.mjs --skip-packwiz` → `466901…: unwrapped … (2 → 3553 entries)` then `FAILED — This archive has no pack manifest…`; manifest content read directly from the unwrapped inner zip | **yes — blocks C4** | Needs a `serverpackcreator` adapter reading `manifest.json`. Do **not** widen `plain.serverzip` to guess; that would repeat the D4 mistake of a degraded duplicate. C4 scope, recorded now so it is not improvised. |
 | DV-05 | C2 | `plain.serverzip` should resolve a real author server pack with derivable metadata | `829758-server-7243901.zip` (4,951 entries, real payload: `start.sh`, `variables.txt`, `server-icon.png`) fails: no `version.json`, no `libraries/` maven path, no installer jar. It is an SPC-style pack too, so its `manifest.json` is the correct source — same root cause as DV-04 | same harness run | **yes — blocks C4** | same decision as DV-04; resolve via the SPC manifest adapter, not by loosening `plain.serverzip` |
+| DV-06 | C1/C3 | Every write scope is exclusive; the plan assigns C1/C3 to one owner | **The Lead parallelised its own C1/C3 edits with a delegated task on the identical files and created no isolation.** The delegate detected it from file mtimes (`types.ts` 20:19:29, `registry.ts` 20:19:50, `modrinth.ts` 20:20:05) plus the `7634736` commit landing mid-session, and **stopped instead of clobbering** — the correct behaviour. Cost: ~10 min, a transient non-compiling tree (`~30 TS errors`: old `DetectContext` in prism/serverzip/ftb, tests on old `{archive}` literals, `pipeline.ts:522` mismatch), and one wasted delegation. | Delegate's message quoting mtimes and the commit; `git log -1` → `7634736`; `npm run build:electron` failing during the window | No (recovered) | **Process decision, binding for the rest of the session: the Lead either reserves a write scope exclusively or delegates it — never both.** When a collision is detected, the delegate must stop and record (as happened), not race. |
 
 ---
 
@@ -82,12 +83,12 @@ alone are explicitly **not** sufficient.
 
 | Phase | reality→spec | spec→code | code→reality | Signed off by | Notes |
 |---|---|---|---|---|---|
-| C0 | — | — | — | — | pending |
-| C1 | — | — | — | — | pending |
-| C2 | — | — | — | — | pending |
-| C3 | — | — | — | — | pending |
-| C4 | — | — | — | — | pending |
+| C0 | — | — | — | — | pending (delegated; conformance script not yet delivered) |
+| C1 | n/a (contract only) | **green** — shapes A–E implemented; registry refuses undeclared shapes (`shapes.includes(input.shape)` guard) | n/a | Lead | unit 328 → **336**, verify 10/10. DV-06 records the write-scope collision that cost ~10 min |
+| C2 | **green** — real 1 GB wrapper unwraps 2 → 3,553 entries exposing the SPC manifest | **green** — research §6 step 2 implemented in shared layer | n/a (install is C8) | Lead | 8 normalize tests; DV-01; found DV-04/DV-05 |
+| C3 | **green** — both real `.mrpack` files resolve; Prominence = Fabric 0.19.3 / MC 1.20.1 / 565 files (352 required, 213 unsupported) matching the known reference | **green** — delegates to `resolveMrpack`/`splitDeps`, no reimplementation | **partial (E2−)** — resolve parity proven; end-to-end install is C8 | Lead | `docs/evidence/adapters/modrinth-recipe-parity.json`. CurseForge half **not done** (see DV-04/05) |
+| C4 | — | — | — | — | pending; blocked on the SPC-manifest adapter (DV-04/DV-05) |
 | C5 | — | — | — | — | pending |
 | C6 | — | — | — | — | pending |
-| C7 | — | — | — | — | pending |
+| C7 | — | — | — | — | pending (delegated) |
 | C8 | — | — | — | — | pending |

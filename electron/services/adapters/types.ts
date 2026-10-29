@@ -120,6 +120,37 @@ export interface ArchiveIndex {
   under(prefix: string): string[];
 }
 
+/**
+ * The acquisition shapes — the axis that actually varies between formats.
+ *
+ * Derived from evidence (docs/audit/21 §2, docs/audit/23 §4.1). The earlier `DetectContext` modelled only
+ * `archive` ∪ `provider`, which structurally excluded the two shapes that failed in the Phase-A audit:
+ * packwiz (an HTTP tree) and Prism/ATLauncher (a local launcher instance).
+ *
+ * | shape      | formats                                        |
+ * |------------|------------------------------------------------|
+ * | archive    | Modrinth .mrpack, CurseForge client pack, author server pack, bare dump |
+ * | provider   | FTB (api.modpacks.ch), Modrinth/CurseForge by id |
+ * | httpTree   | packwiz (pack.toml → index.toml → *.pw.toml over HTTP) |
+ * | instance   | Prism mmc-pack.json, ATLauncher instance.json (payload already local) |
+ */
+export type AdapterShape = 'archive' | 'provider' | 'httpTree' | 'instance';
+
+/**
+ * A discriminated input. An adapter declaring `shapes: ['httpTree']` can never be handed an archive —
+ * that is enforced by the registry, not by convention.
+ */
+export type DetectInput =
+  | { shape: 'archive'; index: ArchiveIndex; path?: string }
+  | { shape: 'provider'; kind: string; ids: Record<string, string | number | undefined>; cacheDir?: string }
+  | { shape: 'httpTree'; baseUrl: string; fetchText?: (url: string) => Promise<string | null> }
+  | { shape: 'instance'; index: ArchiveIndex; dir?: string };
+
+/**
+ * Legacy detection context kept for the adapters that still take it (ftb/prism/atlauncher/packwiz/serverzip).
+ * New code should prefer `DetectInput`. `toDetectInput` in registry.ts bridges the two so the migration can be
+ * incremental instead of a flag day.
+ */
 export interface DetectContext {
   /** Present for archive inputs. */
   archive?: ArchiveIndex;
@@ -134,18 +165,23 @@ export interface AdapterIo {
 
 /**
  * An adapter. `detect` must be cheap and side-effect free; `resolve` may perform provider calls.
- * `inputs` declares whether the adapter handles archives, provider APIs, or both.
+ *
+ * `shapes` is the primary contract: the registry only offers an input whose shape the adapter declares.
+ * `detect`/`resolve` accept the discriminated `DetectInput`.
  */
 export interface PackAdapter {
   readonly id: PackFormatId;
   readonly displayName: string;
-  readonly inputs: readonly AdapterInputKind[];
+  /** Acquisition shapes this adapter accepts. The registry refuses to route any other shape to it. */
+  readonly shapes: readonly AdapterShape[];
+  /** Legacy capability list, kept while adapters migrate to `shapes`. */
+  readonly inputs?: readonly AdapterInputKind[];
   /** Higher priority is evaluated first when several formats could match. */
   readonly priority: number;
-  /** Cheap content-signature test with key validation. */
-  detect(ctx: DetectContext): boolean | Promise<boolean>;
+  /** Cheap content-signature test with key validation. Only called for a declared shape. */
+  detect(input: DetectInput): boolean | Promise<boolean>;
   /** Normalize to the canonical recipe. Throws `AppError('validation', …)` on unresolvable input. */
-  resolve(ctx: DetectContext, io: AdapterIo): Promise<PackRecipe>;
+  resolve(input: DetectInput, io: AdapterIo): Promise<PackRecipe>;
 }
 
 /** Paths a pack must never own, regardless of format. */

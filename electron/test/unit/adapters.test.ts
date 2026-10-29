@@ -1,6 +1,6 @@
 ﻿// Pack adapter layer tests: registry ordering, recipe validation contract, and the FTB adapter's
 // pure mapping functions (verified against the real FTB API response shapes recorded in
-// docs/research/2026-10-29-claim-verification.md Ãƒâ€šÃ‚Â§13). No network.
+// docs/research/2026-10-29-claim-verification.md ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§13). No network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AdapterRegistry, validateRecipe } from '../../services/adapters/registry';
@@ -8,7 +8,7 @@ import {
   buildFtbRecipe, coerceJavaMajor, ftbFileSide, ftbJavaMajor, inferFtbLoaderFromFiles, isFtbPrerelease, isMinecraftVersionString, parseFtbModLoader,
   pickFtbVersion, resolveFtbDestPath,
 } from '../../services/adapters/ftb';
-import type { DetectContext, PackAdapter, PackRecipe } from '../../services/adapters/types';
+import type { DetectInput, PackAdapter, PackRecipe } from '../../services/adapters/types';
 
 /** A no-op IO seam that satisfies the generic `fetchJson<T>` contract. */
 const noopIo = {
@@ -38,7 +38,7 @@ function recipe(overrides: Partial<PackRecipe> = {}): PackRecipe {
 
 test('AdapterRegistry: higher priority wins and only validated matches are returned', async () => {
   const adapter = (id: PackAdapter['id'], priority: number, match: boolean): PackAdapter => ({
-    id, displayName: id, inputs: ['archive'], priority,
+    id, displayName: id, shapes: ['archive'], priority,
     detect: () => match,
     resolve: async () => recipe({ formatId: id }),
   });
@@ -48,25 +48,26 @@ test('AdapterRegistry: higher priority wins and only validated matches are retur
     adapter('packwiz', 50, false),
   ]);
 
-  const candidates = await registry.candidates({});
+  const candidates = await registry.candidates({ shape: 'archive', index: fakeIndex() });
   assert.deepEqual(candidates.map((c) => c.id), ['modrinth.mrpack', 'plain.serverzip']);
-  const resolved = await registry.resolve({}, noopIo);
+  const resolved = await registry.resolve({ shape: 'archive', index: fakeIndex() }, noopIo);
   assert.equal(resolved.formatId, 'modrinth.mrpack', 'highest priority adapter must win');
 });
 
 test('AdapterRegistry: a throwing detector cannot break the others', async () => {
   const registry = new AdapterRegistry([
-    { id: 'ftb.app', displayName: 'boom', inputs: ['archive'], priority: 99, detect: () => { throw new Error('boom'); }, resolve: async () => recipe() },
-    { id: 'plain.serverzip', displayName: 'ok', inputs: ['archive'], priority: 1, detect: () => true, resolve: async () => recipe() },
+    { id: 'ftb.app', displayName: 'boom', shapes: ['archive'], priority: 99, detect: () => { throw new Error('boom'); }, resolve: async () => recipe() },
+    { id: 'plain.serverzip', displayName: 'ok', shapes: ['archive'], priority: 1, detect: () => true, resolve: async () => recipe() },
   ]);
-  const candidates = await registry.candidates({});
+  const candidates = await registry.candidates({ shape: 'archive', index: fakeIndex() });
   assert.deepEqual(candidates.map((c) => c.id), ['plain.serverzip']);
 });
 
 test('AdapterRegistry: an unrecognized archive fails closed with evidence, never "unknown pack"', async () => {
   const registry = new AdapterRegistry([{ ...fakeAdapter(), detect: () => false }]);
-  const ctx: DetectContext = {
-    archive: {
+  const ctx: DetectInput = {
+    shape: 'archive',
+    index: {
       entries: [{ name: 'readme.txt', size: 1, isDir: false }],
       names: new Set(['readme.txt']),
       readText: async () => null,
@@ -85,8 +86,10 @@ test('AdapterRegistry: an unrecognized archive fails closed with evidence, never
   );
 });
 
+const fakeIndex = () => ({ entries: [], names: new Set<string>(), readJson: async () => null, readText: async () => null, under: () => [] });
+
 function fakeAdapter(): PackAdapter {
-  return { id: 'plain.serverzip', displayName: 'fake', inputs: ['archive'], priority: 1, detect: () => true, resolve: async () => recipe() };
+  return { id: 'plain.serverzip', displayName: 'fake', shapes: ['archive'], priority: 1, detect: () => true, resolve: async () => recipe() };
 }
 
 // ---- recipe validation contract ----
@@ -139,7 +142,7 @@ test('ftbJavaMajor: reads the major out of an FTB java target', () => {
   assert.equal(ftbJavaMajor(undefined), null);
 });
 
-test('pickFtbVersion: newest by updated, preferring a release Ã¢â‚¬â€ FTB lists versions ASCENDING', () => {
+test('pickFtbVersion: newest by updated, preferring a release ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â FTB lists versions ASCENDING', () => {
   // Real shape from api.modpacks.ch pack 6 (FTB Omnia): versions[] is oldest-first, and the oldest beta
   // declares no modloader while later releases do. Taking versions[0] installed the wrong build.
   const omnia = {
@@ -155,7 +158,7 @@ test('pickFtbVersion: newest by updated, preferring a release Ã¢â‚¬â€
   assert.equal(pickFtbVersion(omnia, 45).id, 45, 'an explicit pin still wins');
   assert.throws(() => pickFtbVersion(omnia, 99), /no version 99/);
 
-  // Newest overall is a beta, but a release exists Ã¢â€ â€™ prefer the release.
+  // Newest overall is a beta, but a release exists ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ prefer the release.
   const withBetaTip = {
     id: 7,
     name: 'x',
@@ -166,7 +169,7 @@ test('pickFtbVersion: newest by updated, preferring a release Ã¢â‚¬â€
   };
   assert.equal(pickFtbVersion(withBetaTip).id, 1, 'a beta tip must not outrank the newest release');
 
-  // No releases at all Ã¢â€ â€™ take the newest of any type rather than failing.
+  // No releases at all ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ take the newest of any type rather than failing.
   const betaOnly = { id: 8, name: 'y', versions: [{ id: 1, name: 'a', type: 'beta', updated: 100 }, { id: 2, name: 'b', type: 'alpha', updated: 300 }] };
   assert.equal(pickFtbVersion(betaOnly).id, 2);
   assert.equal(isFtbPrerelease(betaOnly.versions[1]!), true);
@@ -252,7 +255,7 @@ test('buildFtbRecipe: records wins and skips URL-less files with a rule-attribut
 
 test('resolveFtbDestPath: path is ALWAYS the parent directory and name is ALWAYS the file', () => {
   // Census of all 92 published FTB packs / 157,125 files: `path` never contained the filename and `name` was
-  // never empty. Every "is this a file or a directory" heuristic was therefore wrong for some pack â€” which is
+  // never empty. Every "is this a file or a directory" heuristic was therefore wrong for some pack Ã¢â‚¬â€ which is
   // exactly how two real bugs appeared (155 mods dropped; EEXIST from a directory treated as a file).
   assert.equal(resolveFtbDestPath({ path: './mods', name: 'Bookshelf-1.15.2-5.3.9.jar' }), 'mods/Bookshelf-1.15.2-5.3.9.jar');
   assert.equal(resolveFtbDestPath({ path: './mods', name: 'shared.jar' }), 'mods/shared.jar');
@@ -303,8 +306,8 @@ test('buildFtbRecipe: mods with no modloader and ambiguous jar names fail closed
 test('inferFtbLoaderFromFiles: requires a clear winner, never a coin flip', () => {
   const jar = (name: string) => ({ path: './mods', name, url: 'https://d.test/x.jar' });
   assert.equal(inferFtbLoaderFromFiles([jar('a-1.20-forge-1.jar'), jar('b-1.20-forge-2.jar'), jar('c-1.20-forge-3.jar')])?.loader, 'forge');
-  assert.equal(inferFtbLoaderFromFiles([jar('a.jar'), jar('b.jar'), jar('c.jar')]), null, 'no loader token Ã¢â€¡â€™ no guess');
-  assert.equal(inferFtbLoaderFromFiles([jar('a-forge-1.jar'), jar('b-fabric-1.jar'), jar('c-fabric-2.jar')]), null, 'split evidence Ã¢â€¡â€™ no guess');
+  assert.equal(inferFtbLoaderFromFiles([jar('a.jar'), jar('b.jar'), jar('c.jar')]), null, 'no loader token ÃƒÂ¢Ã¢â‚¬Â¡Ã¢â‚¬â„¢ no guess');
+  assert.equal(inferFtbLoaderFromFiles([jar('a-forge-1.jar'), jar('b-fabric-1.jar'), jar('c-fabric-2.jar')]), null, 'split evidence ÃƒÂ¢Ã¢â‚¬Â¡Ã¢â‚¬â„¢ no guess');
 });
 
 
@@ -381,4 +384,9 @@ test('buildFtbRecipe: unsafe paths are skipped with a rule id, not installed', (
   assert.equal(result.files.length, 1);
   assert.equal(result.files[0].path, 'mods/ok.jar');
 });
+
+
+
+
+
 

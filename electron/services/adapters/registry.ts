@@ -4,7 +4,7 @@
 // directly, which keeps them pure and unit-testable from fixtures.
 import { listZip, readZipEntry } from '../installer/core';
 import { appError } from '../store';
-import type { ArchiveEntry, ArchiveIndex, DetectContext, PackAdapter, PackFormatId, PackRecipe, AdapterIo } from './types';
+import type { ArchiveEntry, ArchiveIndex, DetectInput, PackAdapter, PackFormatId, PackRecipe, AdapterIo } from './types';
 import { isSafeRelativePath, normalizePath } from './types';
 import { isMinecraftVersionString } from './ftb';
 
@@ -78,11 +78,14 @@ export class AdapterRegistry {
   }
 
   /** Which adapters claim this input, in evaluation order. Useful for diagnostics and tests. */
-  async candidates(ctx: DetectContext): Promise<PackAdapter[]> {
+  async candidates(input: DetectInput): Promise<PackAdapter[]> {
     const matched: PackAdapter[] = [];
     for (const adapter of this.adapters) {
+      // Shape gate: an adapter that does not declare this shape is never even asked. This is what makes
+      // "an archive can never reach an httpTree adapter" a structural property rather than a convention.
+      if (!adapter.shapes.includes(input.shape)) continue;
       try {
-        if (await adapter.detect(ctx)) matched.push(adapter);
+        if (await adapter.detect(input)) matched.push(adapter);
       } catch {
         // A throwing detector must never break detection of other formats.
       }
@@ -94,16 +97,18 @@ export class AdapterRegistry {
    * Detect and resolve in one step. Fails closed with a precise message listing what was checked,
    * so an unsupported archive is never reported as "unknown pack" with no evidence.
    */
-  async resolve(ctx: DetectContext, io: AdapterIo): Promise<PackRecipe> {
-    const matched = await this.candidates(ctx);
+  async resolve(input: DetectInput, io: AdapterIo): Promise<PackRecipe> {
+    const matched = await this.candidates(input);
     if (matched.length === 0) {
-      const evidence = ctx.archive
-        ? `checked ${ctx.archive.entries.length} entries; root files: ${rootEvidence(ctx.archive)}`
-        : 'no archive or provider metadata supplied';
+      const evidence = input.shape === 'archive' || input.shape === 'instance'
+        ? `checked ${input.index.entries.length} entries; root files: ${rootEvidence(input.index)}`
+        : input.shape === 'provider'
+          ? `no adapter claims provider "${input.kind}"`
+          : `no adapter claims the http tree at ${input.baseUrl}`;
       throw appError('validation', `Unrecognized modpack format (${evidence}).`);
     }
     const adapter = matched[0]!;
-    const recipe = await adapter.resolve(ctx, io);
+    const recipe = await adapter.resolve(input, io);
     validateRecipe(recipe);
     return recipe;
   }

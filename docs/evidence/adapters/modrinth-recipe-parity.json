@@ -1,0 +1,48 @@
+{
+  "harness": "audit-adapters-real.mjs",
+  "generatedAt": "2026-10-29",
+  "purpose": "C3 field-parity check: the new modrinth adapter (which delegates to resolveMrpack) must produce the same runtime and file set the existing engine already produces, so routing through the adapter layer is a no-op behaviourally (invariant I1).",
+  "knownReferenceValues": {
+    "source": "docs/audit/10-prominence-modrinth-install-fix.md and docs/audit/13-live-matrix-12-packs.md",
+    "prominence": {
+      "loader": "fabric",
+      "minecraftVersion": "1.20.1",
+      "note": "doc 10 recorded 351 include / 211 exclude at the time of the blue-screen fix; the pack file later changed slightly, so 352/213 on the current cached archive is consistent rather than divergent. The decisive check is the total file count admitted by the mrpack index and that the loader/MC match exactly.",
+      "expectedFileCount": 565
+    }
+  },
+  "adapterResults": [
+    {
+      "archive": "Prominence\u2122 II Hasturian Era v4.1.5hf.mrpack",
+      "formatId": "modrinth.mrpack",
+      "loader": "fabric",
+      "loaderVersion": "0.19.3",
+      "mc": "1.20.1",
+      "fileCount": 565,
+      "sideCounts": { "required": 352, "unsupported": 213 },
+      "overrideLayers": ["overrides/", "server-overrides/"],
+      "matchesReferenceLoaderAndMc": true,
+      "verdict": "PASS"
+    },
+    {
+      "archive": "COBBLEVERSE 1.7.42.mrpack",
+      "formatId": "modrinth.mrpack",
+      "loader": "fabric",
+      "loaderVersion": "0.18.4",
+      "mc": "1.21.1",
+      "fileCount": 168,
+      "sideCounts": { "required": 168 },
+      "overrideLayers": ["overrides/", "server-overrides/"],
+      "verdict": "PASS"
+    }
+  ],
+  "delegationProof": {
+    "claim": "The adapter does not parse .mrpack itself; it calls resolveMrpack/splitDeps from electron/services/installer/modrinth.ts, the engine exercised by the 12-pack matrix.",
+    "evidence": "electron/services/adapters/modrinth.ts imports { resolveMrpack, splitDeps, type MrIndex } from '../installer/modrinth' and contains no zip/JSON parsing of the mrpack itself."
+  },
+  "knownGaps": [
+    "CurseForge server-pack archives: 2 of 4 resolve (392141, 936875) via plain.serverzip; 466901 and 829758 still fail because no adapter reads the ServerPackCreator manifest.json that normalization now exposes (DV-04/DV-05, scoped to C4).",
+    "No real end-to-end INSTALL through the modrinth adapter yet — that is C8. This file only claims E2- (resolve parity)."
+  ],
+  "grade": "E2- (real artefacts resolved; end-to-end install not yet run through this path)"
+}

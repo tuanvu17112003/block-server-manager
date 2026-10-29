@@ -1,12 +1,19 @@
 {
   "harness": "audit-adapters-real.mjs",
-  "startedAt": "2026-10-29T12:54:49.136Z",
+  "startedAt": "2026-10-29T13:24:37.340Z",
   "premise": "real artefacts only; no fixture authored by the harness is used as evidence",
   "archives": [
     {
       "label": "cf:392141-server-6290699.zip",
       "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\392141-server-6290699.zip",
       "sizeBytes": 295045888,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 9503,
+        "effectiveEntryCount": 9503
+      },
       "candidates": [
         "plain.serverzip"
       ],
@@ -51,17 +58,33 @@
       "label": "cf:466901-server-9296268.zip",
       "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\466901-server-9296268.zip",
       "sizeBytes": 1098804554,
-      "candidates": [],
+      "normalization": {
+        "unwrapped": true,
+        "nestedZip": "Prominence™_II_Hasturian_Era_4.1.5_server_pack.zip",
+        "strippedPrefix": null,
+        "outerEntryCount": 2,
+        "effectiveEntryCount": 3553
+      },
+      "candidates": [
+        "plain.serverzip"
+      ],
       "recipe": null,
       "validation": null,
-      "error": "no adapter claimed this real archive",
+      "error": "This archive has no pack manifest and does not state its Minecraft version, so it cannot be installed safely. Add a manifest (Modrinth, CurseForge, packwiz, Prism or ATLauncher) or an exact Minecraft version. Evidence checked: version.json, libraries/ maven path, loader installer jar name.",
       "ok": false,
-      "entryCount": 2
+      "entryCount": 3553
     },
     {
       "label": "cf:829758-server-7243901.zip",
       "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\829758-server-7243901.zip",
       "sizeBytes": 754300266,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 4951,
+        "effectiveEntryCount": 4951
+      },
       "candidates": [
         "plain.serverzip"
       ],
@@ -75,6 +98,13 @@
       "label": "cf:936875-server-8853081.zip",
       "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\936875-server-8853081.zip",
       "sizeBytes": 736512644,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 10223,
+        "effectiveEntryCount": 10223
+      },
       "candidates": [
         "plain.serverzip"
       ],
@@ -119,360 +149,142 @@
       "label": "mrpack:COBBLEVERSE 1.7.42.mrpack",
       "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\mrpack\\COBBLEVERSE 1.7.42.mrpack",
       "sizeBytes": 238975006,
-      "candidates": [],
-      "recipe": null,
-      "validation": null,
-      "error": "no adapter claimed this real archive",
-      "ok": false,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 1648,
+        "effectiveEntryCount": 1648
+      },
+      "candidates": [
+        "modrinth.mrpack"
+      ],
+      "recipe": {
+        "formatId": "modrinth.mrpack",
+        "name": "COBBLEVERSE",
+        "mc": "1.21.1",
+        "loader": "fabric",
+        "loaderVersion": "0.18.4",
+        "javaMajor": null,
+        "fileCount": 168,
+        "overrideLayers": [
+          "overrides/",
+          "server-overrides/"
+        ],
+        "launchShape": "launch-jar",
+        "sideCounts": {
+          "required": 168
+        },
+        "warningRules": [],
+        "resolution": [
+          {
+            "field": "mc",
+            "source": "modrinth.index.json dependencies.minecraft"
+          },
+          {
+            "field": "loader",
+            "source": "modrinth.index.json dependencies (fabric)"
+          },
+          {
+            "field": "files",
+            "source": "modrinth.index.json files[] (downloads + hashes)"
+          },
+          {
+            "field": "side",
+            "source": "files[].env.server, absent â‡’ unknown"
+          }
+        ],
+        "sampleFiles": [
+          "mods/CobbleFurnies-fabric-1.2.jar",
+          "mods/pokeblocks-1.4.0-1.21.1.jar",
+          "resourcepacks/FullyHisuianStarters RP.zip"
+        ]
+      },
+      "validation": "passed",
+      "error": null,
+      "ok": true,
       "entryCount": 1648
     },
     {
       "label": "mrpack:Prominence™ II Hasturian Era v4.1.5hf.mrpack",
       "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\mrpack\\Prominence™ II Hasturian Era v4.1.5hf.mrpack",
       "sizeBytes": 427703135,
-      "candidates": [],
-      "recipe": null,
-      "validation": null,
-      "error": "no adapter claimed this real archive",
-      "ok": false,
-      "entryCount": 2578
-    }
-  ],
-  "packwiz": [
-    {
-      "repo": "GregTech-Odyssey/GregTech-Odyssey",
-      "packFile": "pack.toml",
-      "packToml": null,
-      "indexToml": null,
-      "metafiles": [
-        "mods/ad-astra-rocketed.pw.toml",
-        "mods/ad-astra.pw.toml",
-        "mods/advanced-backups.pw.toml",
-        "mods/advancementnomore.pw.toml",
-        "mods/ae2-crafting-tree.pw.toml",
-        "mods/ae2-import-export-card.pw.toml"
-      ],
-      "recipe": {
-        "formatId": "packwiz",
-        "name": "GregTech Odyssey",
-        "mc": "1.20.1",
-        "loader": "forge",
-        "loaderVersion": "47.4.20",
-        "javaMajor": null,
-        "fileCount": 3,
-        "overrideLayers": [
-          "(root)"
-        ],
-        "launchShape": "generated-args",
-        "sideCounts": {
-          "required": 3
-        },
-        "warningRules": [
-          "packwiz.metafile-no-url",
-          "packwiz.metafile-missing",
-          "packwiz.archive-payload"
-        ],
-        "resolution": [
-          {
-            "field": "mc",
-            "source": "pack.toml [versions].minecraft"
-          },
-          {
-            "field": "loader",
-            "source": "pack.toml [versions].forge"
-          },
-          {
-            "field": "files",
-            "source": "index.toml [[files]] metafile → *.pw.toml [download].url"
-          },
-          {
-            "field": "side",
-            "source": "*.pw.toml side (both/client/server), absent ⇒ both"
-          }
-        ],
-        "sampleFiles": [
-          "mods/ad_astra_rocketed-forge-1.20.1-1.0.5.jar",
-          "mods/ad_astra-forge-1.20.1-1.15.20.jar",
-          "mods/ae2insertexportcard-1.20.1-1.3.0.jar"
-        ]
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 2578,
+        "effectiveEntryCount": 2578
       },
-      "validation": "passed",
-      "error": null,
-      "ok": true,
-      "packTomlBytes": 256,
-      "indexTomlBytes": 93455,
       "candidates": [
-        "packwiz",
-        "plain.serverzip"
-      ]
-    },
-    {
-      "repo": "Laskyyy/Create-Astral",
-      "packFile": "pack.toml",
-      "packToml": null,
-      "indexToml": null,
-      "metafiles": [],
-      "recipe": null,
-      "validation": null,
-      "error": "packwiz pack \"Create Astral\" has an empty index.toml (no [[files]]).",
-      "ok": false,
-      "packTomlBytes": 265,
-      "indexTomlBytes": 230,
-      "candidates": [
-        "packwiz"
-      ]
-    },
-    {
-      "repo": "DM-Earth/Cabricality",
-      "packFile": "pack.toml",
-      "packToml": null,
-      "indexToml": null,
-      "metafiles": [
-        "mods/ad-astra.pw.toml",
-        "mods/ae2.pw.toml",
-        "mods/amecs.pw.toml",
-        "mods/architectury-api.pw.toml",
-        "mods/athena-ctm.pw.toml",
-        "mods/bits-and-chisels.pw.toml"
+        "modrinth.mrpack"
       ],
       "recipe": {
-        "formatId": "packwiz",
-        "name": "Cabricality",
-        "mc": "1.20.2",
-        "loader": "quilt",
-        "loaderVersion": "0.21.0-beta.5",
+        "formatId": "modrinth.mrpack",
+        "name": "Prominence™ II: Hasturian Era",
+        "mc": "1.20.1",
+        "loader": "fabric",
+        "loaderVersion": "0.19.3",
         "javaMajor": null,
-        "fileCount": 6,
+        "fileCount": 565,
         "overrideLayers": [
-          "(root)"
+          "overrides/",
+          "server-overrides/"
         ],
         "launchShape": "launch-jar",
         "sideCounts": {
-          "required": 4,
-          "unsupported": 2
+          "unsupported": 213,
+          "required": 352
         },
-        "warningRules": [
-          "packwiz.metafile-missing",
-          "packwiz.archive-payload"
-        ],
+        "warningRules": [],
         "resolution": [
           {
             "field": "mc",
-            "source": "pack.toml [versions].minecraft"
+            "source": "modrinth.index.json dependencies.minecraft"
           },
           {
             "field": "loader",
-            "source": "pack.toml [versions].quilt"
+            "source": "modrinth.index.json dependencies (fabric)"
           },
           {
             "field": "files",
-            "source": "index.toml [[files]] metafile → *.pw.toml [download].url"
+            "source": "modrinth.index.json files[] (downloads + hashes)"
           },
           {
             "field": "side",
-            "source": "*.pw.toml side (both/client/server), absent ⇒ both"
+            "source": "files[].env.server, absent â‡’ unknown"
           }
         ],
         "sampleFiles": [
-          "mods/ad_astra-fabric-1.20.1-1.15.3.jar",
-          "mods/appliedenergistics2-fabric-15.0.11.jar",
-          "mods/amecs-1.3.9+mc.1.20.1.jar"
+          "mods/mobhealthbar-fabric-1.20.x-2.3.0.jar",
+          "mods/youre-in-grave-danger-fabric-2.0.16.jar",
+          "resourcepacks/HTP-Zenith_attributes-TranslationPack-v1.0.0.zip"
         ]
       },
       "validation": "passed",
       "error": null,
       "ok": true,
-      "packTomlBytes": 278,
-      "indexTomlBytes": 13108,
-      "candidates": [
-        "packwiz",
-        "plain.serverzip"
-      ]
-    },
-    {
-      "repo": "GregTechCEu/GregTech-Modern-Community-Pack",
-      "packFile": "pack.toml",
-      "packToml": null,
-      "indexToml": null,
-      "metafiles": [
-        "mods/ae2-crafting-tree.pw.toml",
-        "mods/alternate-current.pw.toml",
-        "mods/appleskin.pw.toml",
-        "mods/applied-energistics-2-wireless-terminals.pw.toml",
-        "mods/applied-energistics-2.pw.toml",
-        "mods/architects-palette.pw.toml"
-      ],
-      "recipe": null,
-      "validation": null,
-      "error": "packwiz pack \"GregTech CEu Modern Community Pack\" yielded no downloadable metafiles. Its index.toml may list only plain files, which this installer does not reconstruct from overrides.",
-      "ok": false,
-      "packTomlBytes": 290,
-      "indexTomlBytes": 36913,
-      "candidates": [
-        "packwiz",
-        "plain.serverzip"
-      ]
-    },
-    {
-      "repo": "Ministry-of-CBT/Project-CBT",
-      "packFile": "pack.toml",
-      "packToml": null,
-      "indexToml": null,
-      "metafiles": [
-        "mods/advanced-backups.pw.toml",
-        "mods/advancement-plaques.pw.toml",
-        "mods/ae2-extended-life.pw.toml",
-        "mods/ambience-extras.pw.toml",
-        "mods/animales.pw.toml",
-        "mods/asmodeuscore.pw.toml"
-      ],
-      "recipe": null,
-      "validation": null,
-      "error": "packwiz pack \"Project CBT\" yielded no downloadable metafiles. Its index.toml may list only plain files, which this installer does not reconstruct from overrides.",
-      "ok": false,
-      "packTomlBytes": 266,
-      "indexTomlBytes": 418366,
-      "candidates": [
-        "packwiz",
-        "plain.serverzip"
-      ]
-    },
-    {
-      "repo": "Jasons-impart/Create-Delight-Remake",
-      "packFile": "modpack.toml",
-      "packToml": null,
-      "indexToml": null,
-      "metafiles": [],
-      "recipe": null,
-      "validation": null,
-      "error": "no index.toml beside modpack.toml (HTTP 404)",
-      "ok": false,
-      "packTomlBytes": 153
-    },
-    {
-      "repo": "Fabulously-Optimized/fabulously-optimized",
-      "packFile": "Packwiz/1.21/pack.toml",
-      "packToml": null,
-      "indexToml": null,
-      "metafiles": [],
-      "recipe": null,
-      "validation": null,
-      "error": "packwiz must claim this real pack; got \"(none)\"",
-      "ok": false,
-      "packTomlBytes": 282,
-      "indexTomlBytes": 10043,
-      "candidates": []
-    },
-    {
-      "repo": "game-design-driven/Create-Prepare-to-Dye",
-      "packFile": "pack.toml",
-      "packToml": null,
-      "indexToml": null,
-      "metafiles": [
-        "mods/accurate-block-placement.pw.toml",
-        "mods/ae2.pw.toml",
-        "mods/architectury-api.pw.toml",
-        "mods/autoreglib.pw.toml",
-        "mods/balm.pw.toml",
-        "mods/better-compatibility-checker.pw.toml"
-      ],
-      "recipe": {
-        "formatId": "packwiz",
-        "name": "Create-Prepare-to-Dye",
-        "mc": "1.19.2",
-        "loader": "forge",
-        "loaderVersion": "43.4.4",
-        "javaMajor": null,
-        "fileCount": 6,
-        "overrideLayers": [
-          "(root)"
-        ],
-        "launchShape": "generated-args",
-        "sideCounts": {
-          "required": 6
-        },
-        "warningRules": [
-          "packwiz.metafile-missing",
-          "packwiz.archive-payload"
-        ],
-        "resolution": [
-          {
-            "field": "mc",
-            "source": "pack.toml [versions].minecraft"
-          },
-          {
-            "field": "loader",
-            "source": "pack.toml [versions].forge"
-          },
-          {
-            "field": "files",
-            "source": "index.toml [[files]] metafile → *.pw.toml [download].url"
-          },
-          {
-            "field": "side",
-            "source": "*.pw.toml side (both/client/server), absent ⇒ both"
-          }
-        ],
-        "sampleFiles": [
-          "mods/accurate_block_placement-1.19.2_1.0.jar",
-          "mods/appliedenergistics2-forge-12.9.9.jar",
-          "mods/architectury-6.6.92-forge.jar"
-        ]
-      },
-      "validation": "passed",
-      "error": null,
-      "ok": true,
-      "packTomlBytes": 281,
-      "indexTomlBytes": 601995,
-      "candidates": [
-        "packwiz",
-        "plain.serverzip"
-      ]
+      "entryCount": 2578
     }
   ],
-  "defects": [
-    {
-      "source": "packwiz",
-      "repo": "Laskyyy/Create-Astral",
-      "defect": "packwiz pack \"Create Astral\" has an empty index.toml (no [[files]])."
-    },
-    {
-      "source": "packwiz",
-      "repo": "GregTechCEu/GregTech-Modern-Community-Pack",
-      "defect": "packwiz pack \"GregTech CEu Modern Community Pack\" yielded no downloadable metafiles. Its index.toml may list only plain files, which this installer does not reconstruct from overrides."
-    },
-    {
-      "source": "packwiz",
-      "repo": "Ministry-of-CBT/Project-CBT",
-      "defect": "packwiz pack \"Project CBT\" yielded no downloadable metafiles. Its index.toml may list only plain files, which this installer does not reconstruct from overrides."
-    },
-    {
-      "source": "packwiz",
-      "repo": "Jasons-impart/Create-Delight-Remake",
-      "defect": "no index.toml beside modpack.toml (HTTP 404)"
-    },
-    {
-      "source": "packwiz",
-      "repo": "Fabulously-Optimized/fabulously-optimized",
-      "defect": "packwiz must claim this real pack; got \"(none)\""
-    }
-  ],
+  "packwiz": [],
+  "defects": [],
   "verdict": "DEFECTS_FOUND",
   "summary": {
     "realArchives": {
       "total": 6,
-      "resolved": 2
+      "resolved": 4
     },
     "realPackwiz": {
-      "total": 8,
-      "resolved": 3
+      "total": 0,
+      "resolved": 0
     },
     "formatsObserved": [
       "plain.serverzip",
-      "packwiz"
+      "modrinth.mrpack"
     ],
-    "defects": 5
+    "defects": 0
   },
-  "finishedAt": "2026-10-29T12:54:57.197Z",
-  "durationSeconds": 8.1
+  "finishedAt": "2026-10-29T13:24:46.070Z",
+  "durationSeconds": 8.7
 }
