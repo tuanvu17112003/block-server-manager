@@ -1,6 +1,6 @@
 {
   "harness": "verify-adapter-ftb.mjs",
-  "startedAt": "2026-10-29T10:15:03.325Z",
+  "startedAt": "2026-10-29T11:11:10.032Z",
   "packId": 1,
   "versionId": null,
   "detected": "ftb.app",
@@ -12,49 +12,48 @@
     "name": "FTB Academy 1.12",
     "mc": "1.12.2",
     "loader": "forge",
-    "loaderVersion": "14.23.5.2846",
+    "loaderVersion": "14.23.5.2847",
     "javaMajor": 8,
     "launchShape": "generated-args",
     "overrides": [],
-    "fileCount": 1480,
+    "fileCount": 1508,
     "sideCounts": {
-      "unsupported": 59,
-      "required": 1421
+      "required": 1508
     },
     "sampleFiles": [
       {
-        "path": "animation/08.jpg",
-        "side": "unsupported",
-        "size": 18988,
-        "sha1": "78c25d57101bcbb8a837ba828b93cbd7eab7baa0",
+        "path": "mods/Bookshelf-1.12.2-2.3.590.jar",
+        "side": "required",
+        "size": 266636,
+        "sha1": "83a1864dd78f48102609849dd36866d6cf32b907",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "animation/02.jpg",
-        "side": "unsupported",
-        "size": 18988,
-        "sha1": "78c25d57101bcbb8a837ba828b93cbd7eab7baa0",
+        "path": "mods/diethopper-1.1.jar",
+        "side": "required",
+        "size": 5222,
+        "sha1": "2aea3d9a64551cefe0a1b6f5c5edf57959796b66",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "animation/29.jpg",
-        "side": "unsupported",
-        "size": 42762,
-        "sha1": "3ead06944aa00fdcdbe8f400f4ce7e6daac2bc47",
+        "path": "mods/ResourceReloader-1.0.2.5.jar",
+        "side": "required",
+        "size": 13329,
+        "sha1": "ad888f770d1c6e52bc4de2bbca22daf0801656d9",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "animation/46.jpg",
-        "side": "unsupported",
-        "size": 42727,
-        "sha1": "bc6fc77316f6d20bec32c17fb33187164b1d0a56",
+        "path": "mods/jei_1.12.2-4.16.1.302.jar",
+        "side": "required",
+        "size": 653210,
+        "sha1": "3e88d2896ca868c3cedb65e117ad3a1b82488fa8",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "animation/10.jpg",
-        "side": "unsupported",
-        "size": 18988,
-        "sha1": "78c25d57101bcbb8a837ba828b93cbd7eab7baa0",
+        "path": "mods/DefaultOptions_1.12.2-9.2.8.jar",
+        "side": "required",
+        "size": 15056,
+        "sha1": "e3197fc44aa2f59897713a8889a5a56c0f8ccbf3",
         "provenance": "ftb.clientonly/serveronly/optional"
       }
     ],
@@ -78,15 +77,15 @@
   "error": null,
   "verdict": "PASS",
   "download": {
-    "path": "animation/08.jpg",
+    "path": "mods/Bookshelf-1.12.2-2.3.590.jar",
     "status": 200,
-    "bytes": 18988,
-    "expectedSize": 18988,
+    "bytes": 266636,
+    "expectedSize": 266636,
     "sizeMatch": true,
-    "sha1": "78c25d57101bcbb8a837ba828b93cbd7eab7baa0",
-    "expectedSha1": "78c25d57101bcbb8a837ba828b93cbd7eab7baa0",
+    "sha1": "83a1864dd78f48102609849dd36866d6cf32b907",
+    "expectedSha1": "83a1864dd78f48102609849dd36866d6cf32b907",
     "sha1Match": true
   },
-  "finishedAt": "2026-10-29T10:15:04.256Z",
+  "finishedAt": "2026-10-29T11:11:10.967Z",
   "durationSeconds": 0.9
 }

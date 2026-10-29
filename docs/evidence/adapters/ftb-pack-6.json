@@ -1,6 +1,6 @@
 {
   "harness": "verify-adapter-ftb.mjs",
-  "startedAt": "2026-10-29T10:15:06.200Z",
+  "startedAt": "2026-10-29T11:11:07.880Z",
   "packId": 6,
   "versionId": null,
   "detected": "ftb.app",
@@ -12,35 +12,35 @@
     "name": "FTB Omnia",
     "mc": "1.15.2",
     "loader": "forge",
-    "loaderVersion": null,
+    "loaderVersion": "31.2.33",
     "javaMajor": 8,
     "launchShape": "generated-args",
     "overrides": [],
-    "fileCount": 326,
+    "fileCount": 376,
     "sideCounts": {
-      "required": 324,
+      "required": 374,
       "unsupported": 2
     },
     "sampleFiles": [
       {
-        "path": "mods/Bookshelf-1.15.2-5.3.9.jar",
+        "path": "mods/Bookshelf-1.15.2-5.6.40.jar",
         "side": "required",
-        "size": 130429,
-        "sha1": "fb46443d7f487d15c777eaf52dc30084dc8c8cf7",
+        "size": 178961,
+        "sha1": "01aed182efae4bb84415fbfc29b708aee561139a",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "mods/jei-1.15.2-6.0.0.2.jar",
+        "path": "mods/refinedstorageaddons-0.6.3.jar",
         "side": "required",
-        "size": 700499,
-        "sha1": "2dd4eb299675a36d2d01d9a859b2fcc10f9b9bd2",
+        "size": 28802,
+        "sha1": "12d25c913652a67741b773b7ca0e87dc289f4263",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "mods/DefaultOptions_1.15.2-11.0.1.jar",
+        "path": "mods/justenoughbeacons-2.0.jar",
         "side": "required",
-        "size": 14518,
-        "sha1": "fc37c797c37dd0a225ed535bf771c3db909344c0",
+        "size": 18052,
+        "sha1": "1abda7c7b85acc99b6d29ff10355f02b5865be9e",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
@@ -51,19 +51,14 @@
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "mods/refinedstorageaddons-0.6.1.jar",
+        "path": "mods/jei-1.15.2-6.0.2.12.jar",
         "side": "required",
-        "size": 28420,
-        "sha1": "90fd944378d8a0b73dffb82b4df0a3813631582f",
+        "size": 704540,
+        "sha1": "fedf6655a82a12d5d027724f80ecb9266219d98a",
         "provenance": "ftb.clientonly/serveronly/optional"
       }
     ],
-    "warnings": [
-      {
-        "rule": "ftb.modloader-missing-inferred",
-        "message": "FTB declares no modloader for this version; \"forge\" inferred from 6/154 jar names contain \"-forge-\"."
-      }
-    ],
+    "warnings": [],
     "resolution": [
       {
         "field": "mc",
@@ -71,7 +66,7 @@
       },
       {
         "field": "loader",
-        "source": "inferred from jar names (6/154 jar names contain \"-forge-\"); FTB declared no modloader"
+        "source": "ftb target \"forge\""
       },
       {
         "field": "javaMajor",
@@ -83,15 +78,15 @@
   "error": null,
   "verdict": "PASS",
   "download": {
-    "path": "mods/Bookshelf-1.15.2-5.3.9.jar",
+    "path": "mods/Bookshelf-1.15.2-5.6.40.jar",
     "status": 200,
-    "bytes": 130429,
-    "expectedSize": 130429,
+    "bytes": 178961,
+    "expectedSize": 178961,
     "sizeMatch": true,
-    "sha1": "fb46443d7f487d15c777eaf52dc30084dc8c8cf7",
-    "expectedSha1": "fb46443d7f487d15c777eaf52dc30084dc8c8cf7",
+    "sha1": "01aed182efae4bb84415fbfc29b708aee561139a",
+    "expectedSha1": "01aed182efae4bb84415fbfc29b708aee561139a",
     "sha1Match": true
   },
-  "finishedAt": "2026-10-29T10:15:07.076Z",
-  "durationSeconds": 0.9
+  "finishedAt": "2026-10-29T11:11:08.972Z",
+  "durationSeconds": 1.1
 }

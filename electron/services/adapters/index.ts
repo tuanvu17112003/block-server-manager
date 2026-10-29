@@ -36,4 +36,4 @@ export function createAdapterIo(log: (message: string) => void): AdapterIo {
 export { AdapterRegistry, buildArchiveIndex } from './registry';
 export { validateRecipe } from './registry';
 export * from './types';
-export { ftbAdapter, FTB_ALLOWED_HOSTS, buildFtbRecipe, ftbFileSide, parseFtbModLoader, pickFtbVersion, ftbJavaMajor } from './ftb';
+export { ftbAdapter, FTB_ALLOWED_HOSTS, buildFtbRecipe, ftbFileSide, parseFtbModLoader, pickFtbVersion, ftbJavaMajor, isFtbPrerelease, inferFtbLoaderFromFiles, resolveFtbDestPath } from './ftb';

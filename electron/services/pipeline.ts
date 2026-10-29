@@ -15,8 +15,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { IpcContext, Handler } from '../ipc';
 import { appError, Store, type CreateServerInput, type ServerDto } from './store';
 import { Jobs } from './jobs';
-import { log, ensureServerProperties, writeEula, startWithAutoFix, type AutoFixEntry } from './installer/core';
-import { publishStagedServer, assertServerNameAvailable } from './install-transaction';
+import { log, ensureServerProperties, writeEula, startWithAutoFix, fetchTrusted, installLoader, LOADER_ALLOWED_HOSTS, type AutoFixEntry } from './installer/core';
+import {
+  classifyBootFailure, explainNoEscalation, logEscalation, nextLoaderBuild, planLoaderBuilds,
+  type LoaderBuildPlan,
+} from './installer/loader-build';
+import { publishStagedServer, assertServerNameAvailable, validateStagedInstall } from './install-transaction';
 import { installMajorFor, requiredJavaMajor, ensureJava, validateJava } from './java';
 import { makeCuratedResolver, appendLearned } from './installer/curated';
 import { resolveMrpack, splitDeps, installModrinth, fetchModrinthDependency, type MrIndex } from './installer/modrinth';
@@ -603,6 +607,10 @@ export class Pipeline {
     } | null = null;
     let autoFixFixes: AutoFixEntry[] = [];
     let autoFixRounds = 0;
+    // Loader-build policy: computed from the recipe, consumed by bootCheck. Only packs that declare no build
+    // may escalate, and only on a loader-level boot failure (see installer/loader-build.ts).
+    let loaderPlan: LoaderBuildPlan | null = null;
+    let loaderEscalations = 0;
 
     try {
       // ---- pre-mutation validation (failure re-inserts the preview) ----
@@ -673,6 +681,46 @@ export class Pipeline {
           );
           autoFixFixes = result.fixes;
           autoFixRounds = result.rounds;
+
+          // ---- loader-build escalation (see installer/loader-build.ts) ----
+          // The pack's L2/L3 loop could not make it boot. If — and only if — the pack declared no loader build
+          // and the failure is provably at the loader level, try the next provider build, within a hard budget.
+          if (!result.ok && loaderPlan && !loaderPlan.declared) {
+            const failure = classifyBootFailure(result.tail);
+            const next = nextLoaderBuild(loaderPlan, loaderEscalations, failure);
+            if (next) {
+              loaderEscalations += 1;
+              logEscalation(loaderPlan.candidates[loaderEscalations - 1] ?? '?', next.build, next.rule, loaderEscalations - 1, loaderPlan.maxEscalations);
+              report.warnings.push(`loader build escalated to ${next.build} after a loader-level boot failure (${next.rule})`);
+              await installLoader(
+                held.loader.kind as never, stagingDir, held.loader.minecraftVersion, next.build, javaPath ?? 'java', this.cacheDir(),
+              );
+              // The loader artifact name derives from its build (e.g. forge-1.12.2-<build>.jar), so the launch
+              // shape computed before the reinstall now points at a file that is gone. Re-resolve it.
+              let retryLaunch = launch;
+              try {
+                retryLaunch = validateStagedInstall({ stagingDir, loaderKind: held.loader.kind as never, log: () => {} });
+              } catch (error) {
+                log(`[loader] could not re-resolve launch shape after escalation: ${(error as Error).message}`);
+              }
+              const retry = await startWithAutoFix(
+                stagingDir,
+                javaPath ? { exe: javaPath, args: retryLaunch.args } : retryLaunch,
+                {
+                  timeoutMs: 8 * 60_000,
+                  maxRounds: 6,
+                  ...(autoFixContext ? { l2Protect: autoFixContext.protectBasenames } : {}),
+                },
+              );
+              autoFixFixes = [...autoFixFixes, ...retry.fixes];
+              autoFixRounds += retry.rounds;
+              if (retry.ok) return { ok: true, reason: retry.reason, tail: retry.tail };
+              return { ok: false, reason: `${retry.reason} (after loader build ${next.build})`, tail: retry.tail };
+            }
+            if (!result.ok) {
+              report.warnings.push(`loader build not escalated: ${explainNoEscalation(loaderPlan, failure)}`);
+            }
+          }
           return { ok: result.ok, reason: result.reason, tail: result.tail };
         },
         // Provisional id for failed report DTOs (Phase 1 contract: serverId is always populated).
@@ -742,6 +790,27 @@ export class Pipeline {
             };
           } else if (held.recipe) {
             // ---- P1b: install from the canonical recipe produced by a pack adapter ----
+            // Loader-build policy: a declared build is authoritative; otherwise resolve the provider's
+            // recommended/latest builds so a loader-level boot failure can escalate once, within budget.
+            if ((held.recipe.loader === 'forge' || held.recipe.loader === 'neoforge')) {
+              const promotions = await this.fetchPromotions(held.recipe.loader, signal);
+              loaderPlan = planLoaderBuilds({
+                loader: held.recipe.loader,
+                mc: held.recipe.mc,
+                declaredVersion: held.recipe.loaderVersion,
+                promotions,
+              });
+              log(`[loader] ${held.recipe.loader} ${held.recipe.mc}: ${loaderPlan.declared
+                ? `using declared build ${loaderPlan.candidates[0]}`
+                : `no declared build; candidates ${loaderPlan.candidates.join(' -> ')} (source: ${loaderPlan.source})`}`);
+              if (!loaderPlan.declared) {
+                report.warnings.push(
+                  `the pack does not declare a ${held.recipe.loader} build; using ${loaderPlan.candidates[0]} (${loaderPlan.source})`,
+                );
+              }
+              // The primary candidate is what actually gets installed, so pin it on the recipe.
+              if (!held.recipe.loaderVersion) held.recipe.loaderVersion = loaderPlan.candidates[0]!;
+            }
             const resolvedDecisions = held.fileDecisions.map(decision => {
               const choice = choices.files[decision.path];
               return choice ? { ...decision, action: choice, reason: 'userChoice' as const } : decision;
@@ -988,9 +1057,39 @@ export class Pipeline {
     return { loader: loaderName, mc: minecraftVersion };
   }
 
+  /**
+   * Fetch the loader's own recommended/latest build feed for one Minecraft version.
+   * Returns null when no trustworthy feed exists or it is unreachable — an unreachable feed must never block
+   * an install that declares its build, and inventing candidates would be a guess.
+   *
+   * Forge publishes `promotions_slim.json` with explicit `recommended`/`latest` per MC line, which is exactly
+   * the answer needed. NeoForge publishes only a flat version list with no MC-line mapping, so it has no
+   * equivalent: we return null and NeoForge packs simply require a declared build.
+   */
+  private async fetchPromotions(loader: string, signal?: AbortSignal): Promise<{ promos?: Record<string, string> } | null> {
+    if (loader !== 'forge') {
+      log(`[loader] ${loader} has no recommended/latest promotion feed; a declared build is required`);
+      return null;
+    }
+    try {
+      const response = await fetchTrusted(
+        'https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json',
+        LOADER_ALLOWED_HOSTS,
+        signal ? { signal } : {},
+      );
+      if (!response.ok) {
+        log(`[loader] forge promotions feed returned HTTP ${response.status}; not escalating`);
+        return null;
+      }
+      return await response.json() as { promos?: Record<string, string> };
+    } catch (error) {
+      log(`[loader] forge promotions feed unavailable: ${(error as Error).message}`);
+      return null;
+    }
+  }
+
   /** WP-4.5: reject when the reviewed archive no longer matches the preview snapshot. */
-  private async assertNoSourceDrift(held: HeldPreview): Promise<void> {
-    const expected = held.sourcePin.artifact;
+  private async assertNoSourceDrift(held: HeldPreview): Promise<void> {    const expected = held.sourcePin.artifact;
     if (!expected || !held.artifactPath) return;
     const reason = await artifactDriftReason(held.artifactPath, expected);
     if (reason) {

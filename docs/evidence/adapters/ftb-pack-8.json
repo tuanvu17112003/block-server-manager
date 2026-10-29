@@ -1,6 +1,6 @@
 {
   "harness": "verify-adapter-ftb.mjs",
-  "startedAt": "2026-10-29T10:15:07.123Z",
+  "startedAt": "2026-10-29T11:11:12.293Z",
   "packId": 8,
   "versionId": null,
   "detected": "ftb.app",
@@ -12,49 +12,49 @@
     "name": "FTB Sky Odyssey",
     "mc": "1.12.2",
     "loader": "forge",
-    "loaderVersion": "14.23.5.2847",
+    "loaderVersion": "14.23.5.2857",
     "javaMajor": 8,
     "launchShape": "generated-args",
     "overrides": [],
-    "fileCount": 1733,
+    "fileCount": 1711,
     "sideCounts": {
-      "required": 1732,
-      "unsupported": 1
+      "required": 1708,
+      "unsupported": 3
     },
     "sampleFiles": [
       {
-        "path": "mods/SmoothFont-mc1.12.2-2.1.2.jar",
+        "path": "config/AppliedEnergistics2/CustomRecipes.cfg",
         "side": "required",
-        "size": 283513,
-        "sha1": "f904ba15339103acb898b6a618b87f6498b3d8bc",
+        "size": 855,
+        "sha1": "346c28ee2c1b62e305a047c3b76b171798afa12b",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "mods/inventorysorter-1.12.2-1.13.3+57.jar",
+        "path": "config/AppliedEnergistics2/AppliedEnergistics2.cfg",
         "side": "required",
-        "size": 47765,
-        "sha1": "963c9943f0df194c0484ef038f2f7a7684b2d0e2",
+        "size": 12838,
+        "sha1": "fa981d3b19839d8e15f085da9a46c671378b4069",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "mods/JustEnoughResources-1.12.2-0.9.2.60.jar",
+        "path": "config/AppliedEnergistics2/VersionChecker.cfg",
         "side": "required",
-        "size": 222270,
-        "sha1": "3d4c9b8bb4ad948c7e26b7becd1c836f8cb34d07",
+        "size": 757,
+        "sha1": "31bef9543afef9dbf31a52c92080f2ae3260aaed",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "mods/BetterBuildersWands-1.12.2-0.13.2.271+5997513.jar",
+        "path": "config/AppliedEnergistics2/aerecipes/generated/decorative/crystals.recipe",
         "side": "required",
-        "size": 77866,
-        "sha1": "3505169dfeea40d726b23072cb695d3c0e5014da",
+        "size": 1443,
+        "sha1": "df3aa1c794dc25801445145d2ef94c69749311ec",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "mods/bedpatch-2.2-1.12.2.jar",
+        "path": "config/AppliedEnergistics2/aerecipes/README.html",
         "side": "required",
-        "size": 21613,
-        "sha1": "0c54d926ef72088e5f213a89e220d55a2284e44b",
+        "size": 14676,
+        "sha1": "a3585260c46584490e9c04555cb4f3ba9230c17d",
         "provenance": "ftb.clientonly/serveronly/optional"
       }
     ],
@@ -78,15 +78,15 @@
   "error": null,
   "verdict": "PASS",
   "download": {
-    "path": "mods/SmoothFont-mc1.12.2-2.1.2.jar",
+    "path": "config/AppliedEnergistics2/CustomRecipes.cfg",
     "status": 200,
-    "bytes": 283513,
-    "expectedSize": 283513,
+    "bytes": 855,
+    "expectedSize": 855,
     "sizeMatch": true,
-    "sha1": "f904ba15339103acb898b6a618b87f6498b3d8bc",
-    "expectedSha1": "f904ba15339103acb898b6a618b87f6498b3d8bc",
+    "sha1": "346c28ee2c1b62e305a047c3b76b171798afa12b",
+    "expectedSha1": "346c28ee2c1b62e305a047c3b76b171798afa12b",
     "sha1Match": true
   },
-  "finishedAt": "2026-10-29T10:15:07.769Z",
-  "durationSeconds": 0.6
+  "finishedAt": "2026-10-29T11:11:13.751Z",
+  "durationSeconds": 1.5
 }

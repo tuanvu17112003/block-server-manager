@@ -1,6 +1,6 @@
 {
   "harness": "verify-adapter-ftb.mjs",
-  "startedAt": "2026-10-29T10:15:05.530Z",
+  "startedAt": "2026-10-29T11:11:11.019Z",
   "packId": 5,
   "versionId": null,
   "detected": "ftb.app",
@@ -16,44 +16,45 @@
     "javaMajor": 8,
     "launchShape": "generated-args",
     "overrides": [],
-    "fileCount": 3482,
+    "fileCount": 3546,
     "sideCounts": {
-      "required": 3482
+      "required": 3545,
+      "unsupported": 1
     },
     "sampleFiles": [
       {
-        "path": "mods/roughmobsrevamped-1.12.2-2.3.17.jar",
+        "path": "config/AppliedEnergistics2/AppliedEnergistics2.cfg",
         "side": "required",
-        "size": 387900,
-        "sha1": "0aa1a8400ef94b768b1b49b7724e5428e32a4976",
+        "size": 16338,
+        "sha1": "90c8a188716babe22c097d61c7c597d11dd64fe5",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "mods/EmberRootZoo-1.12.2-1.3.10.jar",
+        "path": "config/AppliedEnergistics2/CustomRecipes.cfg",
         "side": "required",
-        "size": 1253567,
-        "sha1": "036d673b7b3fb38ab8f46f3aa3371fa7f1f7d4c4",
+        "size": 834,
+        "sha1": "d4c14f8b66a7e61c0a6f5fb6b8687cb1a09844d7",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "mods/Botania r1.10-363.jar",
+        "path": "config/AppliedEnergistics2/Facades.cfg",
         "side": "required",
-        "size": 13814617,
-        "sha1": "54b0b10d5a01a17dba2b50d2104f2ff970c98f84",
+        "size": 1688,
+        "sha1": "b419c2de230bdeac8e9e404ebfc7587fb0919f26",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "mods/togetherforever-1.12.2-1.0.12-22.jar",
+        "path": "config/AppliedEnergistics2/aliases.recipe",
         "side": "required",
-        "size": 75451,
-        "sha1": "ed5745ae5436969f65e22736582014202fa6cb30",
+        "size": 54,
+        "sha1": "6b47570af7634bbbbb6cc180a836ec48143caf26",
         "provenance": "ftb.clientonly/serveronly/optional"
       },
       {
-        "path": "mods/wizardry-0.11.0.jar",
+        "path": "config/AppliedEnergistics2/decorative/fixtures.recipe",
         "side": "required",
-        "size": 12344507,
-        "sha1": "f953752e92b25716cc733d0f9cdb96551883208c",
+        "size": 161,
+        "sha1": "597338bebd946b063b92c71c29d7c070b9ae7a2e",
         "provenance": "ftb.clientonly/serveronly/optional"
       }
     ],
@@ -77,15 +78,15 @@
   "error": null,
   "verdict": "PASS",
   "download": {
-    "path": "mods/roughmobsrevamped-1.12.2-2.3.17.jar",
+    "path": "config/AppliedEnergistics2/AppliedEnergistics2.cfg",
     "status": 200,
-    "bytes": 387900,
-    "expectedSize": 387900,
+    "bytes": 16338,
+    "expectedSize": 16338,
     "sizeMatch": true,
-    "sha1": "0aa1a8400ef94b768b1b49b7724e5428e32a4976",
-    "expectedSha1": "0aa1a8400ef94b768b1b49b7724e5428e32a4976",
+    "sha1": "90c8a188716babe22c097d61c7c597d11dd64fe5",
+    "expectedSha1": "90c8a188716babe22c097d61c7c597d11dd64fe5",
     "sha1Match": true
   },
-  "finishedAt": "2026-10-29T10:15:06.150Z",
-  "durationSeconds": 0.6
+  "finishedAt": "2026-10-29T11:11:12.239Z",
+  "durationSeconds": 1.2
 }

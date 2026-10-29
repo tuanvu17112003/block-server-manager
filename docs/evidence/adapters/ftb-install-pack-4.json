@@ -1,6 +1,6 @@
 {
   "harness": "verify-ftb-install.mjs",
-  "startedAt": "2026-10-29T10:44:54.505Z",
+  "startedAt": "2026-10-29T11:21:03.951Z",
   "packId": 4,
   "versionId": null,
   "javaPath": "C:\\Program Files\\Java\\jre1.8.0_503\\bin\\java.exe",
@@ -10,48 +10,48 @@
     "loader": {
       "kind": "forge",
       "minecraftVersion": "1.12.2",
-      "loaderVersion": "14.23.5.2847"
+      "loaderVersion": "14.23.5.2860"
     },
-    "include": 1426,
-    "exclude": 0,
+    "include": 1413,
+    "exclude": 2,
     "conflicts": [
-      "mods/Controlling-3.0.9.jar",
-      "mods/MouseTweaks-2.10-mc1.12.2.jar",
-      "mods/Xaeros_Minimap_20.18.0_Forge_1.12.jar",
-      "mods/CraftPresence-1.12.2-1.6.6.jar",
       "config/MouseTweaks.cfg",
-      "config/craftpresence.properties"
+      "config/craftpresence.properties",
+      "mods/Controlling-3.0.10.jar",
+      "mods/CraftPresence-Forge-1.12.2-Release-1.7.2.jar",
+      "mods/MouseTweaks-2.10-mc1.12.2.jar",
+      "mods/Xaeros_Minimap_22.1.2_Forge_1.12.jar"
     ],
-    "totalFiles": 1432,
+    "totalFiles": 1421,
     "sourcePin": {
       "source": "ftb",
       "projectId": 4,
       "artifact": null
     },
     "warnings": [
-      "mods/Controlling-3.0.9.jar: community exclude: controlling",
-      "mods/MouseTweaks-2.10-mc1.12.2.jar: community exclude: MouseTweaks",
-      "mods/Xaeros_Minimap_20.18.0_Forge_1.12.jar: community exclude: Xaeros_Minimap",
-      "mods/CraftPresence-1.12.2-1.6.6.jar: community exclude: craftpresence",
       "config/MouseTweaks.cfg: community exclude: MouseTweaks",
-      "config/craftpresence.properties: community exclude: craftpresence"
+      "config/craftpresence.properties: community exclude: craftpresence",
+      "mods/Controlling-3.0.10.jar: community exclude: controlling",
+      "mods/CraftPresence-Forge-1.12.2-Release-1.7.2.jar: community exclude: craftpresence",
+      "mods/MouseTweaks-2.10-mc1.12.2.jar: community exclude: MouseTweaks",
+      "mods/Xaeros_Minimap_22.1.2_Forge_1.12.jar: community exclude: Xaeros_Minimap"
     ]
   },
   "install": {
     "status": "complete",
-    "serverId": "b67380d4-3385-49e6-b11e-014462851fbc",
+    "serverId": "8c7c345d-94e3-423c-851c-d74dbe2cac2f",
     "loader": {
       "kind": "forge",
       "minecraftVersion": "1.12.2",
-      "loaderVersion": "14.23.5.2847"
+      "loaderVersion": "14.23.5.2860"
     },
     "files": [
       {
-        "path": "1426 files",
+        "path": "1413 files",
         "outcome": "installed"
       },
       {
-        "path": "6 plan-excluded",
+        "path": "8 plan-excluded",
         "outcome": "skipped-user-choice"
       }
     ],
@@ -75,7 +75,7 @@
       }
     ],
     "warnings": [
-      "6 files excluded by the reviewed plan"
+      "8 files excluded by the reviewed plan"
     ],
     "error": null,
     "autofix": null
@@ -83,6 +83,6 @@
   "published": null,
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T10:54:26.578Z",
-  "durationSeconds": 572.1
+  "finishedAt": "2026-10-29T11:28:02.678Z",
+  "durationSeconds": 418.7
 }

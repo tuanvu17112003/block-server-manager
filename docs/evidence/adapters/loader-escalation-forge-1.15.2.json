@@ -1,0 +1,33 @@
+{
+  "harness": "verify-loader-escalation.mjs",
+  "startedAt": "2026-10-29T11:38:47.181Z",
+  "mc": "1.15.2",
+  "loader": "forge",
+  "javaExe": "C:\\Program Files\\Java\\jre1.8.0_503\\bin\\java.exe",
+  "plan": {
+    "candidates": [
+      "31.2.57",
+      "31.2.62"
+    ],
+    "source": "provider-recommended",
+    "declared": false,
+    "maxEscalations": 1
+  },
+  "attempts": [
+    {
+      "attempt": 0,
+      "build": "31.2.57",
+      "installOk": true,
+      "bootOk": true,
+      "reason": null,
+      "classification": {
+        "kind": "unknown"
+      }
+    }
+  ],
+  "verdict": "PASS",
+  "error": null,
+  "finalBuild": "31.2.57",
+  "finishedAt": "2026-10-29T11:39:37.441Z",
+  "durationSeconds": 50.3
+}

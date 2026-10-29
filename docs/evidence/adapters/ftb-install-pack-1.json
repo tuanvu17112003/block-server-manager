@@ -1,6 +1,6 @@
 {
   "harness": "verify-ftb-install.mjs",
-  "startedAt": "2026-10-29T10:55:02.906Z",
+  "startedAt": "2026-10-29T11:40:55.719Z",
   "packId": 1,
   "versionId": null,
   "javaPath": "C:\\Program Files\\Java\\jre1.8.0_503\\bin\\java.exe",
@@ -10,46 +10,46 @@
     "loader": {
       "kind": "forge",
       "minecraftVersion": "1.12.2",
-      "loaderVersion": "14.23.5.2846"
+      "loaderVersion": "14.23.5.2847"
     },
-    "include": 1415,
-    "exclude": 59,
+    "include": 1503,
+    "exclude": 0,
     "conflicts": [
-      "config/MouseTweaks.cfg",
-      "config/craftpresence.properties",
-      "mods/Controlling-3.0.7.jar",
+      "mods/CraftPresence-Forge-1.12.2-Beta-1.7.5.jar",
       "mods/MouseTweaks-2.10-mc1.12.2.jar",
-      "mods/CraftPresence-1.12.2-1.5.5.jar"
+      "mods/Controlling-3.0.10.jar",
+      "config/MouseTweaks.cfg",
+      "config/craftpresence.properties"
     ],
-    "totalFiles": 1479,
+    "totalFiles": 1508,
     "sourcePin": {
       "source": "ftb",
       "projectId": 1,
       "artifact": null
     },
     "warnings": [
-      "config/MouseTweaks.cfg: community exclude: MouseTweaks",
-      "config/craftpresence.properties: community exclude: craftpresence",
-      "mods/Controlling-3.0.7.jar: community exclude: controlling",
+      "mods/CraftPresence-Forge-1.12.2-Beta-1.7.5.jar: community exclude: craftpresence",
       "mods/MouseTweaks-2.10-mc1.12.2.jar: community exclude: MouseTweaks",
-      "mods/CraftPresence-1.12.2-1.5.5.jar: community exclude: craftpresence"
+      "mods/Controlling-3.0.10.jar: community exclude: controlling",
+      "config/MouseTweaks.cfg: community exclude: MouseTweaks",
+      "config/craftpresence.properties: community exclude: craftpresence"
     ]
   },
   "install": {
     "status": "complete",
-    "serverId": "a8c97931-17bb-47f5-b5ce-18746a3dd820",
+    "serverId": "fd3bf098-14a2-43b5-a802-b0c3e84ee76f",
     "loader": {
       "kind": "forge",
       "minecraftVersion": "1.12.2",
-      "loaderVersion": "14.23.5.2846"
+      "loaderVersion": "14.23.5.2847"
     },
     "files": [
       {
-        "path": "1415 files",
+        "path": "1503 files",
         "outcome": "installed"
       },
       {
-        "path": "64 plan-excluded",
+        "path": "5 plan-excluded",
         "outcome": "skipped-user-choice"
       }
     ],
@@ -73,7 +73,7 @@
       }
     ],
     "warnings": [
-      "64 files excluded by the reviewed plan"
+      "5 files excluded by the reviewed plan"
     ],
     "error": null,
     "autofix": null
@@ -81,6 +81,6 @@
   "published": null,
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T11:03:11.647Z",
-  "durationSeconds": 488.7
+  "finishedAt": "2026-10-29T11:48:23.717Z",
+  "durationSeconds": 448
 }

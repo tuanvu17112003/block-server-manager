@@ -5,8 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AdapterRegistry, validateRecipe } from '../../services/adapters/registry';
 import {
-  buildFtbRecipe, ftbFileSide, ftbJavaMajor, inferFtbLoaderFromFiles, parseFtbModLoader, pickFtbVersion,
-  resolveFtbDestPath,
+  buildFtbRecipe, ftbFileSide, ftbJavaMajor, inferFtbLoaderFromFiles, isFtbPrerelease, parseFtbModLoader,
+  pickFtbVersion, resolveFtbDestPath,
 } from '../../services/adapters/ftb';
 import type { DetectContext, PackAdapter, PackRecipe } from '../../services/adapters/types';
 
@@ -139,11 +139,38 @@ test('ftbJavaMajor: reads the major out of an FTB java target', () => {
   assert.equal(ftbJavaMajor(undefined), null);
 });
 
-test('pickFtbVersion: newest by default, exact match when pinned, fails closed when missing', () => {
-  const pack = { id: 1, name: 'FTB Academy 1.12', versions: [{ id: 2, name: '1.1.0', type: 'release' }, { id: 1, name: '1.0.0', type: 'release' }] };
-  assert.equal(pickFtbVersion(pack).id, 2);
-  assert.equal(pickFtbVersion(pack, 1).id, 1);
-  assert.throws(() => pickFtbVersion(pack, 99), /no version 99/);
+test('pickFtbVersion: newest by updated, preferring a release — FTB lists versions ASCENDING', () => {
+  // Real shape from api.modpacks.ch pack 6 (FTB Omnia): versions[] is oldest-first, and the oldest beta
+  // declares no modloader while later releases do. Taking versions[0] installed the wrong build.
+  const omnia = {
+    id: 6,
+    name: 'FTB Omnia',
+    versions: [
+      { id: 6, name: '1.0.0', type: 'beta', updated: 1585684800 },
+      { id: 45, name: '1.0.1', type: 'release', updated: 1586000000 },
+      { id: 91, name: '1.7.0', type: 'release', updated: 1596060000 },
+    ],
+  };
+  assert.equal(pickFtbVersion(omnia).id, 91, 'must pick the newest release, not the oldest array entry');
+  assert.equal(pickFtbVersion(omnia, 45).id, 45, 'an explicit pin still wins');
+  assert.throws(() => pickFtbVersion(omnia, 99), /no version 99/);
+
+  // Newest overall is a beta, but a release exists → prefer the release.
+  const withBetaTip = {
+    id: 7,
+    name: 'x',
+    versions: [
+      { id: 1, name: '1.0', type: 'release', updated: 100 },
+      { id: 2, name: '1.1', type: 'beta', updated: 200 },
+    ],
+  };
+  assert.equal(pickFtbVersion(withBetaTip).id, 1, 'a beta tip must not outrank the newest release');
+
+  // No releases at all → take the newest of any type rather than failing.
+  const betaOnly = { id: 8, name: 'y', versions: [{ id: 1, name: 'a', type: 'beta', updated: 100 }, { id: 2, name: 'b', type: 'alpha', updated: 300 }] };
+  assert.equal(pickFtbVersion(betaOnly).id, 2);
+  assert.equal(isFtbPrerelease(betaOnly.versions[1]!), true);
+  assert.equal(isFtbPrerelease(withBetaTip.versions[0]!), false);
   assert.throws(() => pickFtbVersion({ id: 1, name: 'x', versions: [] }), /no versions/);
 });
 

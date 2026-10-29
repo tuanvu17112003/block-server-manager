@@ -141,14 +141,37 @@ export function ftbJavaMajor(targets: FtbTarget[] | undefined): number | null {
   return Number.isInteger(major) && major > 0 ? major : null;
 }
 
-/** Pick the newest version when the caller did not pin one (FTB lists newest first). */
+/**
+ * Choose which version of a pack to install.
+ *
+ * **The FTB API returns `versions[]` in ASCENDING order (oldest first), and `id` is also ascending** —
+ * verified against five real packs, where id order and `updated` order agree exactly. Taking `versions[0]`
+ * therefore installs the *oldest* build, which is a serious correctness bug:
+ *  - FTB Omnia's oldest version (`6`, 1.0.0, beta, 2020-04-01) declares **no modloader at all**, while every
+ *    later release declares `forge 31.x` — so picking it made a Forge pack look vanilla.
+ *  - Two packages that "passed" were silently installed from outdated releases (Academy 1.1.0 instead of
+ *    1.4.0; Stoneblock 2 1.20.0 instead of 1.23.0).
+ *
+ * So: sort by `updated` (falling back to `id`) rather than trusting array order, prefer the newest
+ * **release**, and only fall back to the newest version of any type when no release exists.
+ */
 export function pickFtbVersion(pack: FtbPack, versionId?: number | null): FtbVersionRef {
   const versions = pack.versions ?? [];
   if (versions.length === 0) throw appError('validation', `FTB pack ${pack.id} has no versions.`);
-  if (versionId === undefined || versionId === null) return versions[0]!;
-  const found = versions.find((version) => version.id === versionId);
-  if (!found) throw appError('validation', `FTB pack ${pack.id} has no version ${versionId}.`);
-  return found;
+  if (versionId !== undefined && versionId !== null) {
+    const found = versions.find((version) => version.id === versionId);
+    if (!found) throw appError('validation', `FTB pack ${pack.id} has no version ${versionId}.`);
+    return found;
+  }
+  const recency = (version: FtbVersionRef): number => (typeof version.updated === 'number' ? version.updated : version.id);
+  const newestFirst = [...versions].sort((a, b) => recency(b) - recency(a));
+  const newestRelease = newestFirst.find((version) => (version.type ?? '').toLowerCase() === 'release');
+  return newestRelease ?? newestFirst[0]!;
+}
+
+/** True when a version is a pre-release, so the caller can warn instead of silently shipping a beta. */
+export function isFtbPrerelease(version: FtbVersionRef): boolean {
+  return (version.type ?? '').toLowerCase() !== 'release';
 }
 
 /**
@@ -331,7 +354,10 @@ export const ftbAdapter: PackAdapter = {
     io.log(`[ftb] resolving pack ${packId}${pinnedVersion === null ? ' (latest version)' : ` version ${pinnedVersion}`}`);
     const pack = await io.fetchJson<FtbPack>(`${FTB_API_BASE}/modpack/${packId}`, FTB_ALLOWED_HOSTS);
     const versionRef = pickFtbVersion(pack, pinnedVersion);
-    io.log(`[ftb] ${pack.name}: version ${versionRef.id} "${versionRef.name}"`);
+    io.log(`[ftb] ${pack.name}: version ${versionRef.id} "${versionRef.name}" (${versionRef.type})`);
+    if (isFtbPrerelease(versionRef)) {
+      io.log(`[ftb] warning: no release version available; using ${versionRef.type} "${versionRef.name}"`);
+    }
 
     const version = await io.fetchJson<FtbVersionDetail>(
       `${FTB_API_BASE}/modpack/${packId}/${versionRef.id}`, FTB_ALLOWED_HOSTS,
