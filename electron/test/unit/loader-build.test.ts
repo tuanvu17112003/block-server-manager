@@ -51,6 +51,28 @@ test('classifyBootFailure: missing dependency is a mod problem, not a loader pro
   assert.equal(result.kind, 'mod');
 });
 
+test('classifyBootFailure: legacy Forge missing-library text is loader-level', () => {
+  // Captured verbatim by scripts/verify-escalation-fault.mjs from a real Forge 1.12.2 missing-libraries
+  // failure — this wording was NOT covered by the first version of the classifier, so escalation was
+  // refused on an authentic loader fault. That gap was found by fault injection, not by unit tests.
+  const tail = [
+    'We appear to be missing one or more essential library files.',
+    'You will need to add them to your server before FML and Forge will run successfully.',
+    'java.lang.ClassNotFoundException: net.minecraft.launchwrapper.Launch',
+    'at java.net.URLClassLoader.findClass(Unknown Source)',
+    'at net.minecraftforge.fml.relauncher.ServerLaunchWrapper.main(ServerLaunchWrapper.java:34)',
+  ];
+  const result = classifyBootFailure(tail);
+  assert.equal(result.kind, 'loader');
+  assert.equal((result as { rule: string }).rule, 'loader.libraries-missing');
+});
+
+test('classifyBootFailure: a missing loader class is loader-level', () => {
+  assert.equal(classifyBootFailure(['java.lang.ClassNotFoundException: cpw.mods.bootstraplauncher.BootstrapLauncher']).kind, 'loader');
+  assert.equal(classifyBootFailure(['java.lang.ClassNotFoundException: net.minecraftforge.fml.loading.FMLServiceProvider']).kind, 'loader');
+  assert.equal(classifyBootFailure(['java.lang.ClassNotFoundException: net.neoforged.fml.loading.FMLServiceProvider']).kind, 'loader');
+});
+
 test('classifyBootFailure: empty output is unknown, never loader', () => {
   assert.equal(classifyBootFailure([]).kind, 'unknown');
   assert.equal(classifyBootFailure(['   ']).kind, 'unknown');
