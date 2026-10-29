@@ -8,8 +8,8 @@
     "java": 17,
     "route": "A/B"
   },
-  "startedAt": "2026-10-29T15:58:08.863Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T15-29-56-412Z\\prominence-2-hasturian-era",
+  "startedAt": "2026-10-29T17:42:42.313Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T17-16-44-104Z\\prominence-2-hasturian-era",
   "sourceKind": "curseforgeProject 466901 (official API key mode)",
   "preview": {
     "sourceName": "Prominence™ II Hasturian Erav v4.1.5hf",
@@ -62,7 +62,7 @@
     "errors": []
   },
   "published": {
-    "serverId": "3e1561b9-e7ed-4a3f-8fab-bb903fe57bcb",
+    "serverId": "e5a93518-93d8-4349-8729-a0ecb39f7a21",
     "jarsEnabled": 371,
     "jarsDisabled": 2,
     "disabled": [
@@ -74,6 +74,6 @@
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T16:01:26.216Z",
-  "durationSeconds": 197.4
+  "finishedAt": "2026-10-29T17:45:46.668Z",
+  "durationSeconds": 184.4
 }

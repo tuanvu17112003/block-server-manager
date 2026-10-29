@@ -6,8 +6,8 @@
     "loader": "fabric",
     "java": 25
   },
-  "startedAt": "2026-10-29T15:29:56.413Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T15-29-56-412Z\\skyblock-enhanced",
+  "startedAt": "2026-10-29T17:16:44.108Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T17-16-44-104Z\\skyblock-enhanced",
   "sourceKind": "modrinthRemote (project e0oMrxjp \"SkyBlock Enhanced\", version C4s9ZcoW)",
   "preview": {
     "sourceName": "SkyBlock Enhanced",
@@ -81,7 +81,7 @@
     "errors": []
   },
   "published": {
-    "serverId": "0632e128-a251-4962-84ab-4878edcf4467",
+    "serverId": "2b7acfe7-b884-4f6e-893b-9f8d6286b596",
     "jarsEnabled": 13,
     "jarsDisabled": 2,
     "disabled": [
@@ -93,6 +93,6 @@
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T15:30:20.392Z",
-  "durationSeconds": 24
+  "finishedAt": "2026-10-29T17:17:04.889Z",
+  "durationSeconds": 20.8
 }
