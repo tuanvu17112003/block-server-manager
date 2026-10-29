@@ -15,11 +15,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { IpcContext, Handler } from '../ipc';
 import { appError, Store, type CreateServerInput, type ServerDto } from './store';
 import { Jobs } from './jobs';
-import { log, ensureServerProperties, writeEula } from './installer/core';
+import { log, ensureServerProperties, writeEula, startWithAutoFix, type AutoFixEntry } from './installer/core';
 import { publishStagedServer, assertServerNameAvailable } from './install-transaction';
 import { installMajorFor, requiredJavaMajor, ensureJava, validateJava } from './java';
-import { makeCuratedResolver } from './installer/curated';
-import { resolveMrpack, splitDeps, installModrinth, type MrIndex } from './installer/modrinth';
+import { makeCuratedResolver, appendLearned } from './installer/curated';
+import { resolveMrpack, splitDeps, installModrinth, fetchModrinthDependency, type MrIndex } from './installer/modrinth';
 import { installCurseforge, inspectStagedZip, inspectCurseForgeProject, type InstallCfResult } from './installer/curseforge';
 import { effectiveCacheDir } from './storage';
 
@@ -214,6 +214,8 @@ export interface PipelineFilePolicyInput {
   clientEnv?: string | null;
   /** Curated L4 verdict for the same path (`makeCuratedResolver().resolve(...)`). */
   curated: { env: string; why: string };
+  /** True for community force-includes: authoritative required, never a user conflict. */
+  curatedProtect?: boolean;
   /** Explicit user choice from `PipelineInstallChoices.files` (install-time only). */
   choice?: PipelineFileChoice | null;
 }
@@ -255,6 +257,16 @@ export function mapFilePolicy(input: PipelineFilePolicyInput): PipelineFilePolic
   const conflict = serverUnsupported && (serverRequired || serverOptional);
   const choice = input.choice ?? null;
 
+  // Community force-includes (`simplytooltips`, `s-lib`, …) are evidence-backed corrections: the
+  // server needs them even when the pack declares `unsupported`. They are required, not a conflict,
+  // and must never be offered as a user choice (excluding them breaks their dependents).
+  if (input.curatedProtect) {
+    if (choice === 'exclude') {
+      throw appError('validation', `The force-included dependency "${input.path}" is required by the pack and cannot be excluded.`);
+    }
+    return { decision: { path: input.path, side: sideFromClient(client, 'required'), action: 'include', reason: 'required' }, warnings };
+  }
+
   if (conflict) {
     if (choice) {
       return { decision: { path: input.path, side: null, action: choice, reason: 'userChoice' }, warnings };
@@ -276,6 +288,27 @@ export function mapFilePolicy(input: PipelineFilePolicyInput): PipelineFilePolic
   }
   if (choice) throw appError('validation', `The file "${input.path}" has no server environment metadata and does not accept a user choice.`);
   return { decision: { path: input.path, side: null, action: 'include', reason: 'missingEnvironmentRetained' }, warnings };
+}
+
+/**
+ * WP-4.6 install-time include set. Only an **explicit** `include` choice may override a curated
+ * unsupported verdict (the reviewed plan's promise), plus `optionalDefaultKeep` files the UI keeps by
+ * default when a headless caller did not send a per-file choice. Everything else — most importantly
+ * curated exclusions that were never offered as a conflict — must stay excluded. Passing a
+ * "not excluded" predicate instead here makes every curated exclusion look user-approved, which is
+ * how Prominence II shipped `drippyloadingscreen`/`welcomescreen` without their `fancymenu` dependency.
+ */
+export function resolveIncludedPaths(
+  decisions: PipelineFileDecision[],
+  choices: Record<string, PipelineFileChoice>,
+): Set<string> {
+  const included = new Set<string>();
+  for (const decision of decisions) {
+    const choice = choices[decision.path];
+    if (choice === 'include') included.add(decision.path);
+    else if (choice === undefined && decision.reason === 'optionalDefaultKeep') included.add(decision.path);
+  }
+  return included;
 }
 
 // ---- WP-4.5: archive snapshot + drift guard ----
@@ -413,11 +446,13 @@ export class Pipeline {
       held.sourceName = resolved.index.name;
       const curated = makeCuratedResolver({ platform: 'modrinth', packSlug: resolved.slug, presentPaths: resolved.index.files.map(file => file.path) });
       for (const file of resolved.index.files) {
+        const verdict = curated.resolve(file.path, file.env?.server ?? 'required');
         const mapped = mapFilePolicy({
           path: file.path,
           serverEnv: file.env?.server ?? null,
           clientEnv: file.env?.client ?? null,
-          curated: curated.resolve(file.path, file.env?.server ?? 'required'),
+          curated: verdict,
+          curatedProtect: verdict.protect,
         });
         warnings.push(...mapped.warnings);
         decisions.push(mapped.decision);
@@ -500,6 +535,16 @@ export class Pipeline {
     let mutationStarted = false;
     let sidecarData: Record<string, unknown> | null = null;
     let createInput: CreateServerInput | null = null;
+    // D9 install-time defense context: populated by the install callback, consumed by bootCheck.
+    let autoFixContext: {
+      platform: 'modrinth' | 'curseforge';
+      mc: string;
+      loader: string;
+      protectBasenames: Set<string>;
+      fetchDependency: ((modId: string) => Promise<string | null>) | null;
+    } | null = null;
+    let autoFixFixes: AutoFixEntry[] = [];
+    let autoFixRounds = 0;
 
     try {
       // ---- pre-mutation validation (failure re-inserts the preview) ----
@@ -547,10 +592,31 @@ export class Pipeline {
         isCancelled: () => this.jobs.isCancelled(jobId),
         signal,
         enforceManagerConfig: { port, eulaAccepted: input.eulaAccepted ?? false },
-        // WP-4.3 (M-10) verified install: the staged server must reach `Done (` once before it is
-        // published as a success. The runtime is already pinned above (no guessed Java major); a
-        // server cannot legally boot without explicit EULA consent, so verification is skipped then.
+        // WP-4.3 / D9 verified install: the staged server must reach `Done (` before publication.
+        // The reference install path runs L2 (jar self-declaration scan) then the L3 boot-decides
+        // loop (crash attribution, reversible `mods-disabled/`, Modrinth dependency fetch) and only
+        // publishes after that succeeds; a single un-assisted boot rejects exactly the packs the
+        // 4-layer pipeline was built to accept (Prominence II: `fancymenu` absent while
+        // drippyloadingscreen/welcomescreen require it).
         bootVerify: { enabled: input.eulaAccepted === true && Boolean(javaExe), javaPath: javaExe },
+        // D9: the verification boot is the L3 authority, not a single bare start. L2 self-declared
+        // client jars are moved to `mods-disabled/` first, then crash/log attribution may disable
+        // offending jars and (Modrinth only) fetch a missing hard dependency, retrying until `Done (`.
+        bootCheck: async (stagingDir, launch, javaPath) => {
+          const result = await startWithAutoFix(
+            stagingDir,
+            javaPath ? { exe: javaPath, args: launch.args } : launch,
+            {
+              timeoutMs: 8 * 60_000,
+              maxRounds: 6,
+              ...(autoFixContext ? { l2Protect: autoFixContext.protectBasenames } : {}),
+              ...(autoFixContext?.fetchDependency ? { fetchDep: autoFixContext.fetchDependency } : {}),
+            },
+          );
+          autoFixFixes = result.fixes;
+          autoFixRounds = result.rounds;
+          return { ok: result.ok, reason: result.reason, tail: result.tail };
+        },
         // Provisional id for failed report DTOs (Phase 1 contract: serverId is always populated).
         onStaging: ({ stagingId }) => { report.serverId = stagingId; },
         onProgress: event => this.jobs.progress(jobId, { progress: event.progress, stage: event.stage }),
@@ -563,19 +629,54 @@ export class Pipeline {
           };
 
           if (held.index && held.mrpackPath) {
+            // Re-derive the plan with the user's actual choices: held decisions were captured at
+            // preview time, before optional Exclude/conflict resolutions existed.
+            const resolvedDecisions = held.fileDecisions.map(decision => {
+              const choice = choices.files[decision.path];
+              return choice ? { ...decision, action: choice, reason: 'userChoice' as const } : decision;
+            });
+            const excludedPaths = new Set(
+              resolvedDecisions
+                // Server-unsupported files already skip through the curated policy; only explicit
+                // plan/user exclusions (optional Exclude, resolved conflicts) are passed as choices.
+                .filter(d => d.action === 'exclude' && d.reason !== 'serverUnsupported')
+                .map(d => d.path),
+            );
+            const includeFiles = resolveIncludedPaths(resolvedDecisions, choices.files);
+            // Belt-and-braces: an explicit plan Exclude must never reach the engine include set.
+            for (const path of excludedPaths) includeFiles.delete(path);
             const res = await installModrinth({
               mrpackPath: held.mrpackPath, index: held.index, slug: held.slug ?? null,
               dir: stagingDir, cacheDir: this.cacheDir(), dataRoot: this.ctx.dataRoot,
               onProgress,
               signal,
-              // WP-4.6: optional files are included by default; only an explicit Exclude removes them.
-              includeOptional: filePath => choices.files[filePath] !== 'exclude',
+              // WP-4.6: only explicit/optional-default files are user-approved; curated exclusions
+              // stay excluded unless the reviewed plan explicitly chose Include for that exact file.
+              includeFiles,
+              excludeFiles: excludedPaths,
             });
             report.files.push({ path: `${res.installed} files`, outcome: 'installed' });
             report.files.push({ path: `${res.skippedOptional} optional`, outcome: 'skipped-optional' });
             report.files.push({ path: `${res.skippedUnsupported} unsupported`, outcome: 'skipped-server-unsupported' });
+            if (res.skippedUserExcluded > 0) report.files.push({ path: `${res.skippedUserExcluded} plan-excluded`, outcome: 'skipped-user-choice' });
             report.warnings.push(...res.warnings);
             report.stages.push({ stage: 'download', outcome: 'complete' });
+            autoFixContext = {
+              platform: 'modrinth',
+              mc: held.loader.minecraftVersion,
+              loader: held.loader.kind,
+              protectBasenames: makeCuratedResolver({
+                platform: 'modrinth', packSlug: held.slug,
+                presentPaths: held.index.files.map(file => file.path),
+              }).protectBasenames,
+              fetchDependency: (modId) => fetchModrinthDependency({
+                mc: held.loader.minecraftVersion,
+                loader: held.loader.kind,
+                modId,
+                modsDir: path.join(stagingDir, 'mods'),
+                signal,
+              }),
+            };
             sidecarData = {
               platform: 'modrinth', slug: held.slug,
               files: held.index.files.map(file => file.path),
@@ -594,6 +695,15 @@ export class Pipeline {
             report.warnings.push(...res.warnings);
             for (const m of res.manuallyRequired) report.warnings.push(`manually required: ${m.pageUrl} (${m.reason})`);
             report.stages.push({ stage: `route-${res.route}`, outcome: 'complete' });
+            // CurseForge dependency fetch is prune-only (D9): the L3 loop may disable attributed
+            // jars but must not pull arbitrary Modrinth projects into a CF pack.
+            autoFixContext = {
+              platform: 'curseforge',
+              mc: inferred.mc,
+              loader: inferred.loader,
+              protectBasenames: new Set<string>(),
+              fetchDependency: null,
+            };
             sidecarData = {
               platform: 'curseforge', slug: projectId ? String(projectId) : null,
               files: [], loader: inferred.loader, mc: inferred.mc,
@@ -622,7 +732,35 @@ export class Pipeline {
           // Chronological stage evidence: install/download + route stages were recorded by the engine,
           // validation happened before boot verification, and publish is last.
           report.stages.push({ stage: 'validate', outcome: 'complete' });
-          if (javaExe && input.eulaAccepted === true) report.stages.push({ stage: 'verify-boot', outcome: 'complete' });
+          if (javaExe && input.eulaAccepted === true) {
+            // D9: report the L3 loop's outcome, including every jar it had to change.
+            for (const fix of autoFixFixes) {
+              report.files.push({
+                path: `mods/${fix.jar ?? fix.mod}`,
+                outcome: fix.action === 'disabled' ? 'disabled-by-autofix' : 'added-by-autofix',
+                detail: `round ${fix.round}: ${fix.action} ${fix.mod}`,
+              });
+            }
+            if (autoFixFixes.length > 0) {
+              report.warnings.push(`auto-fix applied ${autoFixFixes.length} change(s) across ${autoFixRounds} boot round(s) before verification passed`);
+              // Learn disabled jars globally (SPC `-clientsideapply`): future packs skip the crash.
+              try {
+                appendLearned(
+                  autoFixFixes
+                    .filter(fix => fix.action === 'disabled')
+                    .map(fix => ({ match: fix.mod, why: `auto: ${held.sourceName} crashed with this mod loaded (${fix.jar ?? 'unknown jar'})` })),
+                  path.join(this.ctx.dataRoot, 'state', 'env-overrides-learned.json'),
+                );
+              } catch (error) {
+                log(`[autofix] could not persist learned entries: ${(error as Error).message}`);
+              }
+            }
+            report.stages.push({
+              stage: 'verify-boot',
+              outcome: 'complete',
+              detail: autoFixFixes.length > 0 ? `${autoFixFixes.length} auto-fix(es) in ${autoFixRounds} round(s)` : 'first boot',
+            });
+          }
           report.stages.push({ stage: 'publish', outcome: 'complete' });
           // Written into the staged tree, so install-report.json is published atomically with it.
           writeInstallReport(stagingDir, report);
@@ -646,11 +784,13 @@ export class Pipeline {
     const curated = makeCuratedResolver({ platform: 'modrinth', packSlug: held.slug, presentPaths: held.index.files.map(file => file.path) });
     const unresolved: string[] = [];
     for (const file of held.index.files) {
+      const verdict = curated.resolve(file.path, file.env?.server ?? 'required');
       const mapped = mapFilePolicy({
         path: file.path,
         serverEnv: file.env?.server ?? null,
         clientEnv: file.env?.client ?? null,
-        curated: curated.resolve(file.path, file.env?.server ?? 'required'),
+        curated: verdict,
+        curatedProtect: verdict.protect,
         choice: choices.files[file.path] ?? null,
       });
       if (mapped.decision.action === 'awaitingUserChoice') unresolved.push(file.path);

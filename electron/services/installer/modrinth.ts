@@ -266,9 +266,14 @@ export interface InstallModrinthOpts extends Cancelable {
   dir: string; cacheDir: string; dataRoot: string;
   javaMajorOverride?: number;
   onProgress?: (p: { stage: string; pct?: number; file?: string }) => void;
-  includeOptional?: (filePath: string) => boolean;
+  /** Normalized pack paths the reviewed plan explicitly chose to keep (curated overrides allowed). */
+  includeFiles?: ReadonlySet<string>;
+  /** Normalized pack paths the user/plan explicitly excluded (including plan conflicts). */
+  excludeFiles?: ReadonlySet<string>;
 }
-export interface InstallModrinthResult { installed: number; skippedOptional: number; skippedUnsupported: number; warnings: string[]; fixes: AutoFixEntry[]; launch: { exe: string; args: string[] } }
+export interface InstallModrinthResult { installed: number; skippedOptional: number; skippedUnsupported: number; skippedUserExcluded: number; warnings: string[]; fixes: AutoFixEntry[]; launch: { exe: string; args: string[] }; installedPaths: string[] }
+
+const normPackPath = (value: string): string => value.replaceAll('\\', '/').toLowerCase();
 
 export async function installModrinth(o: InstallModrinthOpts): Promise<InstallModrinthResult> {
   const { signal } = o;
@@ -284,16 +289,23 @@ export async function installModrinth(o: InstallModrinthOpts): Promise<InstallMo
   o.onProgress?.({ stage: `installing ${kind} ${ver}`, pct: 5 });
   await installLoader(kind, o.dir, mc, ver ?? '', rt.javapath, o.cacheDir, { signal });
 
-  const result: InstallModrinthResult = { installed: 0, skippedOptional: 0, skippedUnsupported: 0, warnings: [], fixes: [], launch: { exe: '', args: [] } };
+  const result: InstallModrinthResult = { installed: 0, skippedOptional: 0, skippedUnsupported: 0, skippedUserExcluded: 0, warnings: [], fixes: [], launch: { exe: '', args: [] }, installedPaths: [] };
   const curated: CuratedResolver = makeCuratedResolver({ platform: 'modrinth', packSlug: o.slug, presentPaths: o.index.files.map(f => f.path) });
   const total = o.index.files.length;
-  const userIncludedPaths = new Set(
-    o.index.files.filter(f => o.includeOptional?.(f.path) === true).map(f => f.path.replaceAll('\\', '/').toLowerCase()),
-  );
+  const includeFiles = new Set([...(o.includeFiles ?? [])].map(normPackPath));
+  const excludeFiles = new Set([...(o.excludeFiles ?? [])].map(normPackPath));
   for (const f of o.index.files) {
+    const key = normPackPath(f.path);
     const declared = f.env?.server ?? 'required';
     const v = curated.resolve(f.path, declared);
-    const policy = resolveModrinthFilePolicy({ declared, curated: v.env, userIncluded: userIncludedPaths.has(f.path.replaceAll('\\', '/').toLowerCase()), why: v.why });
+    if (excludeFiles.has(key)) {
+      // An explicit plan exclusion beats curated/declared verdicts (this is how conflicting
+      // client-only jars get dropped instead of shipping without their server-side dependency).
+      result.skippedUserExcluded++;
+      result.warnings.push(`${f.path}: excluded by the reviewed plan`);
+      continue;
+    }
+    const policy = resolveModrinthFilePolicy({ declared, curated: v.env, userIncluded: includeFiles.has(key), why: v.why });
     if (policy.warning) result.warnings.push(`${f.path}: ${policy.warning}`);
     if (policy.action === 'skip-unsupported') { result.skippedUnsupported++; if (v.why !== 'declared') result.warnings.push(`${f.path}: ${v.why}`); continue; }
     if (policy.action === 'skip-optional') { result.skippedOptional++; continue; }
@@ -304,6 +316,7 @@ export async function installModrinth(o: InstallModrinthOpts): Promise<InstallMo
       signal,
     });
     result.installed++;
+    result.installedPaths.push(f.path);
     if (result.installed % 25 === 0) o.onProgress?.({ stage: `downloading files ${result.installed}/${total}`, pct: 5 + Math.round(85 * result.installed / total) });
   }
 
@@ -312,10 +325,12 @@ export async function installModrinth(o: InstallModrinthOpts): Promise<InstallMo
     mrpackPath: o.mrpackPath,
     dir: o.dir,
     index: o.index,
-    includeOptional: o.includeOptional,
+    includeOptional: filePath => includeFiles.has(normPackPath(filePath)),
     // Curated excludes apply to overrides only for files the user did NOT explicitly choose.
     excludeFn: rel => {
-      if (userIncludedPaths.has(rel.replaceAll('\\', '/').toLowerCase())) return false;
+      const key = normPackPath(rel);
+      if (includeFiles.has(key)) return false;
+      if (excludeFiles.has(key)) return true;
       return /^mods\/.*\.jar$/i.test(rel) && curated.resolve(rel, 'required').env === 'unsupported';
     },
     signal,
@@ -323,6 +338,6 @@ export async function installModrinth(o: InstallModrinthOpts): Promise<InstallMo
   result.warnings.push(...overrides.warnings);
 
   result.launch = launchCommand(o.dir, rt.javapath);
-  log(`[modrinth] ${o.index.name}: ${result.installed} files, ${result.skippedOptional} optional, ${result.skippedUnsupported} unsupported`);
+  log(`[modrinth] ${o.index.name}: ${result.installed} files, ${result.skippedOptional} optional, ${result.skippedUnsupported} unsupported, ${result.skippedUserExcluded} excluded by plan`);
   return result;
 }

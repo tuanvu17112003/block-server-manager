@@ -13,6 +13,7 @@ import {
   assertLocalMrpackSource,
   assertSupportedNewInstallLoader,
   mapFilePolicy,
+  resolveIncludedPaths,
   snapshotArtifact,
   type PipelineArtifactSnapshot,
   type PipelineFileDecision,
@@ -122,6 +123,60 @@ test('curated L4 can upgrade a missing/optional env without inventing a conflict
   });
   assert.equal(optionalToRequired.decision.action, 'include');
   assert.equal(optionalToRequired.decision.reason, 'required');
+});
+
+test('community force-includes are required, never a conflict, and cannot be excluded', () => {
+  const force = { env: 'required', why: 'community force-include: /(^|/)s-lib-/' };
+  const included = mapFilePolicy({
+    path: 'mods/s-lib-fabric-3.0.1+1.20.1.jar',
+    serverEnv: 'unsupported',
+    curated: force,
+    curatedProtect: true,
+  });
+  assert.equal(included.decision.action, 'include');
+  assert.equal(included.decision.reason, 'required');
+  expectValidation(() => mapFilePolicy({
+    path: 'mods/s-lib-fabric-3.0.1+1.20.1.jar',
+    serverEnv: 'unsupported',
+    curated: force,
+    curatedProtect: true,
+    choice: 'exclude',
+  }), 'cannot be excluded');
+});
+
+// ---- install-time include set (Prominence II regression) ----
+
+test('resolveIncludedPaths: only explicit include and optional-default files are user-approved', () => {
+  const decisions: PipelineFileDecision[] = [
+    { path: 'mods/required.jar', side: 'server', action: 'include', reason: 'required' },
+    { path: 'mods/optional.jar', side: 'server', action: 'include', reason: 'optionalDefaultKeep' },
+    { path: 'mods/conflict.jar', side: null, action: 'awaitingUserChoice', reason: 'conflictingSignals' },
+    { path: 'mods/curated-client.jar', side: 'client', action: 'exclude', reason: 'serverUnsupported' },
+    { path: 'mods/user-excluded.jar', side: 'server', action: 'exclude', reason: 'userChoice' },
+  ];
+
+  const noChoices = resolveIncludedPaths(decisions, {});
+  assert.deepEqual([...noChoices].sort(), ['mods/optional.jar']);
+
+  const resolved = resolveIncludedPaths(decisions, {
+    'mods/conflict.jar': 'include',
+    'mods/optional.jar': 'exclude',
+  });
+  assert.deepEqual([...resolved].sort(), ['mods/conflict.jar']);
+
+  // The regression: a curated exclusion with no choice must never become "included" just because
+  // the caller did not explicitly exclude it (old code: `choices.files[path] !== 'exclude'`).
+  assert.equal(resolved.has('mods/curated-client.jar'), false);
+  assert.equal(resolved.has('mods/required.jar'), false);
+});
+
+test('resolveIncludedPaths: a conflicting file the user excludes is not included', () => {
+  const decisions: PipelineFileDecision[] = [
+    { path: 'mods/fancymenu.jar', side: null, action: 'awaitingUserChoice', reason: 'conflictingSignals' },
+    { path: 'mods/drippyloading.jar', side: 'client', action: 'exclude', reason: 'serverUnsupported' },
+  ];
+  const included = resolveIncludedPaths(decisions, { 'mods/fancymenu.jar': 'exclude' });
+  assert.equal(included.size, 0);
 });
 
 // ---- WP-4.8: Quilt / new-install loader policy ----
