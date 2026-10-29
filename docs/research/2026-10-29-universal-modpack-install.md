@@ -32,6 +32,24 @@ reads ([Verdict.kt](https://github.com/Griefed/ServerPackCreator/blob/main/serve
 An installer built on "trust the manifest and hope" cannot be general; one built on "adapt the format,
 then let the console decide" can.
 
+**Second most important finding — it corrects a claim in our own audit.** itzg does not merely *prefer*
+the client manifest over an author's server pack; it **never uses the server pack at all**:
+`resolveModpackFile` filters `!file.isServerPack()`, and although `serverPackFileId` is parsed into the
+model it is referenced **nowhere else in the repository**
+([CurseForgeApiClient.java](https://github.com/itzg/mc-image-helper/blob/master/src/main/java/me/itzg/helpers/curseforge/CurseForgeApiClient.java),
+[CurseForgeFile.java](https://github.com/itzg/mc-image-helper/blob/master/src/main/java/me/itzg/helpers/curseforge/model/CurseForgeFile.java)).
+Its docs say the same from the user's side: do **not** select a server file, because *"they lack the
+required manifest and defeat the ability to consistently automate startup"*
+([AUTO_CURSEFORGE docs](https://docker-minecraft-server.readthedocs.io/en/latest/types-and-platforms/mod-platforms/auto-curseforge/)).
+This is independent confirmation of fix-11 in [14-fix-provenance.md](../audit/14-fix-provenance.md), and it
+is *stronger* than the reference folder's "prefer" wording: the two most battle-tested implementations both
+refuse the server pack as an install source.
+
+Consequence for this app: our key-mode CurseForge path takes `serverPackFileId` **first** and only falls
+back to the manifest (`curseforge.ts`), i.e. the exact opposite of both references. Several of the
+CurseForge edge cases we fixed this week (nested-ZIP unwrap, ServerPackCreator-manifest guard, Forge
+promotions lookup) exist *because* we install from a shape that carries no machine-readable metadata.
+
 ---
 
 ## 2. Format catalogue (what an adapter layer must accept)
@@ -133,6 +151,50 @@ Current state is split, which is exactly the risk: the itzg-sourced lists go thr
 `n.includes(norm(o.match))` (`curated.ts:45,48`), so a hand/learned entry can over-match the same way.
 Two further gaps: learned entries are version-free mod ids matched against jar *paths*, and neither branch
 logs which rule fired.
+
+### 3.8 Curated data is the *only* pack-specific surface, and both projects say so
+itzg ships two versioned, user-overridable JSON files — `cf-exclude-include.json` (~200 global slugs +
+11 per-pack blocks) and `modrinth-exclude-include.json` (~100 slugs + the `cobbleverse` block + two
+force-include regexes) — injected via `--exclude-include-file`, overridable, and disableable
+(`MODRINTH_DEFAULT_EXCLUDE_INCLUDES=""`). Everything else is generic
+([AUTO_CURSEFORGE docs](https://docker-minecraft-server.readthedocs.io/en/latest/types-and-platforms/mod-platforms/auto-curseforge/),
+[Modrinth docs](https://docker-minecraft-server.readthedocs.io/en/latest/types-and-platforms/mod-platforms/modrinth-modpacks/),
+[schema](https://github.com/itzg/mc-image-helper#excludeinclude-file-schema)).
+Our four data files are byte-identical to the reference's; the missing capability is not the data but the
+**override surface** (user-visible, versioned, per-pack editable without a rebuild).
+
+### 3.9 The shared skeleton across every tool (and what nobody does)
+Five independent implementations — mrpack-install, packwiz-installer, ATLauncher, HMCL, itzg — collapse to
+the **same four stages**, with format only a parser at stage 1:
+
+1. **Manifest → flat file list** of `(dest path, urls, hash)`. mrpack-install `files[]`, packwiz
+   `[[files]]` + `*.pw.toml`, HMCL `server-manifest.json files[]`, ATL `Version.mods`, itzg manifest.
+2. **One side predicate** over that list — `env.server != "unsupported"` (mrpack-install),
+   `downloadSide.hasSide(mod.side)` (packwiz-installer), `Mod::installOnServer` (ATL). *This is the only
+   server-specific logic in any of them.*
+3. **Layered file tree**: `overrides/` → `server-overrides/` → manifest files, in that precedence.
+4. **Loader as an opaque subprocess**: download the official installer and shell out
+   (`--installServer` / `--install-server` / `install server`), then read back what it produced.
+
+Two decisive facts follow:
+
+- **Only mrpack-install and our app read `server-overrides/`.** Prism, HMCL's mrpack importer and
+  ATLauncher's mrpack path read `overrides/` (+ `client-overrides/`) and **silently drop the server layer**
+   — a correctness bug in those tools that we do not have.
+- **None of the five validates `env.server` against what the jar actually declares.** They trust the
+  declared flag. Our L2 jar self-declaration scan plus the L3 boot loop is *strictly more capable* than any
+  tool in this survey on exactly the axis that matters for unseen packs. That is the asset to build on, not
+  the adapters alone.
+
+### 3.10 A nuance that keeps us honest about server packs
+itzg refuses the server pack, but **ATLauncher does the opposite**: for a CurseForge pack it downloads the
+author's server pack and unzips it verbatim — *"downloaded and unzipped without any modifications"* — with
+no filtering and no loader install ([Server.java](https://github.com/ATLauncher/ATLauncher/blob/master/src/main/java/com/atlauncher/data/Server.java)).
+So "never use the server pack" is a *design preference with a real cost trade-off*, not a rule:
+the server pack is fastest and most faithful to the author, but it is opaque, undiffable and — as our own
+week showed — often malformed. The defensible policy is: **use the manifest when it exists, fall back to
+the server pack only when no manifest is available, and then treat it as an opaque payload that must
+still pass the same side-resolution and boot gates.**
 
 ### 3.7 Three side vocabularies must be translated, not compared
 - mrpack `env.{client,server}`: `required | optional | unsupported`
@@ -264,13 +326,15 @@ hash/size verification, no-Range + 2 req/s CF posture, script non-execution, saf
 | # | Gap | Evidence |
 |---|---|---|
 | 1 | **Detection is by UI source kind, not archive content.** No adapter layer; `.mrpack`/CF only. A packwiz/FTB/ATLauncher/Prism/MCBBS/bare pack cannot be opened at all. | `pipeline.ts` `PipelineSourceRequest` has 4 kinds, all provider-specific |
-| 2 | **No loader-args launch path.** Modern Forge/NeoForge without `run.bat` ⇒ `no launch method found`. | `core.ts` `launchCommand` |
+| 2 | **No loader-args launch path.** Modern Forge/NeoForge without `run.bat` ⇒ `no launch method found`. Both mrpack-install (via a pinned ServerStarterJar for Forge 1.17+) and SPC (ServerStarterJar against `unix_args.txt`) solve this; we do not. | `core.ts` `launchCommand` |
 | 3 | **Forge side rule differs from SPC** (all-`side=` vs platform-dependency `side`). | `core.ts:1123` vs ForgeTomlScanner.kt |
 | 4 | **No dependency rescue.** Excluding a mod can strand a dependent; we compensate with hand data (`unlessPresent`). | ModListCompiler.kt vs `curated.ts` |
 | 5 | **Hand/learned exclusion matching is substring-based** ⇒ the `figura`/`configurable` over-exclusion class. (The itzg lists are correctly anchored via `entryTest`; hand+learned are not.) Also no rule id is logged. | `curated.ts:45,48` (`n.includes(...)`) vs `curated.ts:33-38` (`entryTest`) |
-| 6 | **Canonical side is missing `unknown`.** CurseForge has no side data; we currently derive it only from a curated list. | SPC module.md: CF is structurally UNKNOWN |
-| 7 | **Learning is not read at install time** (only at server start), so pack A does not improve pack B's *downloads*. | `pipeline.ts` resolver calls omit `learnedFile` |
+| 6 | **Canonical side is missing `unknown`.** CurseForge has no side data; we currently derive it only from a curated list. Note mrpack-install *fatals* on an unrecognised `env.server`, which is the wrong direction — `unknown` must be first-class. | SPC module.md: CF is structurally UNKNOWN |
+| 7 | **Learning is not read at install time** (only at server start), so pack A does not improve pack B's *downloads*. Every tool above persists and reads a manifest per run; we persist a sidecar that cannot diff. | `pipeline.ts` resolver calls omit `learnedFile` |
 | 8 | **No feasibility gate** (pack that cannot run on a server never fails fast with a reason). | taxonomy row 15 |
+| 9 | **No persisted file manifest for diff-based reinstall/cleanup.** Every surveyed tool keeps one (`packstate.json`, `.curseforge-manifest.json`, ATL `server.json`, HMCL `server-manifest.json`); ours records counts, and CF `files: []`. This is the prerequisite for update and for safe cleanup. | `pipeline.ts` sidecar writer |
+| 10 | **Manual-required is prose, not a machine-readable report.** itzg writes `MODS_NEED_DOWNLOAD.txt` and supports a `/downloads` drop folder. | `curseforge.ts:616` → warning text only, no drop folder |
 
 ---
 
@@ -289,7 +353,9 @@ anchored matching + rule ids in the report).
 correctly; a synthetic "client mod marked required" fixture is excluded pre-boot.
 
 **P3 — Loader launch contract.** `launchCommand` gains `unix_args.txt`/`win_args.txt`/`args.txt` support and
-a `-DlegacyClassPath` sanity check; refuses to hand-build Forge module-path args.
+a `-DlegacyClassPath` sanity check; refuses to hand-build Forge module-path args. Reference behaviour to
+copy rather than invent: mrpack-install ships a pinned ServerStarterJar for Forge 1.17–1.20.2 whose only
+`run.sh` is an argfile, and SPC does the same for Forge ≥1.17.
 *Proof:* fixture tree with `libraries/`+`unix_args.txt` and no `run.bat` boots; existing packs unchanged.
 
 **P4 — Feasibility gate + provider capability matrix.** Before install: every required file resolves to a
@@ -297,10 +363,18 @@ server-installable artifact, loader build exists for that MC, Java major resolva
 reason (`LOCKED` / `NO_SERVER_ARTIFACT` / `UNVERIFIABLE`) instead of discovering it at boot.
 *Proof:* a pure-client fixture and a distribution-locked fixture fail fast with the right code.
 
-**P5 — Learning loop closed.** Install-time resolvers read the learned file; learn only post-success.
-*Proof:* pack A's learned disable changes pack B's preview decisions (test with two fixtures).
+**P5 — Persisted file manifest + diff-based reinstall.** Write the exact `(path, hash, provenance)` set;
+next run diff it, skip when complete, delete only files the previous run owned, never touch world/manager
+state. Prerequisite for the update flow the reference promised.
+*Proof:* install twice → second run is a no-op; remove one file → only it is restored; hand-added file is
+preserved; world dir untouched.
 
-**P6 — Corpus harness (replaces per-pack acceptance).** `--adaptertest` runs every fixture through
+**P6 — Learning loop closed + machine-readable manual report.** Install-time resolvers read the learned
+file; learn only post-success; write `MODS_NEED_DOWNLOAD.txt` and honour a drop folder.
+*Proof:* pack A's learned disable changes pack B's preview decisions; a fixture with one unavailable file
+produces the report and succeeds once the file is dropped in.
+
+**P7 — Corpus harness (replaces per-pack acceptance).** `--adaptertest` runs every fixture through
 detect→resolve→install-plan and asserts the recipe. Live matrix stays as a sanity net, not as the proof.
 
 ---
@@ -327,7 +401,8 @@ support this shape yet" from "we patched this one pack".
 1. **Distribution-locked CurseForge files** (`allowModDistribution=false`) have no URL at all → cannot be
    fetched, scanned, or booted. SPC returns `LOCKED`; we must too. The only path is a user-supplied drop folder.
 2. **CurseForge CDN now requires an API key** (2026-07-16) and the terms forbid self-registration for end
-   users → CurseForge installs fundamentally depend on a user key.
+   users → CurseForge installs fundamentally depend on a user key. Verified: an unauthenticated HEAD to
+   `edge.forgecdn.net` returns **403**.
 3. **Pure client packs and paid/private mods** cannot be installed as servers by anyone.
 4. **A pack can lie in ways only boot reveals**, and a boot may take minutes; a bounded retry budget means a
    pathological pack can still fail (`UNVERIFIABLE`), correctly and explicitly.
@@ -335,6 +410,20 @@ support this shape yet" from "we patched this one pack".
 6. No tool in this survey claims universal success; SPC's own README says *"not a guarantee for working
    server packs… you must still test them."* Our promise should be: **every pack is either installed and
    verified, or rejected with a rule-attributed reason** — never silently wrong.
+
+### Claims from this research that are explicitly NOT verified
+- `CF_IGNORE_JAVA_VERSION`, `CF_SKIP_UPGRADE`, `MODPACK_TYPE`, `CF_OVERRIDES_EXCLUDES`,
+  `CF_OVERRIDES_INCLUDES`: **zero occurrences** in the repo and absent from docs. itzg has no Java gate at all;
+  wrong Java is a documented symptom class only (`java.md`). Absence rests on searches, not on a positive
+  statement — treat as UNVERIFIED.
+- `CF_PARALLEL_DOWNLOADS` is documented (default 4) but appears **dead** in master; the live knob is
+  `CF_MAX_CONCURRENT_DOWNLOADS` (default 10). We should copy the live one, not the documented one.
+- `preset` is **not** a packwiz key (absent from all Go sources, the installer's Kotlin models, and the docs).
+- SPC has **no FTB reader**; FTB support there is UNVERIFIED.
+- Prism's "Export as Server Pack" does **not** exist (open request #5475); its exporter writes *client* packs and
+  only sets `env.server="unsupported"` for client-side mods.
+- `ServerDownloader` / `AbstractServerInstaller` no longer exist in ATLauncher; it is `InstanceInstaller`
+  with an `isServer` flag.
 
 ---
 
