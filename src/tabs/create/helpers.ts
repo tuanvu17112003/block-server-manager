@@ -1,4 +1,4 @@
-// Shared types/helpers for the Create wizard (extracted from Create.tsx, WP-6.5).
+﻿// Shared types/helpers for the Create wizard (extracted from Create.tsx, WP-6.5).
 import type { Modpack, Server } from '../../types';
 import type {
   CurseForgeArchiveInspection,
@@ -59,7 +59,7 @@ export function modrinthLoaderOptions(version: { loaders: string[] } | null): Mo
     return {
       id,
       loader: null,
-      label: `${name} — unsupported for new server installs`,
+      label: `${name} â€” unsupported for new server installs`,
       reason: id === 'quilt' ? 'Quilt pack installs are not supported.' : `The ${name} loader is not supported for new server installs.`,
     };
   });
@@ -105,7 +105,7 @@ export function serverFromInstall(dto: ServerDto, recommended: number, modpack?:
     seed: '',
     worldName: 'world',
     worldSizeMb: 0,
-    worldLastPlayed: '—',
+    worldLastPlayed: 'â€”',
     version: dto.mcVersion + ' ' + dto.loader,
   };
 }
@@ -152,7 +152,30 @@ export function curseforgeProjectInputError(rawInput: string): string | null {
 }
 
 export function javaCandidateLabel(candidate: JavaCandidate): string {
-  return `Java ${candidate.major} · ${candidate.architectureBits}-bit · ${candidate.source}`;
+  return `Java ${candidate.major} Â· ${candidate.architectureBits}-bit Â· ${candidate.source}`;
 }
 
 export type { Modpack };
+
+
+/**
+ * Evidence-grade presentation (docs/audit/26 Item 4). The single implementation lives in
+ * `electron/services/evidence-grade.ts` and is pinned by `electron/test/unit/ui-evidence-grade.test.ts`.
+ * Mirrored here because `electron/tsconfig.json` uses `rootDir: "."` so an Electron module cannot be imported
+ * from the renderer bundle without changing the emit layout — the same constraint and the same
+ * mirror-plus-contract-test pattern the repo already uses for `shared/contracts.ts`
+ * (`electron/services/validate-ipc.ts:9-18`). Keep the two in step: the test fails if this rule drifts.
+ */
+export interface EvidenceGradeView {
+  supported: boolean;
+  tone: 'green' | 'amber';
+  label: string;
+}
+
+/** A grade below E2 is never presented as supported; unrecognised grades fail closed. */
+export function describeEvidence(evidence: { grade: string }): EvidenceGradeView {
+  const supported = evidence.grade === 'E1' || evidence.grade === 'E2';
+  return supported
+    ? { supported, tone: 'green', label: `Verified format (${evidence.grade})` }
+    : { supported, tone: 'amber', label: `Format not yet proven (${evidence.grade})` };
+}

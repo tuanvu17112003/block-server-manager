@@ -1,4 +1,4 @@
-// Canonical IPC contracts shared by the Electron main process and the React renderer
+﻿// Canonical IPC contracts shared by the Electron main process and the React renderer
 // (Phase 7 WP-7.1). Single source of truth for the 66 renderer-invokable command names and the
 // camelCase DTOs they exchange.
 //
@@ -19,7 +19,7 @@
 
 /**
  * Every command the renderer may invoke through `window.electronAPI.invoke(command, args)`
- * (Electron → `ipcMain.handle('cmd:' + command)`). Keep in sync with the handler map and the
+ * (Electron â†’ `ipcMain.handle('cmd:' + command)`). Keep in sync with the handler map and the
  * renderer adapter; the contract gate enforces all three lists are identical.
  */
 export const COMMANDS = [
@@ -390,7 +390,7 @@ export interface MinecraftVersionDto {
   id: string;
   releaseTime: string;
   versionType: string;
-  /** Additive: Paper support status (`SUPPORTED`/`DEPRECATED`/…); null/absent for non-Paper. */
+  /** Additive: Paper support status (`SUPPORTED`/`DEPRECATED`/â€¦); null/absent for non-Paper. */
   support?: string | null;
 }
 
@@ -489,6 +489,8 @@ export interface PipelinePreviewDto {
   sourceName: string;
   plan: PipelineInstallPlan;
   warnings: string[];
+  /** Evidence grade of the detected format (docs/audit/19 §2); null when the source has no adapter recipe. */
+  evidence: EvidenceGradeDto | null;
 }
 
 export interface LocalMrpackSelection {
@@ -615,3 +617,12 @@ export interface ServerReadinessPayload {
   message?: string;
   at?: string;
 }
+
+/** Evidence grade of a detected pack format, for display (docs/audit/26 Item 4). */
+export interface EvidenceGradeDto {
+  /** E1 whole real population · E2 installed+verified · E3 schema-derived (NOT proof) · E4 design only. */
+  grade: string;
+  note: string;
+  formatId: string;
+}
+

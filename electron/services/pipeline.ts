@@ -1,4 +1,4 @@
-// Modpack pipeline Ã¢â‚¬â€ preview/install/cancel mapped to the Rust DTO contract (src/tauri.ts).
+﻿// Modpack pipeline ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â preview/install/cancel mapped to the Rust DTO contract (src/tauri.ts).
 // Preview = resolve + plan (no install); install = staged engine run (atomic publish, complete-or-
 // nothing) with the durable report + sidecar. Phase 4 (WP-4.2/4.5/4.6/4.8):
 //  - L1/L4 file decisions: optional files are included by default (`optionalDefaultKeep`); only
@@ -40,7 +40,7 @@ export type PipelineSourceRequest =
   | { kind: 'curseForgeServerZip'; zipName: string }
   | { kind: 'curseforgeProject'; projectId: number }
   // ---- P1b: format-agnostic inputs, resolved by the pack adapter layer ----
-  /** An FTB pack resolved from the public API (no key). `versionId` omitted Ã¢â€¡â€™ latest. */
+  /** An FTB pack resolved from the public API (no key). `versionId` omitted ÃƒÂ¢Ã¢â‚¬Â¡Ã¢â‚¬â„¢ latest. */
   | { kind: 'ftbProject'; packId: number; versionId?: number }
   /** A launcher archive handed to the adapter registry; the format is detected from its contents. */
   | { kind: 'packArchive'; sourceId: string };
@@ -84,7 +84,7 @@ export interface PipelineSourcePin {
   artifact: PipelineArtifactSnapshot | null;
 }
 
-/** Preview plan Ã¢â‚¬â€ matches `PipelineInstallPlan` in src/tauri.ts. */
+/** Preview plan ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â matches `PipelineInstallPlan` in src/tauri.ts. */
 export interface PipelineInstallPlan {
   schemaVersion: number;
   planId: string;
@@ -100,6 +100,13 @@ export interface PipelinePreviewDto {
   sourceName: string;
   warnings: string[];
   plan: PipelineInstallPlan;
+  /**
+   * Evidence grade of the detected format (docs/audit/19 §2). 
+ull when the source kind has no adapter
+   * recipe (CurseForge key mode, cached zip) — absent means unknown, never an assumed grade.
+   * Only ''E1''/''E2'' may be presented as supported; ''E3''/''E4'' must be shown as not yet proven.
+   */
+  evidence: { grade: string; note: string; formatId: string } | null;
 }
 
 interface HeldPreview {
@@ -112,7 +119,7 @@ interface HeldPreview {
   /** Archive the source pin snapshots (mrpack or CF zip); absent for key-mode projects. */
   artifactPath?: string;
   warnings: string[];
-  /** L1/L4 decisions derived at preview (optionalDefaultKeep/conflictingSignals/Ã¢â‚¬Â¦). */
+  /** L1/L4 decisions derived at preview (optionalDefaultKeep/conflictingSignals/ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦). */
   fileDecisions: PipelineFileDecision[];
   mrpackPath?: string;
   index?: MrIndex;
@@ -144,7 +151,7 @@ export interface PipelineInstallReportFile {
 }
 export interface PipelineInstallReportStage { stage: string; outcome: string; detail?: string | null }
 
-/** Full durable install report Ã¢â‚¬â€ matches `PipelineInstallReport` in src/tauri.ts. */
+/** Full durable install report ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â matches `PipelineInstallReport` in src/tauri.ts. */
 export interface PipelineInstallReport {
   schemaVersion: number;
   planId: string;
@@ -276,7 +283,7 @@ export function mapFilePolicy(input: PipelineFilePolicyInput): PipelineFilePolic
   const conflict = serverUnsupported && (serverRequired || serverOptional);
   const choice = input.choice ?? null;
 
-  // Community force-includes (`simplytooltips`, `s-lib`, Ã¢â‚¬Â¦) are evidence-backed corrections: the
+  // Community force-includes (`simplytooltips`, `s-lib`, ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦) are evidence-backed corrections: the
   // server needs them even when the pack declares `unsupported`. They are required, not a conflict,
   // and must never be offered as a user choice (excluding them breaks their dependents).
   if (input.curatedProtect) {
@@ -312,8 +319,8 @@ export function mapFilePolicy(input: PipelineFilePolicyInput): PipelineFilePolic
 /**
  * WP-4.6 install-time include set. Only an **explicit** `include` choice may override a curated
  * unsupported verdict (the reviewed plan's promise), plus `optionalDefaultKeep` files the UI keeps by
- * default when a headless caller did not send a per-file choice. Everything else Ã¢â‚¬â€ most importantly
- * curated exclusions that were never offered as a conflict Ã¢â‚¬â€ must stay excluded. Passing a
+ * default when a headless caller did not send a per-file choice. Everything else ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â most importantly
+ * curated exclusions that were never offered as a conflict ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â must stay excluded. Passing a
  * "not excluded" predicate instead here makes every curated exclusion look user-approved, which is
  * how Prominence II shipped `drippyloadingscreen`/`welcomescreen` without their `fancymenu` dependency.
  */
@@ -366,7 +373,7 @@ export async function artifactDriftReason(filePath: string, expected: PipelineAr
   }
   if (!stats.isFile()) return 'The reviewed pack archive is no longer a regular file';
   if (stats.size !== expected.sizeBytes) {
-    return `The reviewed pack archive changed size (${expected.sizeBytes} Ã¢â€ â€™ ${stats.size} bytes)`;
+    return `The reviewed pack archive changed size (${expected.sizeBytes} ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ${stats.size} bytes)`;
   }
   if (Math.round(stats.mtimeMs) !== expected.mtimeMs) {
     return 'The reviewed pack archive was modified after review (file timestamp changed)';
@@ -415,12 +422,12 @@ export class Pipeline {
   private cacheDir(): string { return effectiveCacheDir(this.ctx.dataRoot); }
 
   /**
-   * Where the boot-time learner persists what it discovered about mods (research Â§7 gap 7).
+   * Where the boot-time learner persists what it discovered about mods (research Ã‚Â§7 gap 7).
    *
    * `server-process.ts:304` already reads and writes this file, so learning improved *subsequent server starts*
    * but never the *install-time* plan: every `makeCuratedResolver` call in this file omitted `learnedFile`, so a
    * mod already known to need disabling was still downloaded on the next install. Fixing only one side of that
-   * pair is what made the gap invisible â€” the learner looked implemented because it was, on one path.
+   * pair is what made the gap invisible Ã¢â‚¬â€ the learner looked implemented because it was, on one path.
    */
   private learnedOverridesPath(): string {
     return path.join(this.ctx.dataRoot, 'state', 'env-overrides-learned.json');
@@ -511,13 +518,13 @@ export class Pipeline {
       // ---- acquisition shape B (provider API), NOT shape A ----
       // This branch is the CurseForge *provider* path: it asks the official API for the latest file and its
       // server-pack id. The `curseforge.client` / `curseforge.serverpack` adapters declare `shapes: ['archive']`
-      // only, so key-mode traffic deliberately does NOT flow through them — they are not two implementations of
-      // one thing, they serve different acquisition shapes (docs/audit/23 §4.1).
+      // only, so key-mode traffic deliberately does NOT flow through them â€” they are not two implementations of
+      // one thing, they serve different acquisition shapes (docs/audit/23 Â§4.1).
       //
       // Recorded because the Lead's own first proposal ("route the CurseForge pipeline through the adapter
       // layer") was wrong in exactly this way: it would have pushed a working E2 path through new code to
       // satisfy a symmetry that does not exist, risking the 12/12 matrix for tidiness. Invariant I1 says cover
-      // the working path first. What is genuinely missing is a `curseforge.provider` adapter for shape B — see
+      // the working path first. What is genuinely missing is a `curseforge.provider` adapter for shape B â€” see
       // docs/audit/26 Item 2 and DV-33.
       this.jobs.progress(jobId, { progress: 15, stage: 'resolving CurseForge project' });
       const meta = await inspectCurseForgeProject(Number(source.projectId), this.ctx.dataRoot);
@@ -536,14 +543,14 @@ export class Pipeline {
       // ---- P1b: format detected by the adapter layer, not by the UI source kind ----
       this.jobs.progress(jobId, { progress: 15, stage: 'detecting pack format' });
       const adapterIo = createAdapterIo(message => log(message));
-      // Acquisition shape (docs/audit/23 Ã‚Â§4.1): the registry only routes an input to adapters that declare it.
+      // Acquisition shape (docs/audit/23 Ãƒâ€šÃ‚Â§4.1): the registry only routes an input to adapters that declare it.
       let detectInput: DetectInput;
       if (source.kind === 'ftbProject') {
         detectInput = { shape: 'provider', kind: 'ftb', ids: { packId: source.packId, versionId: source.versionId }, cacheDir: this.cacheDir() };
       } else {
         const archivePath = assertRegularArchiveFile(source.sourceId, 'modpack archive');
         held.artifactPath = source.sourceId;
-        // Normalize before detection (research Ã‚Â§6 step 2): unwrap one nested zip, detect a wrapper dir.
+        // Normalize before detection (research Ãƒâ€šÃ‚Â§6 step 2): unwrap one nested zip, detect a wrapper dir.
         const normalized = await normalizeArchive(source.sourceId, { log: message => log(message) });
         held.normalizedArtifactPath = normalized.effectivePath;
         detectInput = { shape: 'archive', index: normalized.index, path: normalized.effectivePath };
@@ -560,7 +567,7 @@ export class Pipeline {
         ? { source: 'ftb', projectId: source.packId, ...(source.versionId === undefined ? {} : { versionId: String(source.versionId) }), artifact: null }
         : { source: 'packArchive', sourceId: source.sourceId, artifact: null };
       log(`[adapters] ${recipe.formatId}: "${recipe.name}" ${recipe.loader} ${recipe.loaderVersion ?? '(unpinned)'} MC ${recipe.mc}, ${recipe.files.length} files`);
-      for (const entry of recipe.resolution) log(`[adapters]   ${entry.field} Ã¢â€ Â ${entry.source}`);
+      for (const entry of recipe.resolution) log(`[adapters]   ${entry.field} ÃƒÂ¢Ã¢â‚¬Â Ã‚Â ${entry.source}`);
       for (const warning of recipe.warnings) {
         warnings.push(`${warning.rule}${warning.path ? ` (${warning.path})` : ''}: ${warning.message}`);
       }
@@ -601,7 +608,15 @@ export class Pipeline {
       loader: loaderPinOf(held.loader),
       fileDecisions: decisions,
     };
-    return { previewId, sourceName: held.sourceName, warnings, plan };
+    // docs/audit/26 Item 4: carry the format's evidence grade to the UI. The grade already exists on every
+    // recipe and is enforced by `validateRecipe`, but it was invisible to the user â€” so a format that is merely
+    // schema-derived (E3) looked identical to one with a real verified install (E2). Only the code knowing that
+    // difference does not complete the "no unsupported claim" principle. Key-mode/legacy paths have no recipe,
+    // hence null rather than a guessed grade.
+    const evidence = held.recipe
+      ? { grade: held.recipe.evidenceGrade, note: held.recipe.evidenceNote, formatId: held.recipe.formatId }
+      : null;
+    return { previewId, sourceName: held.sourceName, warnings, plan, evidence };
   }
 
   discardPreview(previewId: string): boolean { return this.previews.delete(previewId); }
@@ -622,7 +637,7 @@ export class Pipeline {
     if (!held) {
       return this.finalizeFailure('failed', this.createReport(null), `Preview ${previewId} not found or already used; review the pack again.`);
     }
-    // WP-4.5: previews are single-use Ã¢â‚¬â€ consume before any validation/mutation. A pre-mutation failure
+    // WP-4.5: previews are single-use ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â consume before any validation/mutation. A pre-mutation failure
     // below re-inserts it (the user may retry); anything after the staged transaction starts does not.
     this.previews.delete(previewId);
 
@@ -717,7 +732,7 @@ export class Pipeline {
           autoFixRounds = result.rounds;
 
           // ---- loader-build escalation (see installer/loader-build.ts) ----
-          // The pack's L2/L3 loop could not make it boot. If Ã¢â‚¬â€ and only if Ã¢â‚¬â€ the pack declared no loader build
+          // The pack's L2/L3 loop could not make it boot. If ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â and only if ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the pack declared no loader build
           // and the failure is provably at the loader level, try the next provider build, within a hard budget.
           if (!result.ok && loaderPlan && !loaderPlan.declared) {
             const failure = classifyBootFailure(result.tail);
@@ -822,7 +837,7 @@ export class Pipeline {
               platform: 'modrinth', slug: held.slug,
               // gap9: record hashes/sizes, not just paths, so a reinstall can DIFF against this manifest instead
               // of re-downloading everything blind. `PlannedFile` already carried sha1/sha512/size; the sidecar
-              // simply never wrote them, which is why research §7 gap 9 was invisible — the data was there.
+              // simply never wrote them, which is why research Â§7 gap 9 was invisible â€” the data was there.
               files: held.index.files.map(file => ({
                 path: file.path,
                 side: file.env?.server ?? null,
@@ -915,7 +930,7 @@ export class Pipeline {
             };
             sidecarData = {
               platform: held.recipe.formatId,
-              // gap9: same as the modrinth branch — a diffable manifest, not a bare path list.
+              // gap9: same as the modrinth branch â€” a diffable manifest, not a bare path list.
               files: held.recipe.files.map(file => ({
                 path: file.path,
                 side: file.side,
@@ -966,8 +981,8 @@ export class Pipeline {
             sidecarData = {
               platform: 'curseforge', slug: projectId ? String(projectId) : null,
               // gap9: a CF author server pack has no per-file manifest to plan from (the archive IS the payload),
-              // so a per-file hash list cannot be fabricated at plan time. What CAN be recorded — and is what a
-              // reinstall actually needs to diff — is the archive's own identity plus the provider coords.
+              // so a per-file hash list cannot be fabricated at plan time. What CAN be recorded â€” and is what a
+              // reinstall actually needs to diff â€” is the archive's own identity plus the provider coords.
               files: [],
               archive: zipPath && fs.existsSync(zipPath)
                 ? {
@@ -1068,7 +1083,7 @@ export class Pipeline {
     if (unresolved.length > 0) {
       const shown = unresolved.slice(0, 5).join(', ');
       throw appError('validation',
-        `${unresolved.length} file(s) have conflicting server/client signals; choose Include or Exclude before installing (${shown}${unresolved.length > 5 ? ', Ã¢â‚¬Â¦' : ''}).`);
+        `${unresolved.length} file(s) have conflicting server/client signals; choose Include or Exclude before installing (${shown}${unresolved.length > 5 ? ', ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦' : ''}).`);
     }
   }
 
@@ -1126,7 +1141,7 @@ export class Pipeline {
 
   /**
    * Fetch the loader's own recommended/latest build feed for one Minecraft version.
-   * Returns null when no trustworthy feed exists or it is unreachable Ã¢â‚¬â€ an unreachable feed must never block
+   * Returns null when no trustworthy feed exists or it is unreachable ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â an unreachable feed must never block
    * an install that declares its build, and inventing candidates would be a guess.
    *
    * Forge publishes `promotions_slim.json` with explicit `recommended`/`latest` per MC line, which is exactly
@@ -1247,6 +1262,8 @@ export class Pipeline {
     };
   }
 }
+
+
 
 
 
