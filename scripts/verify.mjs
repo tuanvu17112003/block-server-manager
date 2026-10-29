@@ -61,6 +61,8 @@ runStep('unit', node, [path.join('scripts', 'unit.mjs')]);
 // that half would assert nothing and would add a network dependency to a local gate.
 runStep('conformance', node, [path.join('scripts', 'conformance-spec.mjs')]);
 runStep('adapter-audit', node, [path.join('scripts', 'audit-adapters-real.mjs'), '--skip-packwiz']);
+// Prism E2: resolves a real third-party PrismLauncher instance export (docs/audit/24 DV-37). Local file, no network.
+runStep('prism-real', node, [path.join('scripts', 'verify-prism-real.mjs')]);
 runStep('selftest', node, electron('--selftest'));
 runStep('contract', node, electron('--contracttest'));
 runStep('services', node, electron('--servicestest'));
@@ -81,3 +83,4 @@ const summary = [
 process.stdout.write(`${summary}\n`);
 fs.writeFileSync(path.join(artifacts, 'summary.txt'), `${summary}\n`);
 process.exit(failed.length === 0 ? 0 : 1);
+

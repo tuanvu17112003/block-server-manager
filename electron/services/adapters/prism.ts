@@ -1,4 +1,4 @@
-﻿// Prism / MultiMC adapter â€” `mmc-pack.json`.
+// Prism / MultiMC adapter â€” `mmc-pack.json`.
 //
 // Schema read from Prism's own serializer (`launcher/minecraft/PackProfile.cpp`, commit 1814088):
 //   { formatVersion: 1, components: [ { uid, version, dependencyOnly?, important?, cachedName?, cachedVolatile? } ] }
@@ -152,8 +152,14 @@ export const prismAdapter: PackAdapter = {
         { field: 'loader', source: runtime.loaderUid ? `mmc-pack.json component "${runtime.loaderUid}"` : 'no loader component' },
         { field: 'payload', source: 'Prism instance tree applied as overrides (no server export exists)' },
       ],
-    evidenceGrade: 'E3',
-    evidenceNote: 'schema-derived from PrismLauncher mmc-pack.json; NO real Prism instance exists on disk, so nothing was installed. Not proof.',
+    evidenceGrade: 'E2',
+    // Upgraded from E3 on 2026-10-29 (docs/audit/24 DV-37): a real PrismLauncher instance export built by a THIRD
+    // PARTY's CI was obtained and resolved — root mmc-pack.json + instance.cfg, sha256 15456AB9…5EC8 — and the
+    // adapter read forge 47.4.0 / MC 1.20.1 out of the launcher-written metadata with nothing pre-told.
+    // Deliberately NOT E1: one instance is not the whole real population, and a Prism instance is a CLIENT
+    // instance with no dedicated-server export, so no server boot was performed. Resolved-and-installed real
+    // artefact = E2 with that caveat stated, rather than a boot claim that was never tested.
+    evidenceNote: 'a real third-party PrismLauncher instance export (root mmc-pack.json, CI-built, sha256 verified) resolves to forge 47.4.0 / MC 1.20.1 from the launcher metadata; payload applied as override layers because a Prism instance has no server export, so no boot was performed.',
     };
   },
 };

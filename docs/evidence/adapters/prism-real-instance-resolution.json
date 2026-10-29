@@ -1,0 +1,108 @@
+{
+  "harness": "verify-prism-real.mjs",
+  "purpose": "E2 for prism.multimc using a third-party CI-built PrismLauncher instance export (not a fixture we authored)",
+  "artefact": {
+    "path": "docs\\evidence\\adapters\\prism-real-instance.zip",
+    "source": "https://github.com/sugoidogo/packwiz-pack/releases/download/0.0.0/CHANGEME-prism.zip",
+    "producer": "sugoidogo/packwiz-pack Gitea/GitHub Actions workflow — a third party, not this project",
+    "expectedSha256": "15456AB9D502142965175C14ADA62E464CA254440412D09D62B0AA2C52685EC8"
+  },
+  "checks": [
+    {
+      "name": "artefact checksum matches the recorded third-party build",
+      "ok": true,
+      "detail": "15456AB9D502142965175C14ADA62E464CA254440412D09D62B0AA2C52685EC8"
+    },
+    {
+      "name": "artefact is not authored by this project",
+      "ok": true,
+      "detail": "sugoidogo/packwiz-pack Gitea/GitHub Actions workflow — a third party, not this project"
+    },
+    {
+      "name": "root mmc-pack.json present (what a real Prism export writes)",
+      "ok": true
+    },
+    {
+      "name": "root instance.cfg present",
+      "ok": true
+    },
+    {
+      "name": "mmc-pack.json carries net.minecraft (launcher-written, not ours)",
+      "ok": true,
+      "detail": "org.lwjgl3,net.minecraft,net.minecraftforge"
+    },
+    {
+      "name": "prism adapter claims the real archive by content",
+      "ok": true
+    },
+    {
+      "name": "format is prism.multimc",
+      "ok": true,
+      "detail": "prism.multimc"
+    },
+    {
+      "name": "Minecraft version read from the launcher metadata",
+      "ok": true,
+      "detail": "1.20.1"
+    },
+    {
+      "name": "loader family resolved",
+      "ok": true,
+      "detail": "forge"
+    },
+    {
+      "name": "exact loader build resolved (not guessed)",
+      "ok": true,
+      "detail": "47.4.0"
+    },
+    {
+      "name": "resolution records mmc-pack.json as the source",
+      "ok": true
+    },
+    {
+      "name": "payload is override layers (a Prism instance has no server export)",
+      "ok": true,
+      "detail": "[{\"prefix\":\".minecraft/\",\"order\":1},{\"prefix\":\"\",\"order\":2}]"
+    },
+    {
+      "name": "evidence grade is stated",
+      "ok": true,
+      "detail": "E2"
+    }
+  ],
+  "recipe": {
+    "formatId": "prism.multimc",
+    "mc": "1.20.1",
+    "loader": "forge",
+    "loaderVersion": "47.4.0",
+    "files": 0,
+    "overrides": [
+      {
+        "prefix": ".minecraft/",
+        "order": 1
+      },
+      {
+        "prefix": "",
+        "order": 2
+      }
+    ],
+    "resolution": [
+      {
+        "field": "mc",
+        "source": "mmc-pack.json component \"net.minecraft\""
+      },
+      {
+        "field": "loader",
+        "source": "mmc-pack.json component \"net.minecraftforge\""
+      },
+      {
+        "field": "payload",
+        "source": "Prism instance tree applied as overrides (no server export exists)"
+      }
+    ],
+    "evidenceGrade": "E2",
+    "evidenceNote": "a real third-party PrismLauncher instance export (root mmc-pack.json, CI-built, sha256 verified) resolves to forge 47.4.0 / MC 1.20.1 from the launcher metadata; payload applied as override layers because a Prism instance has no server export, so no boot was performed."
+  },
+  "verdict": "PASS",
+  "error": null
+}
