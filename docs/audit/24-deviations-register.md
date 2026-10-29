@@ -85,13 +85,32 @@ alone are explicitly **not** sufficient.
 
 | Phase | reality→spec | spec→code | code→reality | Signed off by | Notes |
 |---|---|---|---|---|---|
-| C0 | — | — | — | — | pending (delegated; conformance script not yet delivered) |
 | C0 | **green** — the script reads the real spec lines (§2 formats, §6 step 2, §7 gaps) and attributes every finding to file:line | **green** — `scripts/conformance-spec.mjs` + `scripts/conformance-waivers.json`; 9 checks, 4 closed, **5 open**; verdict FAIL by design | n/a (measurement) | **QA accepted** | Delivered by delegated subagent; 13 research formats parsed, 6 adapters registered, 7 covered + 6 explicitly waived. Open items with exact locations: gap3 `core.ts:1124`, gap4 zero provides/rescue matches in `installer/`, gap5 `curated.ts:44,45,47`, gap7 `pipeline.ts:234` (6/6 resolver calls omit learnedFile), gap9 `pipeline.ts:796` (3 sidecar payloads record paths only). This is the exact C7 worklist. |
 | C1 | n/a (contract only) | **green** — shapes A–E implemented; registry refuses undeclared shapes (`shapes.includes(input.shape)` guard) | n/a | Lead | unit 328 → **336**, verify 10/10. DV-06 records the write-scope collision that cost ~10 min |
 | C2 | **green** — real 1 GB wrapper unwraps 2 → 3,553 entries exposing the SPC manifest | **green** — research §6 step 2 implemented in shared layer | n/a (install is C8) | Lead | 8 normalize tests; DV-01; found DV-04/DV-05 |
 | C3 | **green** — both real `.mrpack` files resolve; Prominence = Fabric 0.19.3 / MC 1.20.1 / 565 files (352 required, 213 unsupported) matching the known reference | **green** — delegates to `resolveMrpack`/`splitDeps`, no reimplementation | **partial (E2−)** — resolve parity proven; end-to-end install is C8 | Lead | `docs/evidence/adapters/modrinth-recipe-parity.json`. CurseForge half **not done** (see DV-04/05) |
-| C4 | — | — | — | — | pending; blocked on the SPC-manifest adapter (DV-04/DV-05) |
-| C5 | — | — | — | — | pending |
-| C6 | — | — | — | — | pending |
-| C7 | — | — | — | — | pending (delegated) |
-| C8 | — | — | — | — | pending |
+| C4 | — | — | — | — | **open** — blocked on DV-04/DV-05: no adapter reads the SPC `manifest.json` that C2 exposes |
+| C5 | — | — | — | — | **open** — packwiz is still archive-only; 3/8 real packs resolve |
+| C6 | — | — | — | — | **open** — Prism/ATLauncher still need explicit E3 labelling |
+| C7 | **green for gaps 3 and 5** — proven behaviourally, not by grep (DV-08) | **green** — SPC platform-dependency rule + anchored matching with rule ids | n/a (unit + gate) | Lead | unit 336 → **345**, verify 10/10, conformance gap3 CLOSED. **gap4, gap7, gap9 still open** |
+| C8 | — | — | — | — | **open** — required before anything may be called "supported" (invariant I3) |
+
+### Current gate state at `5671114`
+
+| Gate | Result |
+|---|---|
+| `npm run build:electron` | clean |
+| `node scripts/unit.mjs` | **345 / 345 pass** |
+| `node scripts/verify.mjs` | **10/10 PASS** |
+| `node scripts/conformance-spec.mjs` | FAIL by design — 9 checks, 5 closed, 4 open (gap4, gap5-false-positive, gap7, gap9) |
+| `node scripts/audit-adapters-real.mjs --skip-packwiz` | real archives **4/6**; formats observed: `plain.serverzip`, `modrinth.mrpack` |
+
+### What is NOT done (do not read the green rows as completion)
+
+- **CurseForge adapter** (C3 second half) — needs the SPC-manifest adapter; 2 of 4 real CF archives still fail.
+- **C4, C5, C6, C8** — untouched.
+- **gap4 (dependency rescue), gap7 (learned at install), gap9 (diffable sidecar)** — untouched, listed by C0 with file:line.
+- **No real end-to-end install has been run through the adapter layer.** Every claim above is resolve-level
+  (E2− at best). Invariant I3 says a format may be called *supported* only after a real install boots.
+
+
