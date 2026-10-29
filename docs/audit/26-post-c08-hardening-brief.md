@@ -221,3 +221,58 @@ Fixed by moving run-specific timing to the console and keeping only what was mea
 (commit `c724e4c`). Verified by running the harness twice and then the full gate twice: **no diff, 12/12, tree
 clean**. Worth recording because it is the same lesson as DV-13 in a new place — a gate that mutates the tree it
 is judging is not a trustworthy judge.
+
+---
+
+## 9. Item 3 revisited — unblocked, with zero fixtures authored by this project
+
+§8 recorded Item 3 as **blocked**, needing the user to supply one real Prism instance and one real ATLauncher
+instance. That was correct at the time and it was the right call not to write a synthetic one. It turned out both
+real artefacts were already public, just not on this machine:
+
+| Launcher | Real artefact found | Producer | Result |
+|---|---|---|---|
+| **Prism / MultiMC** | `CHANGEME-prism.zip` — root `mmc-pack.json` + `instance.cfg`, 3,859,512 B, sha256 `15456AB9…5EC8` | `sugoidogo/packwiz-pack` CI workflow (a third party) | resolved **forge 47.4.0 / MC 1.20.1**; **E3 → E2** |
+| **ATLauncher** | `instance.json` from ATLauncher issue #875 — 4,170,761 B, sha256 `0E2DD9DC…8023` | an ATLauncher user; reviewed by the ATLauncher maintainer in that thread | resolved **"eTards Create++" / Forge 47.2.17 / 1.20.1 / 290 mods**; **E3 → E2** |
+
+Both artifacts are preserved under `docs/evidence/adapters/` and verified by checksum in their harnesses
+(`verify-prism-real.mjs`, `verify-atlauncher-real.mjs`), which are now gate steps.
+
+### What was tried first, and why it failed
+
+Before finding those, an attempt was made to drive the **real PrismLauncher binary** headlessly
+(portable 11.1.1, `--import <mrpack>`) so the launcher itself would generate the `mmc-pack.json` — the most
+convincing possible provenance. It did not work, and the failures are worth recording because each looked like a
+product bug before being traced to the harness:
+
+1. `QT_QPA_PLATFORM=offscreen` — Prism ships only the `windows` platform plugin, so the process aborts.
+2. With `windows`, the launcher starts but ignores `--import` for a **path containing spaces**: the log shows
+   `Importing from url: QList(QUrl("…/COBBLEVERSE"), QUrl("http://1.7.42.mrpack"))` — the filename was split into
+   two URLs, one of which became an HTTP host. Copying to a space-free path fixed that, but import still did not
+   materialise an instance within the time budget while running headless.
+
+This is **not** a defect in our adapter — it is a limitation of driving a GUI launcher unattended, and it is
+recorded so nobody repeats it expecting a different outcome. The published-artefact route was both simpler and
+stronger evidence: the files were produced by other people's tooling, unmodified.
+
+### Consequence for the grade table
+
+Both launchers are **E2**, not E1, and both recipes say why in `evidenceNote`:
+
+- one instance is not the whole real population, so E1 is not earned;
+- a Prism instance is a *client* instance with no dedicated-server export → payload applied as override layers,
+  no boot performed;
+- for ATLauncher only the metadata file was published, not the instance directory → no payload, no boot.
+
+The distinction from E3 is real and worth stating: E3 meant "we implemented the schema and never saw a real file".
+E2 means "a real file produced by someone else was recognised and resolved correctly". Neither is "supported" in
+the invariant-I3 sense, and nothing in the UI presents them as such (Item 4).
+
+### Final gates after this section
+
+| Gate | Result |
+|---|---|
+| `node scripts/verify.mjs` | **14/14 PASS** (was 12; added `prism-real` and `atl-real`) |
+| `node scripts/unit.mjs` | **416 / 416** |
+| `node scripts/conformance-spec.mjs` | **PASS — 9/9 closed** |
+| `node scripts/audit-adapters-real.mjs --skip-packwiz` | real archives **6/6** |

@@ -52,7 +52,7 @@ Grades are from doc 19. **Only E2+ may be called "supported".** This table is th
 | **FTB** | **E2** | Installs exercised end-to-end against the live API earlier this session; loader-build escalation fault-injected and recovered. |
 | **CurseForge (client + server pack)** | **E2 on the legacy engine, E3 on the adapter** | The 12-pack acceptance matrix installed **6 CurseForge packs end-to-end with verified boots** (Dungeon Heroes 137.6 s, RLCraft 111.3 s, SkyFactory 5 156.6 s, DawnCraft 190 s, Otherworld D&D 237.8 s, Prominence II CF 197.4 s) — but through `curseforge.ts` (route A/B), **not** through the new `curseforge.*` adapters. So CurseForge installs are proven; routing them through the adapter layer is not. |
 | **ServerPackCreator output** | **E3** | The real 1 GB wrapper resolves from its declared `manifest.json` (fabric 0.19.3 / 1.20.1, corroborated by three independent sources). Not installed. |
-| **Prism / ATLauncher** | **E3** | Schema-derived from the launcher sources. **No real instance of either exists anywhere on disk**, verified by a recursive sweep. |
+| **Prism / ATLauncher** | **E2** | Both now rest on real third-party artefacts, not schemas: a CI-built PrismLauncher instance export (`mmc-pack.json`, sha256 `15456AB9…`) resolving **forge 47.4.0 / MC 1.20.1**, and a user-published ATLauncher `instance.json` from issue #875 (sha256 `0E2DD9DC…`) resolving **"eTards Create++" / Forge 47.2.17 / 1.20.1 / 290 mods**. Both preserved under `docs/evidence/adapters/` and checked by checksum in gate steps. Not E1: one instance each is not the population, and neither carries a server payload, so no boot was performed. |
 | **Bare server zip** | **E3** | Two real archives resolve, but it plans no downloads and was not installed via the adapter path. |
 
 Real-artefact coverage: **6/6** cached archives resolve (was 0/6 when the session's adapter work began).
@@ -63,7 +63,7 @@ Real-artefact coverage: **6/6** cached archives resolve (was 0/6 when the sessio
 |---|---|
 | `npm run build:electron` | clean |
 | `node scripts/unit.mjs` | **416 / 416 pass** (336 at session start → 403 after C0–C8 → 416 after the hardening pass) |
-| `node scripts/verify.mjs` | **12/12 PASS** — grew from 10 to 12 when the hardening pass added conformance + adapter-audit as gate steps (`docs/audit/26` Item 1) |
+| `node scripts/verify.mjs` | **14/14 PASS** — 10 → 12 when conformance + adapter-audit became gate steps, then → 14 with `prism-real` and `atl-real` (`docs/audit/26` Item 1, §9) |
 | `node scripts/conformance-spec.mjs` | **PASS — 9/9 closed, 0 open** |
 | `node scripts/audit-adapters-real.mjs --skip-packwiz` | archives **6/6** |
 | `node scripts/verify-adapter-install.mjs` | **PASS** (E2 install) |
@@ -82,7 +82,7 @@ Real-artefact coverage: **6/6** cached archives resolve (was 0/6 when the sessio
   `verify-boot: complete`). This is the strongest single result of the session: 6 Modrinth + 6 CurseForge packs,
   real network, real Java, real boots. Note it exercises the legacy engine paths, so it does not by itself
   upgrade the adapter layer's grade (see the CurseForge line above).
-- **Prism/ATLauncher remain unproven by construction** — no artefact exists to test with.
+- ~~Prism/ATLauncher remain unproven by construction~~ — **both are now E2 on real third-party artefacts** (§9 of the hardening brief). Neither carries a server payload, so "resolved and recognised" is the claim, not "boots".
 - **`plain.serverzip` plans no downloads** and returns a root override layer, so "resolves" there means
   "claims and classifies", not "installs". Recorded, not hidden.
 - **Four formats carry explicit waivers** (MCBBS, HMCL server, GDLauncher, Technic) — deferred with reasons in
@@ -118,6 +118,8 @@ the most valuable:
 ## 7. The one-line version
 
 The code was never the hard part. **Making it impossible to claim something works without a real artefact saying so** was the hard part — and that is now enforced three ways: a conformance script that reads the spec and fails on disagreement (9/9 closed), a required evidence grade on every recipe (the compiler refuses a recipe without one), and an audit harness that only counts real cached packs. Everything the plan asked for now has a number behind it: unit 403/403, verify 10/10, conformance PASS, real archives 6/6, and the 12-pack acceptance matrix 12/12 with verified boots. The remaining honest gap is narrower than when the session began and is stated plainly: the new CurseForge **adapters** have not been exercised end-to-end, even though CurseForge **installs** have.
+
+
 
 
 
