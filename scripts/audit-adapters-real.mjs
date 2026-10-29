@@ -31,7 +31,6 @@ const silentIo = createAdapterIo(() => {});
 
 const report = {
   harness: 'audit-adapters-real.mjs',
-  startedAt: new Date().toISOString(),
   premise: 'real artefacts only; no fixture authored by the harness is used as evidence',
   archives: [],
   packwiz: [],
@@ -211,11 +210,14 @@ try {
   console.error(`ERROR: ${report.error}`);
   process.exitCode = 1;
 } finally {
-  report.finishedAt = new Date().toISOString();
-  report.durationSeconds = Math.round((Date.now() - started) / 100) / 10;
+  // Timestamps and durations are deliberately NOT written into the committed evidence file (docs/audit/26 Item 1).
+  // This script is now a `verify.mjs` step, so a wall-clock field would make every gate run leave the tree dirty
+  // and the committed evidence could never match the tree it describes. Run-specific timing goes to the console;
+  // the file records what was measured, which is the durable part.
+  const elapsedSeconds = (Math.round((Date.now() - started) / 100) / 10).toFixed(1);
   fs.mkdirSync(path.dirname(evidenceFile), { recursive: true });
   fs.writeFileSync(evidenceFile, `${JSON.stringify(report, null, 2)}\n`);
-  console.log(`evidence written: ${evidenceFile}`);
+  console.log(`evidence written: ${evidenceFile} (run took ${elapsedSeconds}s)`);
 }
 
 

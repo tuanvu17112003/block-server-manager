@@ -1,6 +1,5 @@
 {
   "harness": "audit-adapters-real.mjs",
-  "startedAt": "2026-10-29T16:28:24.228Z",
   "premise": "real artefacts only; no fixture authored by the harness is used as evidence",
   "archives": [
     {
@@ -356,7 +355,5 @@
       "modrinth.mrpack"
     ],
     "defects": 0
-  },
-  "finishedAt": "2026-10-29T16:28:37.236Z",
-  "durationSeconds": 13
+  }
 }
