@@ -11,6 +11,7 @@ import { ftbAdapter, FTB_ALLOWED_HOSTS } from './ftb';
 import { packwizAdapter } from './packwiz';
 import { modrinthAdapter } from './modrinth';
 import { curseForgeClientAdapter, curseForgeServerPackAdapter } from './curseforge';
+import { serverPackCreatorAdapter } from './serverpackcreator';
 import { prismAdapter } from './prism';
 import { atlauncherAdapter } from './atlauncher';
 import { serverZipAdapter } from './serverzip';
@@ -18,6 +19,7 @@ import { serverZipAdapter } from './serverzip';
 /** All adapters, highest priority first (the registry re-sorts defensively). */
 export const ADAPTERS = [
   modrinthAdapter,     // 90 — highest: manifest carries per-file sides + full CDN URLs
+  serverPackCreatorAdapter,    // 89 — SPC output (row 12): manifest.json with minecraftVersion/modloader
   curseForgeClientAdapter,     // 88 — manifest.json with manifestType/manifestVersion/minecraft.modLoaders[]
   curseForgeServerPackAdapter, // 87 — author server pack: engine-readable artifacts, or declared variables.txt
   packwizAdapter,      // 60 — declarative, the only archive format with per-file side data
@@ -57,6 +59,7 @@ export {
   isFtbPrerelease, inferFtbLoaderFromFiles, resolveFtbDestPath, coerceJavaMajor, isMinecraftVersionString,
   APP_JAVA_MAJORS,
 } from './ftb';
+export { serverPackCreatorAdapter, readSpcManifest } from './serverpackcreator';
 export { modrinthAdapter, mrpackFileSide, mrpackRuntime, buildMrpackRecipe, isMrpackIndex } from './modrinth';
 export {
   curseForgeClientAdapter, curseForgeServerPackAdapter, isCurseForgeManifest, isServerPackCreatorManifest,
@@ -68,4 +71,5 @@ export { prismAdapter, validateMmcPack, readMmcRuntime, MMC_FORMAT_VERSION, MMC_
 export { atlauncherAdapter, readAtlInstance, readAtlLoader, readAtlMc } from './atlauncher';
 export { serverZipAdapter, readServerZipEvidence, looksLikeServerZip } from './serverzip';
 export { parseToml, tomlAt, tomlString, tomlTable, TomlParseError } from './toml';
+
 

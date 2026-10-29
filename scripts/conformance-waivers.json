@@ -21,11 +21,6 @@
       "priority": 10,
       "format": "Technic",
       "reason": "no real artefact measured; Solder read API only, lowest install share."
-    },
-    {
-      "priority": 12,
-      "format": "SPC output",
-      "reason": "partially reachable today via curseforge.ts flat-manifest handling (curseforge.ts:494); no adapter of its own."
     }
   ]
 }

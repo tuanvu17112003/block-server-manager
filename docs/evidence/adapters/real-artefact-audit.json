@@ -1,6 +1,6 @@
 {
   "harness": "audit-adapters-real.mjs",
-  "startedAt": "2026-10-29T13:55:53.326Z",
+  "startedAt": "2026-10-29T14:02:00.105Z",
   "premise": "real artefacts only; no fixture authored by the harness is used as evidence",
   "archives": [
     {
@@ -67,12 +67,48 @@
         "effectiveEntryCount": 3553
       },
       "candidates": [
+        "serverpackcreator",
         "plain.serverzip"
       ],
-      "recipe": null,
-      "validation": null,
-      "error": "This archive has no pack manifest and does not state its Minecraft version, so it cannot be installed safely. Add a manifest (Modrinth, CurseForge, packwiz, Prism or ATLauncher) or an exact Minecraft version. Evidence checked: version.json, libraries/ maven path, loader installer jar name.",
-      "ok": false,
+      "recipe": {
+        "formatId": "serverpackcreator",
+        "name": "ServerPackCreator pack",
+        "mc": "1.20.1",
+        "loader": "fabric",
+        "loaderVersion": "0.19.3",
+        "javaMajor": null,
+        "fileCount": 0,
+        "overrideLayers": [
+          "(root)"
+        ],
+        "launchShape": "launch-jar",
+        "sideCounts": {},
+        "warningRules": [
+          "spc.manifest-derived"
+        ],
+        "resolution": [
+          {
+            "field": "mc",
+            "source": "manifest.json minecraftVersion"
+          },
+          {
+            "field": "loader",
+            "source": "manifest.json modloader=\"fabric\""
+          },
+          {
+            "field": "loaderVersion",
+            "source": "manifest.json modloaderVersion"
+          },
+          {
+            "field": "payload",
+            "source": "archive tree applied as one root override layer (SPC builds server packs)"
+          }
+        ],
+        "sampleFiles": []
+      },
+      "validation": "passed",
+      "error": null,
+      "ok": true,
       "entryCount": 3553
     },
     {
@@ -304,11 +340,11 @@
   ],
   "packwiz": [],
   "defects": [],
-  "verdict": "DEFECTS_FOUND",
+  "verdict": "PASS",
   "summary": {
     "realArchives": {
       "total": 6,
-      "resolved": 5
+      "resolved": 6
     },
     "realPackwiz": {
       "total": 0,
@@ -316,10 +352,11 @@
     },
     "formatsObserved": [
       "curseforge.serverpack",
+      "serverpackcreator",
       "modrinth.mrpack"
     ],
     "defects": 0
   },
-  "finishedAt": "2026-10-29T13:56:02.981Z",
-  "durationSeconds": 9.7
+  "finishedAt": "2026-10-29T14:02:11.166Z",
+  "durationSeconds": 11.1
 }
