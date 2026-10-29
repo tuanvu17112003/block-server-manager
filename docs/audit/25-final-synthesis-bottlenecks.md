@@ -62,8 +62,8 @@ Real-artefact coverage: **6/6** cached archives resolve (was 0/6 when the sessio
 | Gate | Result |
 |---|---|
 | `npm run build:electron` | clean |
-| `node scripts/unit.mjs` | **403 / 403 pass** (from 336) |
-| `node scripts/verify.mjs` | **10/10 PASS** (`artifacts/2026-10-29T15-25-46-950Z`) |
+| `node scripts/unit.mjs` | **416 / 416 pass** (336 at session start → 403 after C0–C8 → 416 after the hardening pass) |
+| `node scripts/verify.mjs` | **12/12 PASS** — grew from 10 to 12 when the hardening pass added conformance + adapter-audit as gate steps (`docs/audit/26` Item 1) |
 | `node scripts/conformance-spec.mjs` | **PASS — 9/9 closed, 0 open** |
 | `node scripts/audit-adapters-real.mjs --skip-packwiz` | archives **6/6** |
 | `node scripts/verify-adapter-install.mjs` | **PASS** (E2 install) |
@@ -118,6 +118,7 @@ the most valuable:
 ## 7. The one-line version
 
 The code was never the hard part. **Making it impossible to claim something works without a real artefact saying so** was the hard part — and that is now enforced three ways: a conformance script that reads the spec and fails on disagreement (9/9 closed), a required evidence grade on every recipe (the compiler refuses a recipe without one), and an audit harness that only counts real cached packs. Everything the plan asked for now has a number behind it: unit 403/403, verify 10/10, conformance PASS, real archives 6/6, and the 12-pack acceptance matrix 12/12 with verified boots. The remaining honest gap is narrower than when the session began and is stated plainly: the new CurseForge **adapters** have not been exercised end-to-end, even though CurseForge **installs** have.
+
 
 
 

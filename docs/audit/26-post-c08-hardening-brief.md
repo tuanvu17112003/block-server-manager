@@ -159,3 +159,51 @@ comments only.
 4. `curseforgeProject` key-mode path byte-identical to `c40b3b0` (verified by `git diff`).
 5. New DV rows for: the corrected CF analysis, the Prism/ATL block, and anything that deviates from this brief.
 6. `docs/audit/25-final-synthesis-bottlenecks.md` updated to match what is actually true after this pass.
+
+---
+
+## 8. Outcome — this section is the reconciliation against the sections above
+
+Completed 2026-10-29 after the brief was committed at `51e368c`. Every item below is checked against its own
+acceptance criterion from §2; where reality differed from the brief, it is stated rather than smoothed over.
+
+| Item | Brief said | Actual outcome | Commit |
+|---|---|---|---|
+| 1 — gate the spec | add 2 steps, prove the guard guards | `verify.mjs` **12/12** (conformance 99 ms, adapter-audit 15 s). **Guard proved**: a stale `packwiz` waiver made conformance exit 1 and the gate **FAIL 11/12**; restored (`git diff` empty) → 12/12 | `5190c90` |
+| 2 — CurseForge | correct my own proposal, do **not** touch the E2 path | Corrected and recorded. `git diff` on the install path: **zero removed lines**. Boundary comments added at `pipeline.ts:510` and in `curseforge.client`; `curseforge.provider` (shape B) written down as scoped-not-started | `20f5153` |
+| 3 — Prism/ATL | blocked, needs a real instance from the user | **Blocked, not worked around.** Re-verified: no `mmc-pack.json` / `instance.json` anywhere; the only `pack.json` hits are shader packs. No synthetic instance authored, because that would be E3 labelled E2 — the original error | (DV-34) |
+| 4 — show the grade | surface it in the preview UI | DTO carries `{grade, note, formatId}`; `PipelineReview` shows a green "Verified format" or amber "not yet proven" badge plus an alert. 5 tests incl. fail-closed on unknown/lowercase/future grades. Unit 403→408 | `8846e7f` |
+| 5 — deferred formats | real reason, not a generic error | Done, **and it exposed two real defects** (see below). 10 tests incl. a drift guard against `conformance-waivers.json`. Unit 408→416 | `4d1ba59` |
+
+### Where the brief was wrong or incomplete
+
+Recorded because the brief exists to be checked against, not to be flattered:
+
+1. **Item 2's premise was mine and it was wrong.** The brief's own §2 corrects the chat summary: CurseForge key
+   mode is acquisition **shape B**, and the adapters are shape **A**, so there was no duplicated logic to unify.
+   Had I implemented the original proposal, the 12/12 matrix would have been put at risk for symmetry (DV-33).
+2. **Item 5 needed to run earlier than the brief implied.** I put the check where the generic error was thrown —
+   which is *after* adapter selection — and it never fired, because `plain.serverzip` claims any manifest-less
+   archive. The fix had to move **before** `candidates()`. That is the D4 silent-degradation shape reappearing in
+   the very code meant to explain formats.
+3. **A name mismatch the brief did not anticipate:** the app said "HMCL server pack", the waiver said
+   "HMCL server". Caught by the drift guard I wrote rather than by review — which is the argument for writing it.
+
+### Final gates after this pass
+
+| Gate | Result |
+|---|---|
+| `node scripts/verify.mjs` | **12/12 PASS** (was 10/10 before Item 1) |
+| `node scripts/unit.mjs` | **416 / 416** (was 403) |
+| `node scripts/conformance-spec.mjs` | **PASS — 9/9 closed** |
+| `node scripts/audit-adapters-real.mjs --skip-packwiz` | real archives **6/6** (now a gate step) |
+
+**Not re-run in this pass, deliberately:** the 12-pack matrix. Nothing here touches the install path — that was
+the point of Item 2's no-change decision, verified by `git diff` showing zero removed lines. If a future change
+does touch it, the matrix must be re-run and this brief amended.
+
+### Still open (unchanged by this pass)
+
+- **CurseForge shape-B provider adapter** does not exist; `curseforge.*` adapters remain **E3**.
+- **Prism / ATLauncher remain E3** until a user supplies one real instance of each.
+- **Four formats deferred** with recorded reasons, now surfaced to the user instead of hidden.
