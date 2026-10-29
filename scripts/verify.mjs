@@ -55,6 +55,12 @@ const electron = (flag, extra = []) => [electronCli, '.', flag, ...extra];
 runStep('build', 'npm', ['run', 'build']);
 runStep('runtime-data', node, [path.join('scripts', 'check-runtime-data.mjs')]);
 runStep('unit', node, [path.join('scripts', 'unit.mjs')]);
+// Spec-conformance and the real-artefact audit used to be scripts a human had to remember to run, so the gate
+// could print 10/10 while both were failing (docs/audit/26 Item 1). A guardrail that depends on discipline is
+// not a guardrail. --skip-packwiz is deliberate: there is no real packwiz artefact on this machine, so running
+// that half would assert nothing and would add a network dependency to a local gate.
+runStep('conformance', node, [path.join('scripts', 'conformance-spec.mjs')]);
+runStep('adapter-audit', node, [path.join('scripts', 'audit-adapters-real.mjs'), '--skip-packwiz']);
 runStep('selftest', node, electron('--selftest'));
 runStep('contract', node, electron('--contracttest'));
 runStep('services', node, electron('--servicestest'));
