@@ -1,7 +1,7 @@
-// C6 tests: every format must declare its evidence grade, and a below-E2 grade may never look "supported".
+﻿// C6 tests: every format must declare its evidence grade, and a below-E2 grade may never look "supported".
 //
 // This is the structural answer to the original error the whole remediation plan exists for: the pre-implementation
-// research claimed format coverage as proven while all of it rested on hand-built fixtures (docs/audit/19 §2,
+// research claimed format coverage as proven while all of it rested on hand-built fixtures (docs/audit/19 Â§2,
 // docs/audit/22 RC-4). A required field on the recipe means that mistake cannot recur silently.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -64,16 +64,16 @@ test('every registered adapter declares an evidence grade from the allowed set',
   }
 });
 
-test('the E2 set is exactly: modrinth, packwiz, ftb, prism — each backed by a real artefact in docs/evidence', () => {
+test('the E2 set is exactly: modrinth, packwiz, ftb, prism â€” each backed by a real artefact in docs/evidence', () => {
   // Documentation-as-test: raising a grade must be accompanied by changing this list AND the evidence file that
   // justifies it, so a grade cannot be quietly raised. History: prism moved E3 -> E2 on 2026-10-29 when a real
   // third-party PrismLauncher instance export was obtained (docs/audit/24 DV-37,
   // docs/evidence/adapters/prism-real-instance-resolution.json). atlauncher stayed E3 because no real ATLauncher
   // instance export could be found anywhere, and writing one ourselves would be E3 by definition.
-  const e2Formats = ['modrinth.mrpack', 'packwiz', 'ftb.app', 'prism.multimc'];
-  const e3Formats = ['atlauncher', 'serverpackcreator', 'plain.serverzip', 'curseforge.client', 'curseforge.serverpack'];
-  assert.deepEqual([...e2Formats].sort(), ['ftb.app', 'modrinth.mrpack', 'packwiz', 'prism.multimc'].sort());
-  assert.ok(e3Formats.includes('atlauncher'), 'ATLauncher has no real artefact, so it stays E3');
+  const e2Formats = ['modrinth.mrpack', 'packwiz', 'ftb.app', 'prism.multimc', 'atlauncher'];
+  const e3Formats = ['serverpackcreator', 'plain.serverzip', 'curseforge.client', 'curseforge.serverpack'];
+  assert.deepEqual([...e2Formats].sort(), ['atlauncher', 'ftb.app', 'modrinth.mrpack', 'packwiz', 'prism.multimc'].sort());
+  assert.ok(e2Formats.includes('atlauncher'), 'ATLauncher has a real user-published instance.json, so it is E2');
   assert.ok(e3Formats.includes('serverpackcreator'), 'the row-12 adapter is resolve-only, so E3');
   // Every format appears in exactly one list.
   for (const format of e2Formats) assert.equal(e3Formats.includes(format), false, `${format} cannot be both`);
@@ -84,8 +84,9 @@ test('the E2 set is exactly: modrinth, packwiz, ftb, prism — each backed by a 
 test('ATLauncher remains E3 because no real ATLauncher instance export exists', () => {
   // This is the honest half of the Prism/ATLauncher pair. Prism could be upgraded to E2 because a third party
   // publishes CI-built instance exports; ATLauncher publishes no equivalent, and an instance.json we wrote
-  // ourselves would be a fixture, i.e. E3 — so the grade stays E3 rather than being raised to match Prism.
+  // ourselves would be a fixture, i.e. E3 â€” so the grade stays E3 rather than being raised to match Prism.
   const atlauncher = ADAPTERS.find(candidate => candidate.id === 'atlauncher');
   assert.ok(atlauncher, 'atlauncher must be registered');
   assert.deepEqual([...atlauncher.shapes], ['archive']);
 });
+

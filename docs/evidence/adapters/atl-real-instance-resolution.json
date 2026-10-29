@@ -1,0 +1,85 @@
+{
+  "harness": "verify-atlauncher-real.mjs",
+  "purpose": "E2 for atlauncher using a real user-published instance.json (not a fixture we authored)",
+  "artefact": {
+    "path": "docs\\evidence\\adapters\\atl-real-instance.json",
+    "source": "https://github.com/ATLauncher/ATLauncher/files/14380779/instance.json (issue #875)",
+    "producer": "an ATLauncher user; reviewed by the ATLauncher maintainer in that issue thread",
+    "expectedSha256": "0E2DD9DC68E6C2B728ED4FC91E7A66EA87D2EC6F7A6875C396F7CAC3EB628023"
+  },
+  "checks": [
+    {
+      "name": "artefact checksum matches the recorded user-published file",
+      "ok": true,
+      "detail": "0E2DD9DC68E6C2B728ED4FC91E7A66EA87D2EC6F7A6875C396F7CAC3EB628023"
+    },
+    {
+      "name": "artefact is not authored by this project",
+      "ok": true,
+      "detail": "an ATLauncher user; reviewed by the ATLauncher maintainer in that issue thread"
+    },
+    {
+      "name": "has a launcher object (ATL identity block)",
+      "ok": true
+    },
+    {
+      "name": "launcher carries a pack name",
+      "ok": true,
+      "detail": "eTards Create++"
+    },
+    {
+      "name": "does NOT look like FTB (no numeric root versionId)",
+      "ok": true
+    },
+    {
+      "name": "does NOT look like the vanilla launcher (no profiles key)",
+      "ok": true
+    },
+    {
+      "name": "adapter accepts the real instance.json",
+      "ok": true
+    },
+    {
+      "name": "pack identity read from launcher metadata",
+      "ok": true,
+      "detail": "eTards Create++"
+    },
+    {
+      "name": "uuid present (real instance, not a stub)",
+      "ok": true,
+      "detail": "7f45240d-81c7-499b-97f5-e73a573f3c44"
+    },
+    {
+      "name": "loaderVersion block present",
+      "ok": true
+    },
+    {
+      "name": "loader type stated by the launcher",
+      "ok": true,
+      "detail": "Forge"
+    },
+    {
+      "name": "exact loader build stated by the launcher",
+      "ok": true,
+      "detail": "47.2.17"
+    },
+    {
+      "name": "raw version names the Minecraft version too",
+      "ok": true,
+      "detail": "1.20.1-47.2.17"
+    }
+  ],
+  "instance": {
+    "name": "eTards Create++",
+    "pack": "Minecraft",
+    "packId": 0,
+    "uuid": "7f45240d-81c7-499b-97f5-e73a573f3c44",
+    "loaderType": "Forge",
+    "loaderVersion": "47.2.17",
+    "rawVersion": "1.20.1-47.2.17",
+    "hasModsList": true,
+    "modCount": 290
+  },
+  "verdict": "PASS",
+  "error": null
+}

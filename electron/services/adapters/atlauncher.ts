@@ -1,4 +1,4 @@
-﻿// ATLauncher adapter â€” `instance.json`.
+// ATLauncher adapter â€” `instance.json`.
 //
 // Schema read from ATLauncher's own serializer (`data/Instance.java` @Json + Gson `save()` at L1994-2001, and
 // `data/InstanceLauncher.java`), commit 8e9a713:
@@ -167,8 +167,15 @@ export const atlauncherAdapter: PackAdapter = {
         { field: 'loader', source: loader === 'vanilla' ? 'no launcher.loaderVersion.type' : `instance.json launcher.loaderVersion.type="${loader}"` },
         { field: 'payload', source: 'ATLauncher instance tree applied as overrides' },
       ],
-    evidenceGrade: 'E3',
-    evidenceNote: 'schema-derived from ATLauncher instance.json; NO real ATLauncher instance exists on disk, so nothing was installed. Not proof.',
+    evidenceGrade: 'E2',
+    // Upgraded from E3 on 2026-10-29 (docs/audit/24 DV-39): a real ATLauncher `instance.json` was obtained from a
+    // user-published attachment on ATLauncher issue #875 (`eTards Create++`, Forge 47.2.17 / 1.20.1, 290 mods,
+    // sha256 0E2DD9DC…8023) and the adapter recognised it correctly, including the discriminator that matters —
+    // ATLauncher and FTB BOTH write `instance.json`, so detection keys on shape (`launcher.name`/`pack` present,
+    // no numeric root `versionId`, no `profiles`) rather than on the filename.
+    // Deliberately NOT E1: one instance is not the population, and only `instance.json` was published — not the
+    // instance directory with its mods — so there is no payload to install and no boot was attempted.
+    evidenceNote: 'a real user-published ATLauncher instance.json (eTards Create++ / Forge 47.2.17 / 1.20.1, sha256 verified) is recognised and distinguished from FTB and the vanilla launcher by shape; only the metadata file was published, so no payload install or boot was performed.',
     };
   },
 };
