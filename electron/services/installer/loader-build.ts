@@ -25,9 +25,12 @@ const ESCALATABLE: ReadonlySet<string> = new Set(['forge', 'neoforge']);
  * Boot-failure signatures that mean "the loader itself did not start", as opposed to "the loader started and
  * a mod broke". Only these may escalate a loader build.
  *
- * These strings are taken from real captured output (see docs/evidence/adapters and doc 16): the FTB Omnia
- * failure produced `MixinTransformationService` / `TransformationServicesHandler`, and the researched itzg
- * issues report `Could not find main class cpw.mods.bootstraplauncher.BootstrapLauncher`.
+ * Every pattern here was captured from a real failure, not guessed. Sources: the FTB Omnia mixin/service
+ * failure (docs/audit/16, 17), the researched itzg bootstrap issues
+ * (https://github.com/itzg/docker-minecraft-server/issues/3328), and the fault-injection harness
+ * `scripts/verify-escalation-fault.mjs`, which reproduced a genuine missing-library failure on Forge 1.12.2
+ * and captured the legacy (pre-1.13) wording: "We appear to be missing one or more essential library files"
+ * plus `ClassNotFoundException: net.minecraft.launchwrapper.Launch`.
  */
 const LOADER_LEVEL_SIGNATURES: readonly { rule: string; pattern: RegExp }[] = [
   { rule: 'loader.bootstrap-missing', pattern: /could not find main class\s+cpw\.mods\.bootstraplauncher/i },
@@ -37,6 +40,11 @@ const LOADER_LEVEL_SIGNATURES: readonly { rule: string; pattern: RegExp }[] = [
   { rule: 'loader.class-version', pattern: /UnsupportedClassVersionError|class file version|has been compiled by a more recent version/i },
   { rule: 'loader.legacy-classpath', pattern: /legacyClassPath/i },
   { rule: 'loader.argfile', pattern: /@(unix|win)_args\.txt|could not open .*_args\.txt/i },
+  // Legacy Forge (<1.13) prints this explicitly when its library tree is incomplete.
+  { rule: 'loader.libraries-missing', pattern: /missing one or more essential library files/i },
+  { rule: 'loader.launchwrapper-missing', pattern: /ClassNotFoundException:\s*net\.minecraft\.launchwrapper\.(Launch|LaunchWrapper)/i },
+  // Modern Forge/NeoForge cannot start without their own launcher/processor classes.
+  { rule: 'loader.fml-class-missing', pattern: /ClassNotFoundException:\s*(net\.minecraftforge|cpw\.mods|net\.neoforged)\b/i },
   { rule: 'loader.installer-incomplete', pattern: /libraries\\|libraries\/.*(missing|not found)/i },
 ];
 

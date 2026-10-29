@@ -1,0 +1,956 @@
+{
+  "harness": "census-ftb-api.mjs",
+  "startedAt": "2026-10-29T12:05:04.669Z",
+  "packsScanned": 92,
+  "versionsScanned": 149,
+  "filesScanned": 157125,
+  "fieldValueSpace": {
+    "targets": {
+      "neoforge:modloader": 6,
+      "minecraft:game": 597,
+      "java:runtime": 91,
+      "forge:modloader": 80,
+      "fabric:modloader": 4
+    },
+    "types": {},
+    "fileTypes": {
+      "config": 66690,
+      "resource": 62944,
+      "script": 3095,
+      "mod": 24396
+    },
+    "statuses": {}
+  },
+  "versionOrdering": {
+    "packsChecked": 58,
+    "ascendingById": 58,
+    "idMatchesUpdated": 46,
+    "descendingExceptions": []
+  },
+  "pathShapes": {
+    "pathEqualsName": 0,
+    "pathIsParentDir": 157125,
+    "nameEmpty": 0,
+    "pathEmpty": 68,
+    "pathHasBackslash": 0,
+    "pathAbsolute": 0,
+    "samples": {}
+  },
+  "hazards": {
+    "zeroSizeFiles": 290,
+    "duplicateDestinations": 22,
+    "fileDirCollisions": 0,
+    "unsafeRelativePaths": 0,
+    "identicalPathNameRepeats": 0,
+    "packsWithDuplicates": [
+      {
+        "packId": 122,
+        "versionId": 12266,
+        "count": 1,
+        "samples": [
+          "mods/pedestals-0.4.56.jar x2"
+        ]
+      },
+      {
+        "packId": 122,
+        "versionId": 11937,
+        "count": 1,
+        "samples": [
+          "mods/pedestals-0.4.56.jar x2"
+        ]
+      },
+      {
+        "packId": 119,
+        "versionId": 12252,
+        "count": 2,
+        "samples": [
+          "mods/pedestals-0.4.56.jar x2",
+          "mods/playerplates-forge-3.0.4+mc1.20.1.jar x2"
+        ]
+      },
+      {
+        "packId": 119,
+        "versionId": 12194,
+        "count": 2,
+        "samples": [
+          "mods/pedestals-0.4.56.jar x2",
+          "mods/playerplates-forge-3.0.4+mc1.20.1.jar x2"
+        ]
+      },
+      {
+        "packId": 99,
+        "versionId": 12427,
+        "count": 1,
+        "samples": [
+          "mods/torohealth-1.18-forge-2.jar x2"
+        ]
+      },
+      {
+        "packId": 99,
+        "versionId": 11454,
+        "count": 1,
+        "samples": [
+          "mods/torohealth-1.18-forge-2.jar x2"
+        ]
+      },
+      {
+        "packId": 96,
+        "versionId": 2302,
+        "count": 1,
+        "samples": [
+          "mods/soulshards-1.18.2-1.3.2.jar x2"
+        ]
+      },
+      {
+        "packId": 96,
+        "versionId": 2289,
+        "count": 1,
+        "samples": [
+          "mods/soulshards-1.18.2-1.3.2.jar x2"
+        ]
+      },
+      {
+        "packId": 6,
+        "versionId": 90,
+        "count": 1,
+        "samples": [
+          "mods/kubejs-2.7.1.8.jar x2"
+        ]
+      },
+      {
+        "packId": 5,
+        "versionId": 2130,
+        "count": 7,
+        "samples": [
+          "config/DLDungeonsJBG/themes/Ocean.cfg x2",
+          "config/HardcoreDarkness.cfg x2",
+          "config/enderio/EnderIO.cfg x2",
+          "resources/contenttweaker/models/item/skystoneLense.json x2",
+          "resources/contenttweaker/textures/blocks/cloudsHD.png x2"
+        ]
+      },
+      {
+        "packId": 5,
+        "versionId": 2128,
+        "count": 4,
+        "samples": [
+          "config/HardcoreDarkness.cfg x2",
+          "resources/contenttweaker/models/item/skystoneLense.json x2",
+          "resources/contenttweaker/textures/blocks/cloudsHD.png x2",
+          "resources/contenttweaker/textures/items/skystoneLense.png x2"
+        ]
+      }
+    ],
+    "packsWithCollisions": [],
+    "packsWithUnsafePaths": []
+  },
+  "loader": {
+    "releasesWithoutLoader": [
+      {
+        "packId": 81,
+        "name": "Vanilla",
+        "versionId": 14391,
+        "versionName": "26.3",
+        "type": "release"
+      },
+      {
+        "packId": 68,
+        "name": "MindCrack Pack"
+      }
+    ],
+    "packsWithNoLoaderInAnyVersion": [
+      {
+        "packId": 81,
+        "name": "Vanilla"
+      },
+      {
+        "packId": 68,
+        "name": "MindCrack Pack"
+      }
+    ],
+    "loaderNames": {
+      "neoforge": 6,
+      "forge": 80,
+      "fabric": 4
+    },
+    "javaTargets": {
+      "8": 67,
+      "11": 1,
+      "17": 20,
+      "21": 3
+    }
+  },
+  "mcVersions": {
+    "1.21.1": 4,
+    "1.21": 2,
+    "1.20.4": 2,
+    "1.20.1": 8,
+    "1.19.2": 18,
+    "26.1.2": 1,
+    "26.3": 3,
+    "1.18.2": 12,
+    "1.12.2": 29,
+    "1.16.5": 17,
+    "18w43b": 1,
+    "26.3-pre-1": 1,
+    "26.4-snapshot-6": 1,
+    "26.4-snapshot-5": 1,
+    "1.7.10": 18,
+    "1.4.7": 9,
+    "1.6.4": 8,
+    "1.16.3": 2,
+    "1.12.1": 1,
+    "1.10.2": 8,
+    "1.14.4": 1,
+    "1.15.2": 2
+  },
+  "packs": [
+    {
+      "packId": 126,
+      "name": "FTB Presents Direwolf20 1.21",
+      "versions": 8,
+      "pickedVersion": 12599,
+      "pickedType": "release",
+      "pickedLoader": "neoforge=21.1.74"
+    },
+    {
+      "packId": 125,
+      "name": "FTB Evolution",
+      "versions": 7,
+      "pickedVersion": 12629,
+      "pickedType": "release",
+      "pickedLoader": "neoforge=21.1.74"
+    },
+    {
+      "packId": 124,
+      "name": "FTB Unstable 1.21",
+      "versions": 5,
+      "pickedVersion": 12630,
+      "pickedType": "release",
+      "pickedLoader": "neoforge=21.0.167"
+    },
+    {
+      "packId": 123,
+      "name": "FTB NeoTech",
+      "versions": 13,
+      "pickedVersion": 12404,
+      "pickedType": "release",
+      "pickedLoader": "neoforge=20.4.237"
+    },
+    {
+      "packId": 122,
+      "name": "FTB Builders Paradise 2",
+      "versions": 3,
+      "pickedVersion": 12266,
+      "pickedType": "release",
+      "pickedLoader": "forge=47.2.23"
+    },
+    {
+      "packId": 121,
+      "name": "FTB Presents F.A.M",
+      "versions": 5,
+      "pickedVersion": 12209,
+      "pickedType": "release",
+      "pickedLoader": "forge=43.3.8"
+    },
+    {
+      "packId": 120,
+      "name": "FTB Genesis",
+      "versions": 16,
+      "pickedVersion": 12493,
+      "pickedType": "release",
+      "pickedLoader": "forge=43.3.13"
+    },
+    {
+      "packId": 119,
+      "name": "FTB Presents Direwolf20 1.20",
+      "versions": 22,
+      "pickedVersion": 12252,
+      "pickedType": "release",
+      "pickedLoader": "neoforge=47.1.84"
+    },
+    {
+      "packId": 117,
+      "name": "FTB Skies Expert",
+      "versions": 21,
+      "pickedVersion": 12425,
+      "pickedType": "release",
+      "pickedLoader": "forge=43.4.2"
+    },
+    {
+      "packId": 116,
+      "name": "NeoForge",
+      "versions": 2005,
+      "pickedVersion": 14591,
+      "pickedType": "release",
+      "pickedLoader": "neoforge=26.1.2.125"
+    },
+    {
+      "packId": 115,
+      "name": "FTB Arcanum Institute",
+      "versions": 5,
+      "pickedVersion": 11936,
+      "pickedType": "release",
+      "pickedLoader": "forge=40.2.10"
+    },
+    {
+      "packId": 114,
+      "name": "FTB Presents AbePack",
+      "versions": 17,
+      "pickedVersion": 12147,
+      "pickedType": "release",
+      "pickedLoader": "forge=43.3.8"
+    },
+    {
+      "packId": 111,
+      "name": "FTB Interactions Remastered",
+      "versions": 9,
+      "pickedVersion": 12411,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2860"
+    },
+    {
+      "packId": 110,
+      "name": "FTB Unstable 1.20: Forge",
+      "versions": 6,
+      "pickedVersion": 6593,
+      "pickedType": "release",
+      "pickedLoader": "forge=47.1.3"
+    },
+    {
+      "packId": 109,
+      "name": "FTB Unstable 1.20: Fabric",
+      "versions": 4,
+      "pickedVersion": 6571,
+      "pickedType": "release",
+      "pickedLoader": "fabric=0.14.21"
+    },
+    {
+      "packId": 108,
+      "name": "FTB University 1.19",
+      "versions": 10,
+      "pickedVersion": 12168,
+      "pickedType": "release",
+      "pickedLoader": "forge=43.3.5"
+    },
+    {
+      "packId": 107,
+      "name": "FTB Presents Integration by Parts DX",
+      "versions": 21,
+      "pickedVersion": 11640,
+      "pickedType": "release",
+      "pickedLoader": "forge=36.2.39"
+    },
+    {
+      "packId": 105,
+      "name": "Fabric",
+      "versions": 41,
+      "pickedVersion": 14583,
+      "pickedType": "release",
+      "pickedLoader": "fabric=0.20.1"
+    },
+    {
+      "packId": 104,
+      "name": "MinecraftForge",
+      "versions": 5105,
+      "pickedVersion": 14582,
+      "pickedType": "release",
+      "pickedLoader": "forge=66.1.0"
+    },
+    {
+      "packId": 103,
+      "name": "FTB Skies",
+      "versions": 20,
+      "pickedVersion": 12254,
+      "pickedType": "release",
+      "pickedLoader": "forge=43.4.2"
+    },
+    {
+      "packId": 102,
+      "name": "FTB Legend of the Eyes",
+      "versions": 12,
+      "pickedVersion": 6559,
+      "pickedType": "release",
+      "pickedLoader": "fabric=0.14.19"
+    },
+    {
+      "packId": 101,
+      "name": "FTB Presents Direwolf20 1.19",
+      "versions": 23,
+      "pickedVersion": 12087,
+      "pickedType": "release",
+      "pickedLoader": "forge=43.3.7"
+    },
+    {
+      "packId": 100,
+      "name": "FTB StoneBlock 3",
+      "versions": 23,
+      "pickedVersion": 12632,
+      "pickedType": "release",
+      "pickedLoader": "forge=40.2.14"
+    },
+    {
+      "packId": 99,
+      "name": "FTB Inferno",
+      "versions": 18,
+      "pickedVersion": 12427,
+      "pickedType": "release",
+      "pickedLoader": "forge=40.2.7"
+    },
+    {
+      "packId": 97,
+      "name": "FTB One",
+      "versions": 19,
+      "pickedVersion": 12208,
+      "pickedType": "release",
+      "pickedLoader": "forge=43.3.5"
+    },
+    {
+      "packId": 96,
+      "name": "FTB Plexiglass Mountain",
+      "versions": 10,
+      "pickedVersion": 2302,
+      "pickedType": "release",
+      "pickedLoader": "forge=40.1.84"
+    },
+    {
+      "packId": 95,
+      "name": "FTB Presents Direwolf20 1.18",
+      "versions": 18,
+      "pickedVersion": 2299,
+      "pickedType": "release",
+      "pickedLoader": "forge=40.1.84"
+    },
+    {
+      "packId": 94,
+      "name": "FTB Chocolate",
+      "versions": 2,
+      "pickedVersion": 2119,
+      "pickedType": "release",
+      "pickedLoader": "forge=40.0.52"
+    },
+    {
+      "packId": 93,
+      "name": "FTB Ultimate: Anniversary Edition",
+      "versions": 10,
+      "pickedVersion": 12072,
+      "pickedType": "release",
+      "pickedLoader": "forge=36.2.26"
+    },
+    {
+      "packId": 91,
+      "name": "FTB OceanBlock",
+      "versions": 21,
+      "pickedVersion": 6495,
+      "pickedType": "release",
+      "pickedLoader": "forge=36.2.39"
+    },
+    {
+      "packId": 90,
+      "name": "FTB University 1.16",
+      "versions": 11,
+      "pickedVersion": 12146,
+      "pickedType": "release",
+      "pickedLoader": "forge=36.2.39"
+    },
+    {
+      "packId": 89,
+      "name": "FTB Competition Pack",
+      "versions": 1,
+      "pickedVersion": 2063,
+      "pickedType": "beta",
+      "pickedLoader": "forge=36.2.2"
+    },
+    {
+      "packId": 88,
+      "name": "FTB Academy 1.16",
+      "versions": 5,
+      "pickedVersion": 2338,
+      "pickedType": "release",
+      "pickedLoader": "forge=36.2.34"
+    },
+    {
+      "packId": 86,
+      "name": "FTB Cotton",
+      "versions": 2,
+      "pickedVersion": 2057,
+      "pickedType": "release",
+      "pickedLoader": "fabric=0.11.3"
+    },
+    {
+      "packId": 81,
+      "name": "Vanilla",
+      "versions": 926,
+      "pickedVersion": 14391,
+      "pickedType": "release",
+      "pickedLoader": null
+    },
+    {
+      "packId": 80,
+      "name": "FTB Endeavour",
+      "versions": 11,
+      "pickedVersion": 2112,
+      "pickedType": "release",
+      "pickedLoader": "forge=36.2.23"
+    },
+    {
+      "packId": 79,
+      "name": "FTB Presents Direwolf20 1.16",
+      "versions": 23,
+      "pickedVersion": 2113,
+      "pickedType": "release",
+      "pickedLoader": "forge=36.2.22"
+    },
+    {
+      "packId": 78,
+      "name": "FTB Mage Quest",
+      "versions": 1,
+      "pickedVersion": 207,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1614"
+    },
+    {
+      "packId": 77,
+      "name": "YogCraft Modpack",
+      "versions": 1,
+      "pickedVersion": 202,
+      "pickedType": "release",
+      "pickedLoader": "forge=6.6.2.534"
+    },
+    {
+      "packId": 76,
+      "name": "FTB Ultimate",
+      "versions": 1,
+      "pickedVersion": 199,
+      "pickedType": "release",
+      "pickedLoader": "forge=6.6.2.534"
+    },
+    {
+      "packId": 75,
+      "name": "FTB Tech World",
+      "versions": 1,
+      "pickedVersion": 197,
+      "pickedType": "release",
+      "pickedLoader": "forge=6.6.2.534"
+    },
+    {
+      "packId": 74,
+      "name": "MindCrack Pack",
+      "versions": 1,
+      "pickedVersion": 193,
+      "pickedType": "release",
+      "pickedLoader": "forge=6.6.2.534"
+    },
+    {
+      "packId": 73,
+      "name": "Magic World",
+      "versions": 1,
+      "pickedVersion": 192,
+      "pickedType": "release",
+      "pickedLoader": "forge=6.6.2.534"
+    },
+    {
+      "packId": 72,
+      "name": "FTB Lite 2",
+      "versions": 2,
+      "pickedVersion": 2041,
+      "pickedType": "release",
+      "pickedLoader": "forge=9.11.1.965"
+    },
+    {
+      "packId": 70,
+      "name": "Direwolf20 1.4.7",
+      "versions": 1,
+      "pickedVersion": 185,
+      "pickedType": "release",
+      "pickedLoader": "forge=6.6.2.534"
+    },
+    {
+      "packId": 68,
+      "name": "MindCrack Pack",
+      "versions": 0,
+      "pickedLoader": null
+    },
+    {
+      "packId": 66,
+      "name": "FTB Monster",
+      "versions": 1,
+      "pickedVersion": 194,
+      "pickedType": "release",
+      "pickedLoader": "forge=9.11.1.965"
+    },
+    {
+      "packId": 65,
+      "name": "FTB Horizons",
+      "versions": 1,
+      "pickedVersion": 190,
+      "pickedType": "release",
+      "pickedLoader": "forge=9.11.1.965"
+    },
+    {
+      "packId": 62,
+      "name": "FTB Presents Direwolf20 - 1.6.4",
+      "versions": 1,
+      "pickedVersion": 183,
+      "pickedType": "release",
+      "pickedLoader": "forge=9.11.1.965"
+    },
+    {
+      "packId": 61,
+      "name": "FTB Magic World 2",
+      "versions": 1,
+      "pickedVersion": 191,
+      "pickedType": "release",
+      "pickedLoader": "forge=9.11.1.965"
+    },
+    {
+      "packId": 60,
+      "name": "FTB Tech World 2",
+      "versions": 1,
+      "pickedVersion": 198,
+      "pickedType": "release",
+      "pickedLoader": "forge=9.11.1.965"
+    },
+    {
+      "packId": 59,
+      "name": "Slow's Stream Pack",
+      "versions": 1,
+      "pickedVersion": 196,
+      "pickedType": "release",
+      "pickedLoader": "forge=6.6.2.534"
+    },
+    {
+      "packId": 58,
+      "name": "Pax East 2014 Map",
+      "versions": 1,
+      "pickedVersion": 205,
+      "pickedType": "release",
+      "pickedLoader": "forge=9.11.1.965"
+    },
+    {
+      "packId": 56,
+      "name": "FTB Lite",
+      "versions": 1,
+      "pickedVersion": 187,
+      "pickedType": "release",
+      "pickedLoader": "forge=6.6.2.534"
+    },
+    {
+      "packId": 54,
+      "name": "FTB Pax Challenge Pack 2013",
+      "versions": 1,
+      "pickedVersion": 195,
+      "pickedType": "release",
+      "pickedLoader": "forge=6.6.2.534"
+    },
+    {
+      "packId": 52,
+      "name": "FTB University 1.12",
+      "versions": 5,
+      "pickedVersion": 216,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2847"
+    },
+    {
+      "packId": 47,
+      "name": "FTB Unstable 1.16",
+      "versions": 4,
+      "pickedVersion": 155,
+      "pickedType": "release",
+      "pickedLoader": "forge=34.1.25"
+    },
+    {
+      "packId": 37,
+      "name": "FTB Builders Paradise",
+      "versions": 3,
+      "pickedVersion": 2056,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2855"
+    },
+    {
+      "packId": 36,
+      "name": "FTB Ultimate Reloaded",
+      "versions": 3,
+      "pickedVersion": 2052,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2855"
+    },
+    {
+      "packId": 35,
+      "name": "FTB Revelation",
+      "versions": 6,
+      "pickedVersion": 2129,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2858"
+    },
+    {
+      "packId": 34,
+      "name": "FTB Continuum",
+      "versions": 3,
+      "pickedVersion": 149,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2796"
+    },
+    {
+      "packId": 33,
+      "name": "FTB Sky Adventures",
+      "versions": 3,
+      "pickedVersion": 148,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2796"
+    },
+    {
+      "packId": 32,
+      "name": "FTB Pyramid Reborn 3.0",
+      "versions": 6,
+      "pickedVersion": 150,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2768"
+    },
+    {
+      "packId": 31,
+      "name": "FTB Presents Direwolf20 1.12",
+      "versions": 5,
+      "pickedVersion": 2051,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2855"
+    },
+    {
+      "packId": 30,
+      "name": "FTB Unstable 1.12",
+      "versions": 1,
+      "pickedVersion": 31,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.22.1.2478"
+    },
+    {
+      "packId": 29,
+      "name": "FTB Horizons III",
+      "versions": 3,
+      "pickedVersion": 2058,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2855"
+    },
+    {
+      "packId": 28,
+      "name": "FTB Beyond",
+      "versions": 1,
+      "pickedVersion": 115,
+      "pickedType": "release",
+      "pickedLoader": "forge=12.18.3.2422"
+    },
+    {
+      "packId": 27,
+      "name": "FTB Egg Hunt",
+      "versions": 1,
+      "pickedVersion": 28,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.4.2705"
+    },
+    {
+      "packId": 26,
+      "name": "FTB SkyFactory Challenges",
+      "versions": 2,
+      "pickedVersion": 118,
+      "pickedType": "release",
+      "pickedLoader": "forge=12.18.3.2254"
+    },
+    {
+      "packId": 25,
+      "name": "FTB Presents Skyfactory 3",
+      "versions": 6,
+      "pickedVersion": 123,
+      "pickedType": "release",
+      "pickedLoader": "forge=12.18.3.2511"
+    },
+    {
+      "packId": 24,
+      "name": "FTB Presents Direwolf20 1.10",
+      "versions": 2,
+      "pickedVersion": 25,
+      "pickedType": "release",
+      "pickedLoader": "forge=12.18.3.2316"
+    },
+    {
+      "packId": 23,
+      "name": "FTB Infinity Evolved 1.7",
+      "versions": 1,
+      "pickedVersion": 99,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1614"
+    },
+    {
+      "packId": 22,
+      "name": "FTB Presents Crackpack",
+      "versions": 1,
+      "pickedVersion": 100,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1614"
+    },
+    {
+      "packId": 21,
+      "name": "FTB Inventions",
+      "versions": 1,
+      "pickedVersion": 114,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1614"
+    },
+    {
+      "packId": 20,
+      "name": "FTB Infinity Evolved Skyblock",
+      "versions": 1,
+      "pickedVersion": 102,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1614"
+    },
+    {
+      "packId": 19,
+      "name": "FTB Presents Skyfactory 2.5",
+      "versions": 2,
+      "pickedVersion": 97,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1614"
+    },
+    {
+      "packId": 18,
+      "name": "FTB Vanilla+",
+      "versions": 2,
+      "pickedVersion": 12169,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1448"
+    },
+    {
+      "packId": 17,
+      "name": "FTB Horizons: Daybreaker",
+      "versions": 1,
+      "pickedVersion": 109,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1448"
+    },
+    {
+      "packId": 16,
+      "name": "FTB Departed",
+      "versions": 1,
+      "pickedVersion": 105,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1448"
+    },
+    {
+      "packId": 15,
+      "name": "FTB Presents Cloud 9",
+      "versions": 1,
+      "pickedVersion": 108,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1448"
+    },
+    {
+      "packId": 14,
+      "name": "FTB Presents Direwolf20",
+      "versions": 1,
+      "pickedVersion": 104,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1558"
+    },
+    {
+      "packId": 13,
+      "name": "FTB Trident",
+      "versions": 1,
+      "pickedVersion": 107,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1448"
+    },
+    {
+      "packId": 12,
+      "name": "FTB Resurrection",
+      "versions": 1,
+      "pickedVersion": 119,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.2.1291"
+    },
+    {
+      "packId": 11,
+      "name": "FTB Lite 3",
+      "versions": 2,
+      "pickedVersion": 12170,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1448"
+    },
+    {
+      "packId": 10,
+      "name": "Pax Prime 2015 Map",
+      "versions": 1,
+      "pickedVersion": 110,
+      "pickedType": "release",
+      "pickedLoader": "forge=10.13.4.1448"
+    },
+    {
+      "packId": 9,
+      "name": "FTB Presents HermitPack",
+      "versions": 1,
+      "pickedVersion": 9,
+      "pickedType": "release",
+      "pickedLoader": "forge=12.18.3.2254"
+    },
+    {
+      "packId": 8,
+      "name": "FTB Sky Odyssey",
+      "versions": 7,
+      "pickedVersion": 2301,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2857"
+    },
+    {
+      "packId": 7,
+      "name": "FTB Unstable 1.14",
+      "versions": 1,
+      "pickedVersion": 7,
+      "pickedType": "release",
+      "pickedLoader": "forge=28.1.61"
+    },
+    {
+      "packId": 6,
+      "name": "FTB Omnia",
+      "versions": 10,
+      "pickedVersion": 91,
+      "pickedType": "release",
+      "pickedLoader": "forge=31.2.33"
+    },
+    {
+      "packId": 5,
+      "name": "FTB Interactions",
+      "versions": 8,
+      "pickedVersion": 2130,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2847"
+    },
+    {
+      "packId": 4,
+      "name": "FTB Presents Stoneblock 2",
+      "versions": 5,
+      "pickedVersion": 12182,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2860"
+    },
+    {
+      "packId": 1,
+      "name": "FTB Academy 1.12",
+      "versions": 4,
+      "pickedVersion": 158,
+      "pickedType": "release",
+      "pickedLoader": "forge=14.23.5.2847"
+    }
+  ],
+  "summary": {
+    "versionOrderingAlwaysAscending": true,
+    "idAlwaysTracksUpdated": false,
+    "packsWhoseNewestReleaseLacksLoader": 2,
+    "packsWithNoLoaderAnywhere": 2,
+    "pathConventionSplit": {
+      "fullPath": 0,
+      "parentDirPlusName": 157125
+    }
+  },
+  "verdict": "COMPLETE",
+  "finishedAt": "2026-10-29T12:09:11.291Z",
+  "durationSeconds": 246.6
+}

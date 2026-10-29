@@ -1,6 +1,6 @@
 {
   "harness": "verify-ftb-install.mjs",
-  "startedAt": "2026-10-29T11:33:36.673Z",
+  "startedAt": "2026-10-29T12:28:19.608Z",
   "packId": 6,
   "versionId": null,
   "javaPath": "C:\\Program Files\\Java\\jre1.8.0_503\\bin\\java.exe",
@@ -37,7 +37,7 @@
   },
   "install": {
     "status": "complete",
-    "serverId": "a03efd70-b38a-408d-a182-d90b506b9860",
+    "serverId": "f2617c3b-d357-4c0d-a4eb-6db8f55cc5ff",
     "loader": {
       "kind": "forge",
       "minecraftVersion": "1.15.2",
@@ -81,6 +81,6 @@
   "published": null,
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T11:36:44.042Z",
-  "durationSeconds": 187.4
+  "finishedAt": "2026-10-29T12:32:04.302Z",
+  "durationSeconds": 224.7
 }

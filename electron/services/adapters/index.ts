@@ -1,8 +1,8 @@
-// Adapter layer entry point: the registered adapters + helpers the pipeline uses.
+﻿// Adapter layer entry point: the registered adapters + helpers the pipeline uses.
 //
 // Phase P1 registers the FTB adapter first (the format this app could not open at all and the one that
 // needs no API key). Subsequent phases add the remaining formats from
-// docs/research/2026-10-29-universal-modpack-install.md §2 without touching the pipeline.
+// docs/research/2026-10-29-universal-modpack-install.md Â§2 without touching the pipeline.
 import { fetchTrusted } from '../installer/core';
 import type { AdapterIo } from './types';
 import { AdapterRegistry } from './registry';
@@ -36,4 +36,5 @@ export function createAdapterIo(log: (message: string) => void): AdapterIo {
 export { AdapterRegistry, buildArchiveIndex } from './registry';
 export { validateRecipe } from './registry';
 export * from './types';
-export { ftbAdapter, FTB_ALLOWED_HOSTS, buildFtbRecipe, ftbFileSide, parseFtbModLoader, pickFtbVersion, ftbJavaMajor, isFtbPrerelease, inferFtbLoaderFromFiles, resolveFtbDestPath } from './ftb';
+export { ftbAdapter, FTB_ALLOWED_HOSTS, buildFtbRecipe, ftbFileSide, parseFtbModLoader, pickFtbVersion, ftbJavaMajor, isFtbPrerelease, inferFtbLoaderFromFiles, resolveFtbDestPath, coerceJavaMajor, isMinecraftVersionString, APP_JAVA_MAJORS } from './ftb';
+

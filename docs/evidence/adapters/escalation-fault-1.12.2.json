@@ -1,0 +1,86 @@
+{
+  "harness": "verify-escalation-fault.mjs",
+  "startedAt": "2026-10-29T11:59:04.768Z",
+  "mc": "1.12.2",
+  "javaExe": "C:\\Program Files\\Java\\jre1.8.0_503\\bin\\java.exe",
+  "purpose": "fault-injection: prove the escalation wiring (classify -> reinstall -> re-resolve launch -> retry)",
+  "notProvenHere": "that a REAL pack needs escalation; no surveyed FTB pack does after the version fix",
+  "plan": {
+    "candidates": [
+      "14.23.5.2859",
+      "14.23.5.2864"
+    ],
+    "source": "provider-recommended",
+    "declared": false,
+    "maxEscalations": 1
+  },
+  "injectedFault": "deleted libraries/ (loader library tree) — an authentic loader-level failure",
+  "attempt0": {
+    "build": "14.23.5.2859",
+    "launchArgs": [
+      "-jar",
+      "forge-1.12.2-14.23.5.2859.jar",
+      "nogui"
+    ],
+    "bootOk": false,
+    "reason": "process exited (code 1) before Done(",
+    "classification": {
+      "kind": "loader",
+      "rule": "loader.libraries-missing"
+    },
+    "tailSample": [
+      "We appear to be missing one or more essential library files.",
+      "You will need to add them to your server before FML and Forge will run successfully.java.lang.ClassNotFoundException: net.minecraft.launchwrapper.Launch",
+      "\tat java.net.URLClassLoader.findClass(Unknown Source)",
+      "\tat java.lang.ClassLoader.loadClass(Unknown Source)",
+      "\tat sun.misc.Launcher$AppClassLoader.loadClass(Unknown Source)",
+      "\tat java.lang.ClassLoader.loadClass(Unknown Source)",
+      "\tat java.lang.Class.forName0(Native Method)",
+      "\tat java.lang.Class.forName(Unknown Source)",
+      "\tat net.minecraftforge.fml.relauncher.ServerLaunchWrapper.run(ServerLaunchWrapper.java:52)",
+      "\tat net.minecraftforge.fml.relauncher.ServerLaunchWrapper.main(ServerLaunchWrapper.java:34)"
+    ]
+  },
+  "escalation": {
+    "from": "14.23.5.2859",
+    "to": "14.23.5.2864",
+    "rule": "loader.libraries-missing"
+  },
+  "attempt1": {
+    "build": "14.23.5.2864",
+    "bootOk": true,
+    "reason": "[18:59:25] [Server thread/INFO] [minecraft/DedicatedServer]: Done (4.664s)! For help, type \"help\" or \"?\"",
+    "tailSample": [
+      "[18:59:25] [Server thread/INFO] [minecraft/DedicatedServer]: Done (4.664s)! For help, type \"help\" or \"?\"",
+      "[18:59:25] [Server thread/INFO] [FML]: Unloading dimension -1",
+      "[18:59:25] [Server thread/INFO] [FML]: Unloading dimension 1",
+      "[18:59:25] [Server thread/INFO] [minecraft/DedicatedServer]: Stopping the server",
+      "[18:59:25] [Server thread/INFO] [minecraft/MinecraftServer]: Stopping server",
+      "[18:59:25] [Server thread/INFO] [minecraft/MinecraftServer]: Saving players",
+      "[18:59:25] [Server thread/INFO] [minecraft/MinecraftServer]: Saving worlds",
+      "[18:59:25] [Server thread/INFO] [minecraft/MinecraftServer]: Saving chunks for level 'world'/overworld",
+      "[18:59:28] [Server thread/INFO] [FML]: Unloading dimension 0",
+      "[18:59:28] [Server Shutdown Thread/INFO] [minecraft/MinecraftServer]: Stopping server",
+      "[18:59:28] [Server Shutdown Thread/INFO] [minecraft/MinecraftServer]: Saving players",
+      "[18:59:28] [Server Shutdown Thread/INFO] [minecraft/MinecraftServer]: Saving worlds"
+    ]
+  },
+  "launchReresolveProof": {
+    "before": [
+      "-jar",
+      "forge-1.12.2-14.23.5.2859.jar",
+      "nogui"
+    ],
+    "after": [
+      "-jar",
+      "forge-1.12.2-14.23.5.2859.jar",
+      "nogui"
+    ],
+    "changed": false,
+    "why": "the loader artifact name contains its build, so the pre-escalation launch shape pointed at a deleted file"
+  },
+  "verdict": "PASS",
+  "error": null,
+  "finishedAt": "2026-10-29T11:59:29.281Z",
+  "durationSeconds": 24.5
+}

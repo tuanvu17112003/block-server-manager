@@ -6,6 +6,7 @@ import { listZip, readZipEntry } from '../installer/core';
 import { appError } from '../store';
 import type { ArchiveEntry, ArchiveIndex, DetectContext, PackAdapter, PackFormatId, PackRecipe, AdapterIo } from './types';
 import { isSafeRelativePath, normalizePath } from './types';
+import { isMinecraftVersionString } from './ftb';
 
 /** Build an `ArchiveIndex` from a zip on disk (one listing, memoized reads). */
 export async function buildArchiveIndex(zipPath: string): Promise<ArchiveIndex> {
@@ -123,11 +124,14 @@ function rootEvidence(archive: ArchiveIndex): string {
  */
 export function validateRecipe(recipe: PackRecipe): void {
   if (recipe.name.trim() === '') throw appError('validation', `Adapter ${recipe.formatId} produced an empty pack name.`);
-  if (recipe.mc.trim() === '') {
+  if (!recipe.mc.trim()) {
     throw appError('validation',
       `Adapter ${recipe.formatId} could not determine the Minecraft version. Refusing to guess a runtime.`);
   }
-  if (!/^\d+\.\d+(?:\.\d+)?$/.test(recipe.mc)) {
+  // Snapshot / pre-release / alpha names are legitimate Minecraft versions (the FTB corpus contains
+  // `18w43b`, `26.3-pre-1`, `26.4-snapshot-6`, `rd-132211`), so the check accepts them rather than requiring
+  // a bare `x.y[.z]` and refusing real packs.
+  if (!isMinecraftVersionString(recipe.mc)) {
     throw appError('validation', `Adapter ${recipe.formatId} produced an invalid Minecraft version "${recipe.mc}".`);
   }
   if (recipe.loader === 'hybrid') {

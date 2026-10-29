@@ -1,0 +1,1656 @@
+{
+  "harness": "conformance-ftb-corpus.mjs",
+  "startedAt": "2026-10-29T12:26:04.913Z",
+  "packs": [
+    {
+      "packId": 126,
+      "name": "FTB Presents Direwolf20 1.21",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.21.1",
+      "loader": "neoforge",
+      "loaderVersion": "21.1.74",
+      "javaMajor": 21,
+      "files": 1235,
+      "sideCounts": {
+        "required": 1221,
+        "unsupported": 14
+      },
+      "warnings": []
+    },
+    {
+      "packId": 125,
+      "name": "FTB Evolution",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.21.1",
+      "loader": "neoforge",
+      "loaderVersion": "21.1.74",
+      "javaMajor": 21,
+      "files": 4922,
+      "sideCounts": {
+        "required": 4901,
+        "unsupported": 21
+      },
+      "warnings": []
+    },
+    {
+      "packId": 124,
+      "name": "FTB Unstable 1.21",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.21",
+      "loader": "neoforge",
+      "loaderVersion": "21.0.167",
+      "javaMajor": 21,
+      "files": 943,
+      "sideCounts": {
+        "required": 927,
+        "unsupported": 16
+      },
+      "warnings": []
+    },
+    {
+      "packId": 123,
+      "name": "FTB NeoTech",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.20.4",
+      "loader": "neoforge",
+      "loaderVersion": "20.4.237",
+      "javaMajor": 17,
+      "files": 1283,
+      "sideCounts": {
+        "required": 1265,
+        "unsupported": 18
+      },
+      "warnings": []
+    },
+    {
+      "packId": 122,
+      "name": "FTB Builders Paradise 2",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.20.1",
+      "loader": "forge",
+      "loaderVersion": "47.2.23",
+      "javaMajor": 17,
+      "files": 3602,
+      "sideCounts": {
+        "required": 3587,
+        "unsupported": 15
+      },
+      "warnings": [
+        "ftb.duplicate-destination"
+      ]
+    },
+    {
+      "packId": 121,
+      "name": "FTB Presents F.A.M",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.19.2",
+      "loader": "forge",
+      "loaderVersion": "43.3.8",
+      "javaMajor": 17,
+      "files": 1120,
+      "sideCounts": {
+        "required": 1109,
+        "unsupported": 11
+      },
+      "warnings": []
+    },
+    {
+      "packId": 120,
+      "name": "FTB Genesis",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.19.2",
+      "loader": "forge",
+      "loaderVersion": "43.3.13",
+      "javaMajor": 17,
+      "files": 2689,
+      "sideCounts": {
+        "required": 2674,
+        "unsupported": 15
+      },
+      "warnings": []
+    },
+    {
+      "packId": 119,
+      "name": "FTB Presents Direwolf20 1.20",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.20.1",
+      "loader": "neoforge",
+      "loaderVersion": "47.1.84",
+      "javaMajor": 17,
+      "files": 423,
+      "sideCounts": {
+        "required": 413,
+        "unsupported": 10
+      },
+      "warnings": [
+        "ftb.duplicate-destination"
+      ]
+    },
+    {
+      "packId": 117,
+      "name": "FTB Skies Expert",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.19.2",
+      "loader": "forge",
+      "loaderVersion": "43.4.2",
+      "javaMajor": 17,
+      "files": 3065,
+      "sideCounts": {
+        "required": 3044,
+        "unsupported": 21
+      },
+      "warnings": []
+    },
+    {
+      "packId": 116,
+      "name": null,
+      "ok": false,
+      "error": "FTB pack \"NeoForge\" version has no downloadable files.",
+      "formatId": null,
+      "mc": null,
+      "loader": null,
+      "loaderVersion": null,
+      "javaMajor": null,
+      "files": 0,
+      "sideCounts": {},
+      "warnings": [],
+      "skipped": true
+    },
+    {
+      "packId": 115,
+      "name": "FTB Arcanum Institute",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.18.2",
+      "loader": "forge",
+      "loaderVersion": "40.2.10",
+      "javaMajor": 17,
+      "files": 3501,
+      "sideCounts": {
+        "required": 3487,
+        "unsupported": 14
+      },
+      "warnings": []
+    },
+    {
+      "packId": 114,
+      "name": "FTB Presents AbePack",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.19.2",
+      "loader": "forge",
+      "loaderVersion": "43.3.8",
+      "javaMajor": 17,
+      "files": 720,
+      "sideCounts": {
+        "required": 708,
+        "unsupported": 12
+      },
+      "warnings": []
+    },
+    {
+      "packId": 111,
+      "name": "FTB Interactions Remastered",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2860",
+      "javaMajor": 8,
+      "files": 2991,
+      "sideCounts": {
+        "required": 2979,
+        "unsupported": 12
+      },
+      "warnings": []
+    },
+    {
+      "packId": 110,
+      "name": "FTB Unstable 1.20: Forge",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.20.1",
+      "loader": "forge",
+      "loaderVersion": "47.1.3",
+      "javaMajor": 17,
+      "files": 209,
+      "sideCounts": {
+        "required": 202,
+        "unsupported": 7
+      },
+      "warnings": []
+    },
+    {
+      "packId": 109,
+      "name": "FTB Unstable 1.20: Fabric",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.20.1",
+      "loader": "fabric",
+      "loaderVersion": "0.14.21",
+      "javaMajor": 17,
+      "files": 157,
+      "sideCounts": {
+        "required": 150,
+        "unsupported": 7
+      },
+      "warnings": []
+    },
+    {
+      "packId": 108,
+      "name": "FTB University 1.19",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.19.2",
+      "loader": "forge",
+      "loaderVersion": "43.3.5",
+      "javaMajor": 17,
+      "files": 1139,
+      "sideCounts": {
+        "required": 1121,
+        "unsupported": 18
+      },
+      "warnings": []
+    },
+    {
+      "packId": 107,
+      "name": "FTB Presents Integration by Parts DX",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.16.5",
+      "loader": "forge",
+      "loaderVersion": "36.2.39",
+      "javaMajor": 17,
+      "files": 2273,
+      "sideCounts": {
+        "required": 2260,
+        "unsupported": 13
+      },
+      "warnings": [
+        "ftb.java-major-unsupported"
+      ]
+    },
+    {
+      "packId": 105,
+      "name": null,
+      "ok": false,
+      "error": "FTB pack \"Fabric\" version has no downloadable files.",
+      "formatId": null,
+      "mc": null,
+      "loader": null,
+      "loaderVersion": null,
+      "javaMajor": null,
+      "files": 0,
+      "sideCounts": {},
+      "warnings": [],
+      "skipped": true
+    },
+    {
+      "packId": 104,
+      "name": null,
+      "ok": false,
+      "error": "FTB pack \"MinecraftForge\" version has no downloadable files.",
+      "formatId": null,
+      "mc": null,
+      "loader": null,
+      "loaderVersion": null,
+      "javaMajor": null,
+      "files": 0,
+      "sideCounts": {},
+      "warnings": [],
+      "skipped": true
+    },
+    {
+      "packId": 103,
+      "name": "FTB Skies",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.19.2",
+      "loader": "forge",
+      "loaderVersion": "43.4.2",
+      "javaMajor": 17,
+      "files": 1857,
+      "sideCounts": {
+        "required": 1840,
+        "unsupported": 17
+      },
+      "warnings": []
+    },
+    {
+      "packId": 102,
+      "name": "FTB Legend of the Eyes",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.19.2",
+      "loader": "fabric",
+      "loaderVersion": "0.14.19",
+      "javaMajor": 17,
+      "files": 935,
+      "sideCounts": {
+        "required": 930,
+        "unsupported": 5
+      },
+      "warnings": []
+    },
+    {
+      "packId": 101,
+      "name": "FTB Presents Direwolf20 1.19",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.19.2",
+      "loader": "forge",
+      "loaderVersion": "43.3.7",
+      "javaMajor": 17,
+      "files": 1023,
+      "sideCounts": {
+        "required": 1017,
+        "unsupported": 6
+      },
+      "warnings": []
+    },
+    {
+      "packId": 100,
+      "name": "FTB StoneBlock 3",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.18.2",
+      "loader": "forge",
+      "loaderVersion": "40.2.14",
+      "javaMajor": 17,
+      "files": 1238,
+      "sideCounts": {
+        "required": 1237,
+        "unsupported": 1
+      },
+      "warnings": []
+    },
+    {
+      "packId": 99,
+      "name": "FTB Inferno",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.18.2",
+      "loader": "forge",
+      "loaderVersion": "40.2.7",
+      "javaMajor": 17,
+      "files": 4064,
+      "sideCounts": {
+        "required": 4052,
+        "unsupported": 12
+      },
+      "warnings": [
+        "ftb.duplicate-destination"
+      ]
+    },
+    {
+      "packId": 97,
+      "name": "FTB One",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.19.2",
+      "loader": "forge",
+      "loaderVersion": "43.3.5",
+      "javaMajor": 17,
+      "files": 1627,
+      "sideCounts": {
+        "required": 1617,
+        "unsupported": 10
+      },
+      "warnings": []
+    },
+    {
+      "packId": 96,
+      "name": "FTB Plexiglass Mountain",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.18.2",
+      "loader": "forge",
+      "loaderVersion": "40.1.84",
+      "javaMajor": 17,
+      "files": 1414,
+      "sideCounts": {
+        "required": 1414
+      },
+      "warnings": [
+        "ftb.duplicate-destination"
+      ]
+    },
+    {
+      "packId": 95,
+      "name": "FTB Presents Direwolf20 1.18",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.18.2",
+      "loader": "forge",
+      "loaderVersion": "40.1.84",
+      "javaMajor": 17,
+      "files": 689,
+      "sideCounts": {
+        "required": 687,
+        "unsupported": 2
+      },
+      "warnings": []
+    },
+    {
+      "packId": 94,
+      "name": "FTB Chocolate",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.18.2",
+      "loader": "forge",
+      "loaderVersion": "40.0.52",
+      "javaMajor": 17,
+      "files": 274,
+      "sideCounts": {
+        "required": 272,
+        "unsupported": 2
+      },
+      "warnings": []
+    },
+    {
+      "packId": 93,
+      "name": "FTB Ultimate: Anniversary Edition",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.16.5",
+      "loader": "forge",
+      "loaderVersion": "36.2.26",
+      "javaMajor": 8,
+      "files": 523,
+      "sideCounts": {
+        "required": 518,
+        "unsupported": 5
+      },
+      "warnings": []
+    },
+    {
+      "packId": 91,
+      "name": "FTB OceanBlock",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.16.5",
+      "loader": "forge",
+      "loaderVersion": "36.2.39",
+      "javaMajor": 8,
+      "files": 1573,
+      "sideCounts": {
+        "required": 1566,
+        "unsupported": 7
+      },
+      "warnings": []
+    },
+    {
+      "packId": 90,
+      "name": "FTB University 1.16",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.16.5",
+      "loader": "forge",
+      "loaderVersion": "36.2.39",
+      "javaMajor": 8,
+      "files": 1146,
+      "sideCounts": {
+        "required": 1141,
+        "unsupported": 5
+      },
+      "warnings": []
+    },
+    {
+      "packId": 89,
+      "name": "FTB Competition Pack",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.16.5",
+      "loader": "forge",
+      "loaderVersion": "36.2.2",
+      "javaMajor": 8,
+      "files": 594,
+      "sideCounts": {
+        "required": 593,
+        "unsupported": 1
+      },
+      "warnings": []
+    },
+    {
+      "packId": 88,
+      "name": "FTB Academy 1.16",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.16.5",
+      "loader": "forge",
+      "loaderVersion": "36.2.34",
+      "javaMajor": 8,
+      "files": 795,
+      "sideCounts": {
+        "required": 791,
+        "unsupported": 4
+      },
+      "warnings": []
+    },
+    {
+      "packId": 86,
+      "name": "FTB Cotton",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.16.5",
+      "loader": "fabric",
+      "loaderVersion": "0.11.3",
+      "javaMajor": 8,
+      "files": 241,
+      "sideCounts": {
+        "required": 241
+      },
+      "warnings": []
+    },
+    {
+      "packId": 81,
+      "name": null,
+      "ok": false,
+      "error": "FTB pack \"Vanilla\" version has no downloadable files.",
+      "formatId": null,
+      "mc": null,
+      "loader": null,
+      "loaderVersion": null,
+      "javaMajor": null,
+      "files": 0,
+      "sideCounts": {},
+      "warnings": [],
+      "skipped": true
+    },
+    {
+      "packId": 80,
+      "name": "FTB Endeavour",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.16.5",
+      "loader": "forge",
+      "loaderVersion": "36.2.23",
+      "javaMajor": 8,
+      "files": 1126,
+      "sideCounts": {
+        "required": 1121,
+        "unsupported": 5
+      },
+      "warnings": []
+    },
+    {
+      "packId": 79,
+      "name": "FTB Presents Direwolf20 1.16",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.16.5",
+      "loader": "forge",
+      "loaderVersion": "36.2.22",
+      "javaMajor": 8,
+      "files": 628,
+      "sideCounts": {
+        "required": 625,
+        "unsupported": 3
+      },
+      "warnings": []
+    },
+    {
+      "packId": 78,
+      "name": "FTB Mage Quest",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1614",
+      "javaMajor": 8,
+      "files": 389,
+      "sideCounts": {
+        "optional": 51,
+        "unsupported": 1,
+        "required": 337
+      },
+      "warnings": []
+    },
+    {
+      "packId": 77,
+      "name": "YogCraft Modpack",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.4.7",
+      "loader": "forge",
+      "loaderVersion": "6.6.2.534",
+      "javaMajor": 8,
+      "files": 134,
+      "sideCounts": {
+        "optional": 2,
+        "required": 131,
+        "unsupported": 1
+      },
+      "warnings": []
+    },
+    {
+      "packId": 76,
+      "name": "FTB Ultimate",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.4.7",
+      "loader": "forge",
+      "loaderVersion": "6.6.2.534",
+      "javaMajor": 8,
+      "files": 402,
+      "sideCounts": {
+        "optional": 7,
+        "required": 394,
+        "unsupported": 1
+      },
+      "warnings": []
+    },
+    {
+      "packId": 75,
+      "name": "FTB Tech World",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.4.7",
+      "loader": "forge",
+      "loaderVersion": "6.6.2.534",
+      "javaMajor": 8,
+      "files": 127,
+      "sideCounts": {
+        "optional": 3,
+        "required": 124
+      },
+      "warnings": []
+    },
+    {
+      "packId": 74,
+      "name": "MindCrack Pack",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.4.7",
+      "loader": "forge",
+      "loaderVersion": "6.6.2.534",
+      "javaMajor": 8,
+      "files": 378,
+      "sideCounts": {
+        "optional": 3,
+        "required": 375
+      },
+      "warnings": []
+    },
+    {
+      "packId": 73,
+      "name": "Magic World",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.4.7",
+      "loader": "forge",
+      "loaderVersion": "6.6.2.534",
+      "javaMajor": 8,
+      "files": 114,
+      "sideCounts": {
+        "optional": 1,
+        "required": 113
+      },
+      "warnings": []
+    },
+    {
+      "packId": 72,
+      "name": "FTB Lite 2",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.6.4",
+      "loader": "forge",
+      "loaderVersion": "9.11.1.965",
+      "javaMajor": 8,
+      "files": 437,
+      "sideCounts": {
+        "required": 437
+      },
+      "warnings": []
+    },
+    {
+      "packId": 70,
+      "name": "Direwolf20 1.4.7",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.4.7",
+      "loader": "forge",
+      "loaderVersion": "6.6.2.534",
+      "javaMajor": 8,
+      "files": 139,
+      "sideCounts": {
+        "optional": 5,
+        "required": 132,
+        "unsupported": 2
+      },
+      "warnings": []
+    },
+    {
+      "packId": 68,
+      "name": null,
+      "ok": false,
+      "error": "FTB pack 68 has no versions.",
+      "formatId": null,
+      "mc": null,
+      "loader": null,
+      "loaderVersion": null,
+      "javaMajor": null,
+      "files": 0,
+      "sideCounts": {},
+      "warnings": [],
+      "skipped": true
+    },
+    {
+      "packId": 66,
+      "name": "FTB Monster",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.6.4",
+      "loader": "forge",
+      "loaderVersion": "9.11.1.965",
+      "javaMajor": 8,
+      "files": 575,
+      "sideCounts": {
+        "optional": 35,
+        "unsupported": 4,
+        "required": 536
+      },
+      "warnings": []
+    },
+    {
+      "packId": 65,
+      "name": "FTB Horizons",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.6.4",
+      "loader": "forge",
+      "loaderVersion": "9.11.1.965",
+      "javaMajor": 8,
+      "files": 526,
+      "sideCounts": {
+        "unsupported": 4,
+        "optional": 20,
+        "required": 502
+      },
+      "warnings": []
+    },
+    {
+      "packId": 62,
+      "name": "FTB Presents Direwolf20 - 1.6.4",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.6.4",
+      "loader": "forge",
+      "loaderVersion": "9.11.1.965",
+      "javaMajor": 8,
+      "files": 521,
+      "sideCounts": {
+        "optional": 37,
+        "required": 484
+      },
+      "warnings": []
+    },
+    {
+      "packId": 61,
+      "name": "FTB Magic World 2",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.6.4",
+      "loader": "forge",
+      "loaderVersion": "9.11.1.965",
+      "javaMajor": 8,
+      "files": 911,
+      "sideCounts": {
+        "optional": 18,
+        "unsupported": 4,
+        "required": 889
+      },
+      "warnings": []
+    },
+    {
+      "packId": 60,
+      "name": "FTB Tech World 2",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.6.4",
+      "loader": "forge",
+      "loaderVersion": "9.11.1.965",
+      "javaMajor": 8,
+      "files": 487,
+      "sideCounts": {
+        "optional": 25,
+        "unsupported": 2,
+        "required": 460
+      },
+      "warnings": []
+    },
+    {
+      "packId": 59,
+      "name": "Slow's Stream Pack",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.4.7",
+      "loader": "forge",
+      "loaderVersion": "6.6.2.534",
+      "javaMajor": 8,
+      "files": 353,
+      "sideCounts": {
+        "optional": 1,
+        "required": 352
+      },
+      "warnings": []
+    },
+    {
+      "packId": 58,
+      "name": "Pax East 2014 Map",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.6.4",
+      "loader": "forge",
+      "loaderVersion": "9.11.1.965",
+      "javaMajor": 8,
+      "files": 188,
+      "sideCounts": {
+        "optional": 7,
+        "required": 181
+      },
+      "warnings": []
+    },
+    {
+      "packId": 56,
+      "name": "FTB Lite",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.4.7",
+      "loader": "forge",
+      "loaderVersion": "6.6.2.534",
+      "javaMajor": 8,
+      "files": 124,
+      "sideCounts": {
+        "optional": 2,
+        "required": 122
+      },
+      "warnings": []
+    },
+    {
+      "packId": 54,
+      "name": "FTB Pax Challenge Pack 2013",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.4.7",
+      "loader": "forge",
+      "loaderVersion": "6.6.2.534",
+      "javaMajor": 8,
+      "files": 234,
+      "sideCounts": {
+        "optional": 2,
+        "required": 232
+      },
+      "warnings": []
+    },
+    {
+      "packId": 52,
+      "name": "FTB University 1.12",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2847",
+      "javaMajor": 8,
+      "files": 2231,
+      "sideCounts": {
+        "required": 2231
+      },
+      "warnings": []
+    },
+    {
+      "packId": 47,
+      "name": "FTB Unstable 1.16",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.16.3",
+      "loader": "forge",
+      "loaderVersion": "34.1.25",
+      "javaMajor": 8,
+      "files": 382,
+      "sideCounts": {
+        "required": 375,
+        "unsupported": 7
+      },
+      "warnings": []
+    },
+    {
+      "packId": 37,
+      "name": "FTB Builders Paradise",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2855",
+      "javaMajor": 8,
+      "files": 638,
+      "sideCounts": {
+        "required": 637,
+        "unsupported": 1
+      },
+      "warnings": []
+    },
+    {
+      "packId": 36,
+      "name": "FTB Ultimate Reloaded",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2855",
+      "javaMajor": 8,
+      "files": 499,
+      "sideCounts": {
+        "required": 499
+      },
+      "warnings": []
+    },
+    {
+      "packId": 35,
+      "name": "FTB Revelation",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2858",
+      "javaMajor": 8,
+      "files": 992,
+      "sideCounts": {
+        "required": 990,
+        "unsupported": 2
+      },
+      "warnings": []
+    },
+    {
+      "packId": 34,
+      "name": "FTB Continuum",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2796",
+      "javaMajor": 8,
+      "files": 675,
+      "sideCounts": {
+        "required": 675
+      },
+      "warnings": []
+    },
+    {
+      "packId": 33,
+      "name": "FTB Sky Adventures",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2796",
+      "javaMajor": 8,
+      "files": 730,
+      "sideCounts": {
+        "required": 730
+      },
+      "warnings": []
+    },
+    {
+      "packId": 32,
+      "name": "FTB Pyramid Reborn 3.0",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2768",
+      "javaMajor": 8,
+      "files": 607,
+      "sideCounts": {
+        "required": 607
+      },
+      "warnings": []
+    },
+    {
+      "packId": 31,
+      "name": "FTB Presents Direwolf20 1.12",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2855",
+      "javaMajor": 8,
+      "files": 832,
+      "sideCounts": {
+        "required": 831,
+        "unsupported": 1
+      },
+      "warnings": []
+    },
+    {
+      "packId": 30,
+      "name": "FTB Unstable 1.12",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.1",
+      "loader": "forge",
+      "loaderVersion": "14.22.1.2478",
+      "javaMajor": 8,
+      "files": 495,
+      "sideCounts": {
+        "unsupported": 495
+      },
+      "warnings": []
+    },
+    {
+      "packId": 29,
+      "name": "FTB Horizons III",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2855",
+      "javaMajor": 8,
+      "files": 503,
+      "sideCounts": {
+        "required": 503
+      },
+      "warnings": []
+    },
+    {
+      "packId": 28,
+      "name": "FTB Beyond",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.10.2",
+      "loader": "forge",
+      "loaderVersion": "12.18.3.2422",
+      "javaMajor": 8,
+      "files": 873,
+      "sideCounts": {
+        "required": 873
+      },
+      "warnings": []
+    },
+    {
+      "packId": 27,
+      "name": "FTB Egg Hunt",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.4.2705",
+      "javaMajor": 8,
+      "files": 105,
+      "sideCounts": {
+        "unsupported": 105
+      },
+      "warnings": []
+    },
+    {
+      "packId": 26,
+      "name": "FTB SkyFactory Challenges",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.10.2",
+      "loader": "forge",
+      "loaderVersion": "12.18.3.2254",
+      "javaMajor": 8,
+      "files": 433,
+      "sideCounts": {
+        "required": 433
+      },
+      "warnings": []
+    },
+    {
+      "packId": 25,
+      "name": "FTB Presents Skyfactory 3",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.10.2",
+      "loader": "forge",
+      "loaderVersion": "12.18.3.2511",
+      "javaMajor": 8,
+      "files": 520,
+      "sideCounts": {
+        "required": 520
+      },
+      "warnings": []
+    },
+    {
+      "packId": 24,
+      "name": "FTB Presents Direwolf20 1.10",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.10.2",
+      "loader": "forge",
+      "loaderVersion": "12.18.3.2316",
+      "javaMajor": 8,
+      "files": 336,
+      "sideCounts": {
+        "required": 336
+      },
+      "warnings": []
+    },
+    {
+      "packId": 23,
+      "name": "FTB Infinity Evolved 1.7",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1614",
+      "javaMajor": 8,
+      "files": 719,
+      "sideCounts": {
+        "required": 717,
+        "unsupported": 2
+      },
+      "warnings": []
+    },
+    {
+      "packId": 22,
+      "name": "FTB Presents Crackpack",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1614",
+      "javaMajor": 8,
+      "files": 443,
+      "sideCounts": {
+        "optional": 132,
+        "required": 309,
+        "unsupported": 2
+      },
+      "warnings": []
+    },
+    {
+      "packId": 21,
+      "name": "FTB Inventions",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1614",
+      "javaMajor": 8,
+      "files": 314,
+      "sideCounts": {
+        "optional": 99,
+        "unsupported": 4,
+        "required": 211
+      },
+      "warnings": []
+    },
+    {
+      "packId": 20,
+      "name": "FTB Infinity Evolved Skyblock",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1614",
+      "javaMajor": 8,
+      "files": 769,
+      "sideCounts": {
+        "required": 766,
+        "unsupported": 3
+      },
+      "warnings": []
+    },
+    {
+      "packId": 19,
+      "name": "FTB Presents Skyfactory 2.5",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1614",
+      "javaMajor": 8,
+      "files": 547,
+      "sideCounts": {
+        "required": 541,
+        "unsupported": 4,
+        "optional": 2
+      },
+      "warnings": []
+    },
+    {
+      "packId": 18,
+      "name": "FTB Vanilla+",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1448",
+      "javaMajor": 8,
+      "files": 146,
+      "sideCounts": {
+        "required": 117,
+        "optional": 27,
+        "unsupported": 2
+      },
+      "warnings": []
+    },
+    {
+      "packId": 17,
+      "name": "FTB Horizons: Daybreaker",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1448",
+      "javaMajor": 8,
+      "files": 400,
+      "sideCounts": {
+        "optional": 96,
+        "required": 304
+      },
+      "warnings": []
+    },
+    {
+      "packId": 16,
+      "name": "FTB Departed",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1448",
+      "javaMajor": 8,
+      "files": 493,
+      "sideCounts": {
+        "optional": 42,
+        "required": 451
+      },
+      "warnings": []
+    },
+    {
+      "packId": 15,
+      "name": "FTB Presents Cloud 9",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1448",
+      "javaMajor": 8,
+      "files": 226,
+      "sideCounts": {
+        "optional": 57,
+        "unsupported": 2,
+        "required": 167
+      },
+      "warnings": []
+    },
+    {
+      "packId": 14,
+      "name": "FTB Presents Direwolf20",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1558",
+      "javaMajor": 8,
+      "files": 351,
+      "sideCounts": {
+        "optional": 77,
+        "required": 272,
+        "unsupported": 2
+      },
+      "warnings": []
+    },
+    {
+      "packId": 13,
+      "name": "FTB Trident",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1448",
+      "javaMajor": 8,
+      "files": 1637,
+      "sideCounts": {
+        "optional": 60,
+        "required": 1577
+      },
+      "warnings": []
+    },
+    {
+      "packId": 12,
+      "name": "FTB Resurrection",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.2.1291",
+      "javaMajor": 8,
+      "files": 235,
+      "sideCounts": {
+        "optional": 43,
+        "required": 192
+      },
+      "warnings": []
+    },
+    {
+      "packId": 11,
+      "name": "FTB Lite 3",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1448",
+      "javaMajor": 8,
+      "files": 139,
+      "sideCounts": {
+        "required": 137,
+        "unsupported": 2
+      },
+      "warnings": []
+    },
+    {
+      "packId": 10,
+      "name": "Pax Prime 2015 Map",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.7.10",
+      "loader": "forge",
+      "loaderVersion": "10.13.4.1448",
+      "javaMajor": 8,
+      "files": 770,
+      "sideCounts": {
+        "optional": 21,
+        "required": 749
+      },
+      "warnings": []
+    },
+    {
+      "packId": 9,
+      "name": "FTB Presents HermitPack",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.10.2",
+      "loader": "forge",
+      "loaderVersion": "12.18.3.2254",
+      "javaMajor": 8,
+      "files": 372,
+      "sideCounts": {
+        "required": 371,
+        "unsupported": 1
+      },
+      "warnings": []
+    },
+    {
+      "packId": 8,
+      "name": "FTB Sky Odyssey",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2857",
+      "javaMajor": 8,
+      "files": 1711,
+      "sideCounts": {
+        "required": 1708,
+        "unsupported": 3
+      },
+      "warnings": []
+    },
+    {
+      "packId": 7,
+      "name": "FTB Unstable 1.14",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.14.4",
+      "loader": "forge",
+      "loaderVersion": "28.1.61",
+      "javaMajor": 8,
+      "files": 152,
+      "sideCounts": {
+        "required": 152
+      },
+      "warnings": []
+    },
+    {
+      "packId": 6,
+      "name": "FTB Omnia",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.15.2",
+      "loader": "forge",
+      "loaderVersion": "31.2.33",
+      "javaMajor": 8,
+      "files": 376,
+      "sideCounts": {
+        "required": 374,
+        "unsupported": 2
+      },
+      "warnings": []
+    },
+    {
+      "packId": 5,
+      "name": "FTB Interactions",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2847",
+      "javaMajor": 8,
+      "files": 3539,
+      "sideCounts": {
+        "required": 3538,
+        "unsupported": 1
+      },
+      "warnings": [
+        "ftb.duplicate-destination"
+      ]
+    },
+    {
+      "packId": 4,
+      "name": "FTB Presents Stoneblock 2",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2860",
+      "javaMajor": 8,
+      "files": 1421,
+      "sideCounts": {
+        "required": 1419,
+        "unsupported": 2
+      },
+      "warnings": []
+    },
+    {
+      "packId": 1,
+      "name": "FTB Academy 1.12",
+      "ok": true,
+      "error": null,
+      "formatId": "ftb.app",
+      "mc": "1.12.2",
+      "loader": "forge",
+      "loaderVersion": "14.23.5.2847",
+      "javaMajor": 8,
+      "files": 1508,
+      "sideCounts": {
+        "required": 1508
+      },
+      "warnings": []
+    }
+  ],
+  "failures": [
+    {
+      "packId": 116,
+      "name": null,
+      "ok": false,
+      "error": "FTB pack \"NeoForge\" version has no downloadable files.",
+      "formatId": null,
+      "mc": null,
+      "loader": null,
+      "loaderVersion": null,
+      "javaMajor": null,
+      "files": 0,
+      "sideCounts": {},
+      "warnings": [],
+      "skipped": true
+    },
+    {
+      "packId": 105,
+      "name": null,
+      "ok": false,
+      "error": "FTB pack \"Fabric\" version has no downloadable files.",
+      "formatId": null,
+      "mc": null,
+      "loader": null,
+      "loaderVersion": null,
+      "javaMajor": null,
+      "files": 0,
+      "sideCounts": {},
+      "warnings": [],
+      "skipped": true
+    },
+    {
+      "packId": 104,
+      "name": null,
+      "ok": false,
+      "error": "FTB pack \"MinecraftForge\" version has no downloadable files.",
+      "formatId": null,
+      "mc": null,
+      "loader": null,
+      "loaderVersion": null,
+      "javaMajor": null,
+      "files": 0,
+      "sideCounts": {},
+      "warnings": [],
+      "skipped": true
+    },
+    {
+      "packId": 81,
+      "name": null,
+      "ok": false,
+      "error": "FTB pack \"Vanilla\" version has no downloadable files.",
+      "formatId": null,
+      "mc": null,
+      "loader": null,
+      "loaderVersion": null,
+      "javaMajor": null,
+      "files": 0,
+      "sideCounts": {},
+      "warnings": [],
+      "skipped": true
+    },
+    {
+      "packId": 68,
+      "name": null,
+      "ok": false,
+      "error": "FTB pack 68 has no versions.",
+      "formatId": null,
+      "mc": null,
+      "loader": null,
+      "loaderVersion": null,
+      "javaMajor": null,
+      "files": 0,
+      "sideCounts": {},
+      "warnings": [],
+      "skipped": true
+    }
+  ],
+  "totals": {
+    "packs": 92,
+    "passed": 87,
+    "hardFailures": 0,
+    "skippedEmpty": 5,
+    "filesPlanned": 83177
+  },
+  "verdict": "PASS",
+  "finishedAt": "2026-10-29T12:27:25.237Z",
+  "durationSeconds": 80.3
+}

@@ -12,7 +12,7 @@
 // route through this adapter so one recipe shape covers local and remote FTB inputs.
 import { appError } from '../store';
 import {
-  MANAGER_OWNED_PATHS,
+  MANAGER_OWNED_PATHS, isSafeRelativePath,
   type AdapterIo,
   type DetectContext,
   type FileSide,
@@ -108,27 +108,22 @@ export function normalizeFtbPath(path: string): string {
 /**
  * Resolve the destination path for one FTB file entry.
  *
- * The FTB API is inconsistent between packs, which is why this cannot be guessed from extensions:
- *  - Most packs: `path` is the full file path (`./mods/foo.jar`, with `name` equal to the last segment).
- *  - Some packs (FTB Omnia): `path` is only the *directory* (`./mods`) and the real filename is in `name`.
- *  - Some entries point at a directory but ship a filename with **no extension** (`./config/vanillafix`
- *    + `config_version`), which defeats any "has a dot ⇒ it is a file" heuristic — and treating that as a
- *    file made a later directory creation collide (EEXIST).
+ * **Census result (157,125 files across all 92 published FTB packs): `path` is ALWAYS the parent directory
+ * and `name` is ALWAYS the file name.** Not once did `path` contain the filename. So the only correct rule is
+ * to join them — every heuristic ("has a dot ⇒ it is a file", "endsWith(name)") was wrong in some pack and
+ * produced one of the bugs found during P1/P1b (155 mods dropped; EEXIST from a directory treated as a file).
  *
- * The reliable invariant is that **`name` is always the file name** and `path` is either that full path
- * or its parent directory. So: use `path` when it already ends with `name`, otherwise join them.
- * Returns '' when no safe destination can be derived.
+ * `path` may be empty (seen on a `default-server.properties` resource): those files have nowhere defined to
+ * go, so returning '' makes the caller skip them rather than inventing a location.
  */
 export function resolveFtbDestPath(file: Pick<FtbFile, 'path' | 'name'>): string {
   const rawPath = normalizeFtbPath(file.path ?? '');
   const rawName = (file.name ?? '').replaceAll('\\', '/').replace(/^\.\/+/, '').replace(/^\/+/, '');
+  if (rawName === '') return '';
   if (rawPath === '') return '';
-  if (rawName === '') return rawPath;
-  // `path` already carries the filename.
-  if (rawPath === rawName || rawPath.endsWith(`/${rawName}`)) return rawPath;
-  // `name` is a bare filename and `path` is its directory.
-  if (!rawName.includes('/')) return `${rawPath.replace(/\/+$/, '')}/${rawName}`;
-  return rawPath;
+  // Defend here as well as in validateRecipe: a `..` segment must never reach path.join.
+  if (rawPath.split('/').includes('..') || rawName.split('/').includes('..')) return '';
+  return `${rawPath.replace(/\/+$/, '')}/${rawName}`;
 }
 
 /** Read the Java major out of an FTB `java` target version such as `8.0.312+7` or `17.0.8`. */
@@ -139,6 +134,39 @@ export function ftbJavaMajor(targets: FtbTarget[] | undefined): number | null {
   if (!match) return null;
   const major = Number(match[1]);
   return Number.isInteger(major) && major > 0 ? major : null;
+}
+
+/**
+ * Java majors this app can actually provision and launch (mirrors `SUPPORTED_MAJORS` in `java.ts`).
+ * Census note: one published FTB pack declares Java **11** (`FTB Presents Integration by Parts DX`,
+ * `11.0.19+7`). Treating that as a hard requirement would reject a pack that runs fine on 17, and the app
+ * cannot install 11 anyway — so it is rounded up to the next supported major and reported, never dropped.
+ */
+export const APP_JAVA_MAJORS: readonly number[] = [8, 17, 21, 25];
+
+export function coerceJavaMajor(declared: number | null): { major: number | null; adjusted: boolean } {
+  if (declared === null) return { major: null, adjusted: false };
+  if (APP_JAVA_MAJORS.includes(declared)) return { major: declared, adjusted: false };
+  const next = APP_JAVA_MAJORS.find((major) => major >= declared) ?? APP_JAVA_MAJORS[APP_JAVA_MAJORS.length - 1]!;
+  return { major: next, adjusted: true };
+}
+
+/**
+ * Validate a Minecraft version string from a pack.
+ *
+ * `validateRecipe` requires `\d+\.\d+(\.\d+)?`, but the FTB corpus contains snapshot and pre-release names
+ * (`18w43b`, `26.3-pre-1`, `26.4-snapshot-6`) and even alpha names (`rd-132211`). Those are real MC versions,
+ * not malformed data, so the recipe validator must accept them or a legitimate pack is refused.
+ */
+export function isMinecraftVersionString(value: string): boolean {
+  const text = (value ?? '').trim();
+  if (text === '') return false;
+  if (/^\d+\.\d+(?:\.\d+)?$/.test(text)) return true;           // 1.20.1, 26.3
+  if (/^\d{2}w\d{2}[a-z]$/i.test(text)) return true;            // 18w43b (weekly snapshot)
+  if (/^\d+\.\d+(?:\.\d+)?-(?:pre|rc|snapshot)[-\w.]*$/i.test(text)) return true; // 26.3-pre-1, 26.4-snapshot-6
+  if (/^[a-z]\d+\.\d+(?:\.\d+)?[a-z]$/i.test(text)) return true; // c0.0.11a, rd-132211 handled below
+  if (/^[a-z]{2}-\d+$/.test(text)) return true;                  // rd-132211 (alpha)
+  return false;
 }
 
 /**
@@ -222,10 +250,22 @@ export function buildFtbRecipe(input: {
   const loaderVersion = loaderTarget?.version?.trim() || null;
 
   const warnings: RecipeWarning[] = [];
-  const files: PlannedFile[] = [];
+
+  // Validate the Minecraft version first: without it nothing can be installed, whatever the loader is, so it is
+  // both the more fundamental failure and the more actionable one to report.
+  if (mc === '') {
+    throw appError('validation',
+      `FTB pack "${input.packName}" does not declare a Minecraft version target; refusing to guess a runtime.`);
+  }
 
   // A pack that ships mods but declares no modloader is self-contradictory metadata. Infer, or fail closed.
-  const hasModFiles = (input.version.files ?? []).some((file) => (file.type === 'mod') || /\.jar$/i.test(file.name ?? ''));
+  // `type` is optional in the API (a jar can arrive with no type), so a `.jar` under a `mods` directory also
+  // counts — otherwise a resource-only archive could be misread as a modded pack and rejected.
+  const hasModFiles = (input.version.files ?? []).some((file) => {
+    if (file.type === 'mod') return true;
+    const path = resolveFtbDestPath(file).toLowerCase();
+    return path.startsWith('mods/') && path.endsWith('.jar');
+  });
   let loaderProvenance = loaderTarget ? `ftb target "${loaderTarget.name}"` : 'declared (no modloader target)';
   if (!loaderTarget && hasModFiles) {
     const inferred = inferFtbLoaderFromFiles(input.version.files ?? []);
@@ -242,18 +282,29 @@ export function buildFtbRecipe(input: {
     });
   }
 
+  // Census-driven: destinations can collide. 22 duplicate destinations were observed across the corpus
+  // (e.g. `mods/pedestals-0.4.56.jar` listed twice in one version). Fetching the same path twice is at best
+  // wasted work and at worst two different builds overwriting each other, so the first entry wins and the
+  // duplicate is recorded rather than silently installed twice.
+  const byPath = new Map<string, PlannedFile>();
+  let duplicatePaths = 0;
   for (const file of input.version.files ?? []) {
     const path = resolveFtbDestPath(file);
     if (path === '') continue;
     // FTB ships non-mod resources too (config, kubejs, scripts, animation); all belong on a server
     // unless marked client-only. `.meta` sidecar files are FTB bookkeeping, not payload.
     if (/\.meta$/i.test(path)) continue;
+    if (!isSafeRelativePath(path)) {
+      warnings.push({ rule: 'ftb.unsafe-path', message: 'FTB file path escapes the server directory; skipped.', path });
+      continue;
+    }
+    if (byPath.has(path)) { duplicatePaths += 1; continue; }
     const urls = [file.url, ...(file.mirrors ?? [])].filter((url): url is string => typeof url === 'string' && url !== '');
     if (urls.length === 0) {
       warnings.push({ rule: 'ftb.file-no-url', message: `FTB file has no download URL; it will be skipped.`, path });
       continue;
     }
-    files.push({
+    byPath.set(path, {
       path,
       source: { urls },
       sha1: file.sha1 ?? null,
@@ -263,23 +314,32 @@ export function buildFtbRecipe(input: {
       sideProvenance: 'ftb.clientonly/serveronly/optional',
     });
   }
+  const files = [...byPath.values()];
+  if (duplicatePaths > 0) {
+    warnings.push({
+      rule: 'ftb.duplicate-destination',
+      message: `${duplicatePaths} file entr${duplicatePaths === 1 ? 'y' : 'ies'} targeted an already-planned path; the first entry was kept.`,
+    });
+  }
 
   if (files.length === 0) {
     throw appError('validation', `FTB pack "${input.packName}" version has no downloadable files.`);
   }
-  if (mc === '') {
-    throw appError('validation',
-      `FTB pack "${input.packName}" does not declare a Minecraft version target; refusing to guess a runtime.`);
-  }
-
   const declaredJava = ftbJavaMajor(targets);
+  const java = coerceJavaMajor(declaredJava);
+  if (java.adjusted && declaredJava !== null) {
+    warnings.push({
+      rule: 'ftb.java-major-unsupported',
+      message: `FTB declares Java ${declaredJava}, which this app cannot provision; using Java ${java.major}.`,
+    });
+  }
   return {
     formatId: 'ftb.app',
     name: input.packName,
     mc,
     loader,
     loaderVersion,
-    javaMajor: declaredJava,
+    javaMajor: java.major,
     files,
     // FTB has no override layers: every payload file is listed explicitly with its final path.
     overrides: [],
