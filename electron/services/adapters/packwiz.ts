@@ -1,6 +1,6 @@
-﻿// packwiz adapter â€” `pack.toml` + `index.toml` + `*.pw.toml`.
+﻿// packwiz adapter Ã¢â‚¬â€ `pack.toml` + `index.toml` + `*.pw.toml`.
 //
-// Schema taken from packwiz's own struct tags (docs/research/2026-10-29-p1c-format-census.md Â§3):
+// Schema taken from packwiz's own struct tags (docs/research/2026-10-29-p1c-format-census.md Ã‚Â§3):
 //   pack.toml   : name, author, version, description, pack-format, [index]{file,hash-format,hash},
 //                 [versions]{minecraft,fabric,forge,quilt,...}, [export], [options]
 //   index.toml  : hash-format, [[files]]{file,hash,hash-format,alias,metafile,preserve}
@@ -57,13 +57,13 @@ export function isValidPackwizPack(pack: TomlTable | null): boolean {
   return Boolean(index && tomlString(pack, 'index', 'file'));
 }
 
-/** Map packwiz `side` onto the canonical value. Absent â‡’ both â‡’ required. */
+/** Map packwiz `side` onto the canonical value. Absent Ã¢â€¡â€™ both Ã¢â€¡â€™ required. */
 export function packwizFileSide(side: string | null): { side: FileSide; provenance: string } {
   const value = (side ?? '').trim().toLowerCase();
   if (value === 'client') return { side: 'unsupported', provenance: 'packwiz side="client"' };
   if (value === 'server') return { side: 'required', provenance: 'packwiz side="server"' };
   if (value === 'both') return { side: 'required', provenance: 'packwiz side="both"' };
-  if (value === '') return { side: 'required', provenance: 'packwiz side absent â‡’ both' };
+  if (value === '') return { side: 'required', provenance: 'packwiz side absent Ã¢â€¡â€™ both' };
   // An unknown side value must not be guessed either way.
   return { side: 'unknown', provenance: `packwiz side="${value}" (unrecognised)` };
 }
@@ -116,34 +116,231 @@ function hashFor(format: string | null, hash: string | null): { sha1?: string; s
   return {};
 }
 
+/** Pack file names packwiz actually uses. Measured: `modpack.toml` is real (Jasons-impart/Create-Delight-Remake). */
+export const PACKWIZ_PACK_FILES: readonly string[] = ['pack.toml', 'modpack.toml'];
+
+/**
+ * Fetch one text resource from a packwiz HTTP tree. Returns null on 404 so discovery can move on; throws on
+ * other failures so a real outage is not mistaken for "the file does not exist".
+ */
+async function fetchTreeText(
+  baseUrl: string,
+  relativePath: string,
+  fetchText?: (url: string) => Promise<string | null>,
+): Promise<string | null> {
+  const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  const url = `${base}${relativePath.replace(/^\.?\/+/, '')}`;
+  if (fetchText) return await fetchText(url);
+  const response = await fetch(url);
+  if (response.status === 404) return null;
+  if (!response.ok) throw appError('io', `packwiz HTTP tree returned ${response.status} for ${url}`);
+  return await response.text();
+}
+
+/**
+ * Discover the pack file in an HTTP tree: `pack.toml` first, then `modpack.toml`, at the base URL.
+ * Returns the file name and its text, or null when neither exists.
+ */
+export async function discoverPackwizPackFile(
+  baseUrl: string,
+  fetchText?: (url: string) => Promise<string | null>,
+): Promise<{ file: string; text: string } | null> {
+  for (const candidate of PACKWIZ_PACK_FILES) {
+    const text = await fetchTreeText(baseUrl, candidate, fetchText);
+    if (text !== null) return { file: candidate, text };
+  }
+  return null;
+}
+
+/** Resolve a metafile path against the directory that holds the pack file (packs may live in a subdirectory). */
+export function resolveTreeSibling(baseUrl: string, packFile: string, sibling: string): string {
+  const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  void packFile;
+  return `${base}${sibling.replace(/^\.?\/+/, '')}`;
+}
+
+/**
+ * Shape C: resolve a packwiz pack served as an HTTP tree.
+ *
+ * This is how `packwiz-installer` actually works (research §3.9: it "reads only `pack.toml` over HTTP and
+ * nothing else, so any host/CDN/CI can serve a pack"), and it is the reason DV-22 exists: the adapter used to
+ * *declare* httpTree without implementing it. Measured on real packs, `index.toml` can reference 86 and 126
+ * metafiles, each an independent HTTP resource — there is no archive to read them out of.
+ *
+ * Errors are specific, never generic: a missing `index.toml` means the pack is not installable (declarative
+ * format with no file list), while a missing metafile is a per-file warning so one dead link does not sink an
+ * otherwise valid pack.
+ */
+async function resolveHttpTree(
+  input: Extract<DetectInput, { shape: 'httpTree' }>,
+  io: AdapterIo,
+): Promise<PackRecipe> {
+  const discovered = await discoverPackwizPackFile(input.baseUrl, input.fetchText);
+  if (!discovered) {
+    throw appError('validation',
+      `no pack.toml or modpack.toml at ${input.baseUrl}. A packwiz HTTP tree must expose one of them.`);
+  }
+  let pack: TomlTable;
+  try {
+    pack = parseToml(discovered.text);
+  } catch (error) {
+    throw appError('validation', `${discovered.file} is not valid TOML: ${(error as Error).message}`);
+  }
+  if (!isValidPackwizPack(pack)) {
+    throw appError('validation', `${discovered.file} is not a packwiz pack (no versions.minecraft).`);
+  }
+
+  const mc = (tomlString(pack, 'versions', 'minecraft') ?? '').trim();
+  const { loader, version: loaderVersion } = packwizLoader(tomlTable(pack, 'versions'));
+  const name = (tomlString(pack, 'name') ?? 'packwiz pack').trim() || 'packwiz pack';
+  const warnings: RecipeWarning[] = [];
+  const byPath = new Map<string, PlannedFile>();
+  let duplicatePaths = 0;
+
+  const indexText = await fetchTreeText(input.baseUrl, 'index.toml', input.fetchText);
+  if (indexText === null) {
+    throw appError('validation',
+      `packwiz pack "${name}" has no index.toml at ${input.baseUrl}, so it declares no files. `
+      + 'A packwiz tree must expose index.toml alongside its pack file.');
+  }
+  let index: TomlTable;
+  try {
+    index = parseToml(indexText);
+  } catch (error) {
+    throw appError('validation', `index.toml is not valid TOML: ${(error as Error).message}`);
+  }
+  const entries = tomlAt(index, ['files']);
+  const fileEntries = Array.isArray(entries) ? entries : [];
+  if (fileEntries.length === 0) {
+    throw appError('validation', `packwiz pack "${name}" has an empty index.toml (no [[files]]).`);
+  }
+
+  let metafilesSeen = 0;
+  for (const rawEntry of fileEntries) {
+    if (typeof rawEntry !== 'object' || rawEntry === null || Array.isArray(rawEntry)) continue;
+    const entry = rawEntry as TomlTable;
+    const filePath = (tomlString(entry, 'file') ?? '').replaceAll('\\', '/').replace(/^\.?\/+/, '');
+    if (filePath === '') continue;
+    if (!Boolean(tomlAt(entry, ['metafile']))) continue; // plain payload files ship in the tree, not as downloads
+    metafilesSeen += 1;
+    const text = await fetchTreeText(input.baseUrl, filePath, input.fetchText);
+    if (text === null) {
+      warnings.push({ rule: 'packwiz.metafile-missing', message: 'index.toml references a metafile the host does not serve; skipped.', path: filePath });
+      continue;
+    }
+    let metafile: PackwizMetafile;
+    try {
+      metafile = readMetafile(text);
+    } catch (error) {
+      warnings.push({ rule: 'packwiz.metafile-invalid', message: (error as Error).message, path: filePath });
+      continue;
+    }
+    if (!metafile.url) {
+      warnings.push({ rule: 'packwiz.metafile-no-url', message: 'metafile has no [download].url; skipped.', path: filePath });
+      continue;
+    }
+    const metafileDir = filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/')) : '';
+    const fallbackName = metafile.filename ?? `${filePath.split('/').pop()!.replace(/\.pw\.toml$/i, '')}.jar`;
+    const target = (metafileDir ? `${metafileDir}/${fallbackName}` : fallbackName).replaceAll('\\', '/').replace(/^\.?\/+/, '');
+    if (!isSafeRelativePath(target)) {
+      warnings.push({ rule: 'packwiz.unsafe-path', message: 'destination escapes the server directory; skipped.', path: target });
+      continue;
+    }
+    if (MANAGER_OWNED_PATHS.includes(target.toLowerCase())) continue;
+    if (byPath.has(target)) { duplicatePaths += 1; continue; }
+    const hashes = hashFor(metafile.hashFormat, metafile.hash);
+    byPath.set(target, {
+      path: target,
+      source: { urls: [metafile.url] },
+      sha1: hashes.sha1 ?? null,
+      sha512: hashes.sha512 ?? null,
+      size: null,
+      side: metafile.optional ? 'optional' : metafile.side.side,
+      sideProvenance: metafile.optional ? `${metafile.side.provenance}; option.optional` : metafile.side.provenance,
+    });
+  }
+
+  const resolved = [...byPath.values()];
+  if (duplicatePaths > 0) {
+    warnings.push({ rule: 'packwiz.duplicate-destination', message: `${duplicatePaths} metafile(s) targeted an already-planned path; the first was kept.` });
+  }
+  if (resolved.length === 0) {
+    throw appError('validation',
+      `packwiz pack "${name}" yielded no downloadable metafiles from its HTTP tree `
+      + `(${metafilesSeen} metafile entries were listed).`);
+  }
+
+  io.log(`[packwiz] httpTree "${name}" ${loader} ${loaderVersion ?? '(unpinned)'} MC ${mc}: ${resolved.length}/${metafilesSeen} metafiles`);
+  return {
+    formatId: 'packwiz',
+    name,
+    mc,
+    loader,
+    loaderVersion,
+    javaMajor: null,
+    files: resolved,
+    // The tree's own payload (config/scripts/resources) is not fetched here; only the metafile-declared mods are.
+    overrides: [],
+    launchShape: loader === 'fabric' || loader === 'quilt' ? 'launch-jar' : 'generated-args',
+    managerOwned: [...MANAGER_OWNED_PATHS],
+    warnings,
+    resolution: [
+      { field: 'mc', source: `${discovered.file} [versions].minecraft` },
+      { field: 'loader', source: loader === 'vanilla' ? 'no loader key in [versions]' : `${discovered.file} [versions].${loader}` },
+      { field: 'files', source: 'index.toml [[files]] metafile → *.pw.toml [download].url, fetched over HTTP' },
+      { field: 'side', source: '*.pw.toml side (both/client/server), absent ⇒ both' },
+    ],
+  };
+}
+
 export const packwizAdapter: PackAdapter = {
   id: 'packwiz',
-  displayName: 'packwiz (pack.toml / index.toml)',
+  displayName: 'packwiz (pack.toml / index.toml, archive or HTTP tree)',
+  // Both shapes are implemented: shape A for zipped packs, shape C for the way packwiz-installer actually works
+  // (fetch pack.toml -> index.toml -> each *.pw.toml over HTTP). Declaring a shape the adapter cannot handle
+  // would be a lie the registry cannot catch (docs/audit/24 DV-22).
   shapes: ['archive', 'httpTree'],
   priority: 60,
 
   async detect(input: DetectInput): Promise<boolean> {
+    if (input.shape === 'httpTree') {
+      try {
+        return (await discoverPackwizPackFile(input.baseUrl, input.fetchText)) !== null;
+      } catch {
+        // Detection must never throw: an unreachable tree simply is not a claimed pack.
+        return false;
+      }
+    }
     const archive = input.shape === 'archive' || input.shape === 'instance' ? input.index : undefined;
     if (!archive) return false;
-    if (!archive.names.has('pack.toml')) return false;
-    const pack = await archive.readText('pack.toml');
-    if (pack === null) return false;
-    try {
-      return isValidPackwizPack(parseToml(pack));
-    } catch {
-      // An unparseable pack.toml is not a packwiz pack for detection purposes.
-      return false;
+    for (const candidate of PACKWIZ_PACK_FILES) {
+      const pack = await archive.readText(candidate);
+      if (pack === null) continue;
+      try {
+        if (isValidPackwizPack(parseToml(pack))) return true;
+      } catch {
+        // An unparseable pack file is not a packwiz pack for detection purposes; try the next candidate.
+      }
     }
+    return false;
   },
 
   async resolve(input: DetectInput, io: AdapterIo): Promise<PackRecipe> {
+    if (input.shape === 'httpTree') {
+      return await resolveHttpTree(input, io);
+    }
     const archive = input.shape === 'archive' || input.shape === 'instance' ? input.index : undefined;
-    if (!archive) throw appError('validation', 'packwiz adapter needs an archive.');
-    const packText = await archive.readText('pack.toml');
-    if (packText === null) throw appError('validation', 'packwiz archive has no pack.toml.');
+    if (!archive) throw appError('validation', 'packwiz adapter needs an archive or an HTTP tree.');
+    let packText: string | null = null;
+    let packFile = 'pack.toml';
+    for (const candidate of PACKWIZ_PACK_FILES) {
+      packText = await archive.readText(candidate);
+      if (packText !== null) { packFile = candidate; break; }
+    }
+    if (packText === null) throw appError('validation', 'packwiz archive has no pack.toml or modpack.toml.');
     const pack = parseToml(packText);
     if (!isValidPackwizPack(pack)) {
-      throw appError('validation', 'pack.toml is not a packwiz pack (no versions.minecraft).');
+      throw appError('validation', `${packFile} is not a packwiz pack (no versions.minecraft).`);
     }
 
     const mc = (tomlString(pack, 'versions', 'minecraft') ?? '').trim();
@@ -267,12 +464,14 @@ export const packwizAdapter: PackAdapter = {
       resolution: [
         { field: 'mc', source: 'pack.toml [versions].minecraft' },
         { field: 'loader', source: loader === 'vanilla' ? 'no loader key in [versions]' : `pack.toml [versions].${loader}` },
-        { field: 'files', source: 'index.toml [[files]] metafile â†’ *.pw.toml [download].url' },
-        { field: 'side', source: '*.pw.toml side (both/client/server), absent â‡’ both' },
+        { field: 'files', source: 'index.toml [[files]] metafile Ã¢â€ â€™ *.pw.toml [download].url' },
+        { field: 'side', source: '*.pw.toml side (both/client/server), absent Ã¢â€¡â€™ both' },
       ],
     };
   },
 };
+
+
 
 
 

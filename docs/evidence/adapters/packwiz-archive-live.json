@@ -1,0 +1,116 @@
+{
+  "harness": "verify-packwiz-archive.mjs",
+  "startedAt": "2026-10-29T14:59:48.123Z",
+  "purpose": "prove the packwiz adapter works on a REAL zip end-to-end, including override extraction and a real download",
+  "candidates": [
+    "packwiz",
+    "plain.serverzip"
+  ],
+  "recipe": {
+    "formatId": "packwiz",
+    "name": "Live packwiz fixture",
+    "mc": "1.20.1",
+    "loader": "fabric",
+    "loaderVersion": "0.15.11",
+    "files": [
+      {
+        "path": "mods/fabric-api-0.92.2+1.20.1.jar",
+        "side": "required",
+        "urls": [
+          "https://cdn.modrinth.com/data/wtk2r10e/versions/x38ZMwb1/mobhealthbar-fabric-1.20.x-2.3.0.jar"
+        ]
+      }
+    ],
+    "overrides": [
+      {
+        "prefix": "",
+        "order": 1
+      }
+    ],
+    "warnings": [
+      {
+        "rule": "packwiz.archive-payload",
+        "message": "files shipped inside the archive (config/scripts/resources) are applied as an override layer; index.toml metadata files themselves are not installed."
+      }
+    ],
+    "resolution": [
+      {
+        "field": "mc",
+        "source": "pack.toml [versions].minecraft"
+      },
+      {
+        "field": "loader",
+        "source": "pack.toml [versions].fabric"
+      },
+      {
+        "field": "files",
+        "source": "index.toml [[files]] metafile Ã¢â€ â€™ *.pw.toml [download].url"
+      },
+      {
+        "field": "side",
+        "source": "*.pw.toml side (both/client/server), absent Ã¢â€¡â€™ both"
+      }
+    ]
+  },
+  "install": {
+    "installed": 1,
+    "skippedUnsupported": 0,
+    "skippedOptional": 0,
+    "skippedUserExcluded": 0,
+    "warnings": []
+  },
+  "installedFiles": [
+    {
+      "path": "config/example.cfg",
+      "bytes": 46
+    },
+    {
+      "path": "fabric-server-launch.jar",
+      "bytes": 633
+    },
+    {
+      "path": "libraries/net/fabricmc/fabric-loader/0.15.11/fabric-loader-0.15.11.jar",
+      "bytes": 1327691
+    },
+    {
+      "path": "libraries/net/fabricmc/intermediary/1.20.1/intermediary-1.20.1.jar",
+      "bytes": 573365
+    },
+    {
+      "path": "libraries/net/fabricmc/sponge-mixin/0.13.3+mixin.0.8.5/sponge-mixin-0.13.3+mixin.0.8.5.jar",
+      "bytes": 1458875
+    },
+    {
+      "path": "libraries/org/ow2/asm/asm/9.6/asm-9.6.jar",
+      "bytes": 123598
+    },
+    {
+      "path": "libraries/org/ow2/asm/asm-analysis/9.6/asm-analysis-9.6.jar",
+      "bytes": 34041
+    },
+    {
+      "path": "libraries/org/ow2/asm/asm-commons/9.6/asm-commons-9.6.jar",
+      "bytes": 72194
+    },
+    {
+      "path": "libraries/org/ow2/asm/asm-tree/9.6/asm-tree-9.6.jar",
+      "bytes": 51935
+    },
+    {
+      "path": "libraries/org/ow2/asm/asm-util/9.6/asm-util-9.6.jar",
+      "bytes": 91131
+    },
+    {
+      "path": "mods/fabric-api-0.92.2+1.20.1.jar",
+      "bytes": 128551
+    },
+    {
+      "path": "server.jar",
+      "bytes": 47791053
+    }
+  ],
+  "verdict": "PASS",
+  "error": null,
+  "finishedAt": "2026-10-29T14:59:51.978Z",
+  "durationSeconds": 3.9
+}
