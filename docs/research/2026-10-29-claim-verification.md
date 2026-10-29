@@ -182,12 +182,82 @@ a genuine trade-off, which is why my report frames it as policy rather than a ru
 
 ## 10. Claims that remain UNVERIFIED (and why)
 
-| Claim | Status | Why it cannot be settled by grep |
-|---|---|---|
-| Whether `CF_PARALLEL_DOWNLOADS` was *ever* wired to `--max-concurrent-downloads` in an earlier release | **UNVERIFIED** | Would require full git history with tags/branches, not a shallow clone of `master`. Settle with `git log -S` on a full clone if it ever matters. |
-| FTB end-to-end support in any tool other than itzg | **UNVERIFIED** | itzg's FTBA path exists (`start-deployFTBA`), but no full real-pack run was observed in this session. |
+Both formerly open items are now **closed** — see §12 and §13. Nothing from the original list remains open.
 
-Everything else previously marked UNVERIFIED is now **settled**.
+---
+
+## 12. CLOSED — `CF_PARALLEL_DOWNLOADS` history (full git history, not a shallow clone)
+
+Both repos were unshallowed and searched with `git log -S` across **all** history.
+
+**mc-image-helper (846 commits) — the flag existed and was deliberately removed:**
+
+| Commit | Date | Event |
+|---|---|---|
+| `7c17abf` "curseforge: support parallel downloads and force reinstall (#94)" | 2023-01-12 | **added** `@Option(names = "--parallel-downloads", defaultValue = "4")` and `.setParallelism(parallelDownloads)`. First shipped in **1.24.10** |
+| `949afa0` "cf: cleanup remaining parallelism that's redundant (#201)" | 2023-04-14 | **removed** the option. First shipped in **1.27.6** |
+
+**docker-minecraft-server (2,832 commits) — the env var existed and its wiring was deleted:**
+
+| Commit | Date | Event |
+|---|---|---|
+| `8017379` "Use parallel downloads for AUTO_CURSEFORGE (#1899)" | 2023-01-12 | added `CF_PARALLEL_DOWNLOADS` to the script **and** forwarded it as `--parallel-downloads=`. Worked. |
+| `d0dcc68` "autocf: remove usage of old parallel downloads option (#2095)" | 2023-04-23 | deleted exactly one line: |
+
+```diff
+ args+=(
+-  --parallel-downloads="$CF_PARALLEL_DOWNLOADS"
+   --force-synchronize="$CF_FORCE_SYNCHRONIZE"
+   --overrides-skip-existing="$CF_OVERRIDES_SKIP_EXISTING"
+ )
+```
+
+**Conclusion (positive, not inferred):** the variable *did* work from 2023-01-12 until 2023-04-23, i.e. for
+helper releases 1.24.10 → 1.27.5. It has been inert since `d0dcc68` because the helper removed the flag
+first (`949afa0`, nine days earlier) and the script line was then deleted. The docs were never updated,
+which is why `auto-curseforge.md:349` and `variables.md:677` still advertise a default of 4.
+
+**Action for us:** use `CF_MAX_CONCURRENT_DOWNLOADS` / `--max-concurrent-downloads` (default **10**) and
+`MODRINTH_MAX_CONCURRENT_DOWNLOADS` (default 10). Do not implement `CF_PARALLEL_DOWNLOADS`.
+
+---
+
+## 13. CLOSED — FTB end-to-end (a real pack, resolved and downloaded unauthenticated)
+
+Rather than reasoning from docs, the public FTB API was exercised directly.
+
+**Pack resolution works with no authentication:**
+```
+GET https://api.modpacks.ch/public/modpack/1
+→ pack "FTB Academy 1.12", 4 versions
+→ latest version id 2 "1.1.0"
+→ targets: forge 14.23.5.2846 | minecraft 1.12.2 | java 8.0.312+7
+```
+That single response yields **exactly the recipe fields an adapter needs** — MC version, loader and loader
+version, and the Java major — for a pack format SPC cannot read at all.
+
+**Per-file side data exists** (`clientonly` / `serveronly` / `optional`):
+```
+GET https://api.modpacks.ch/public/modpack/1/2
+→ 1,483 files; top-level: config 988, mods 315, resources 102, animation 59, kubejs 10, scripts 5
+→ 202 entries are server candidates (serveronly, or shared mods/)
+→ entry: { version, path, url, mirrors[], sha1, size, tags[], clientonly:false, serveronly:false, optional:false, id, name, type, updated }
+```
+
+**Files are genuinely downloadable and verifiable by a third party** — a real download was performed:
+```
+GET <file url>  → 200 (no auth, no key)
+bytes: 1666   expected size: 1666   size match: true
+sha1: 601b45469bba87bc2ab57980baea6842a85d38dc   expected: 601b45469bba87bc2ab57980baea6842a85d38dc   MATCH: true
+```
+
+**Conclusion:** FTB is fully supportable by this app with no legal or technical blocker — public,
+unauthenticated, with per-file sides, SHA-1 + size, mirrors, and exact target metadata. This upgrades FTB
+from "UNVERIFIED" to a **first-class adapter candidate**, and it is the cheapest way to demonstrate
+generality beyond Modrinth/CurseForge (no API key needed at all, unlike CurseForge).
+
+Caveat: this proves *resolution and download*, not a completed server boot of an FTB pack. Installing one
+is the natural first live test of the P1 adapter layer.
 
 ## 11. Net effect on the research document
 

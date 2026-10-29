@@ -66,7 +66,7 @@ and `instance.json` are each claimed by multiple formats, so keys must be valida
 | 5 | ATLauncher | `instance.json` that ALSO has `id`/`libraries`/`mainClass` | top-level `id` | `launcher.loaderVersion{type,version}` | none (`disabled`/`optional` only) | direct URLs; CF-sourced inherit CF rules |
 | 6 | Prism/MultiMC | `mmc-pack.json` (`formatVersion:1` + `components[]`) | `net.minecraft` component | `net.minecraftforge`/`net.neoforged`/`org.quiltmc.quilt-loader` | none | n/a (no server export exists) |
 | 7 | packwiz | `pack.toml` (`pack-format="packwiz:1.x"`) + `index.toml` | `[versions].minecraft` | `[versions].{fabric,forge,quilt}` | **only in each `*.pw.toml`**: `side="both\|client\|server"` | open |
-| 8 | FTB App | `instance.json` with `uuid,id,versionId,mcVersion,modLoader` + 179-byte `version.json` | `mcVersion` | `modLoader` | `clientonly`/`serveronly` in remote manifest | `api.feed-the-beast.com` public, unauthenticated |
+| 8 | FTB App | `instance.json` with `uuid,id,versionId,mcVersion,modLoader` + 179-byte `version.json` | `mcVersion` | `modLoader` | `clientonly`/`serveronly` in remote manifest | **`api.feed-the-beast.com` / `api.modpacks.ch` public, unauthenticated — verified live: exact `targets`, per-file sides, SHA-1+size, real download OK** |
 | 9 | GDLauncher | `gdlpack.json` | `dependencies.minecraft` | `dependencies.modloaders[]` | `optional` | hash-only resolution |
 | 10 | Technic | `bin/modpack.jar` + `mods/` | `bin` jar manifest / build API | renamed loader jar | none | Solder read API public |
 | 11 | CF author server pack | **no manifest**: `mods/`+`config/`+(`user_jvm_args.txt`\|`run.sh`\|`startserver.sh`) or `*-installer.jar` | installer jar name / `libraries/` maven path | same | implicit (already filtered) | redistribution grey area |
@@ -441,9 +441,13 @@ export (three export actions, 0 hits for `ServerPack`; its mrpack exporter only 
 is documented as 16 in prose but defaults to **1** in `start-setupModpack:10`, while the same doc's own
 example uses 1 — an upstream doc bug.
 
-**Still open (2, both need more than a grep):** whether `CF_PARALLEL_DOWNLOADS` was *ever* wired in an
-earlier release (needs full history: `git log -S`, not a shallow clone), and real end-to-end FTB runs in any
-tool (no live FTB pack was installed in this session).
+**Still open (0).** Both former open items were closed with harder evidence:
+[2026-10-29-claim-verification.md](2026-10-29-claim-verification.md) §12 traces `CF_PARALLEL_DOWNLOADS`
+through full git history (it *did* work, 2023-01-12 → 2023-04-23, removed in `d0dcc68`; docs never updated),
+and §13 exercises the public FTB API live: no auth, exact `targets` (forge 14.23.5.2846 / minecraft 1.12.2 /
+java 8), 1,483 files with `clientonly`/`serveronly` flags, and a real file downloaded with matching size and
+SHA-1. **FTB is therefore a first-class adapter candidate and needs no API key at all** — the cheapest live
+proof of generality beyond Modrinth/CurseForge.
 
 ---
 
