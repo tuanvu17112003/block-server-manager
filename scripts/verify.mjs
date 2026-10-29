@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 // Unified verification gate. Mirrors the plan's gate runner:
 // - clears ELECTRON_RUN_AS_NODE (required in this environment),
 // - runs every layer serially (Electron gates must never overlap),
@@ -65,6 +65,10 @@ runStep('adapter-audit', node, [path.join('scripts', 'audit-adapters-real.mjs'),
 runStep('prism-real', node, [path.join('scripts', 'verify-prism-real.mjs')]);
 // ATLauncher E2: recognises a real user-published instance.json, incl. the FTB/vanilla discriminator (DV-39).
 runStep('atl-real', node, [path.join('scripts', 'verify-atlauncher-real.mjs')]);
+// Encoding guard (docs/audit/24 DV-40): mojibake inside a string literal compiles and passes, so no test caught
+// 65 corrupted lines of user-facing text in this session. This fails the gate if any SOURCE file contains
+// double-encoded UTF-8. Docs are excluded on purpose — quoting the corruption as evidence is legitimate.
+runStep('encoding', node, [path.join('scripts', 'check-encoding.mjs')]);
 runStep('selftest', node, electron('--selftest'));
 runStep('contract', node, electron('--contracttest'));
 runStep('services', node, electron('--servicestest'));
