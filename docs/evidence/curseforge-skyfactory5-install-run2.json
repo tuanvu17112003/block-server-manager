@@ -1,0 +1,58 @@
+{
+  "harness": "verify-cf-install.mjs",
+  "startedAt": "2026-10-29T05:31:35.281Z",
+  "pack": "392141-server-6290699.zip",
+  "packBytes": 295045888,
+  "javaPath": "C:\\Program Files\\Java\\jdk-17\\bin\\java.exe",
+  "preview": {
+    "sourceName": "392141-server-6290699",
+    "loader": "forge",
+    "mc": "1.20.1",
+    "decisions": 0
+  },
+  "report": {
+    "status": "complete",
+    "stages": [
+      {
+        "stage": "route-A",
+        "outcome": "complete"
+      },
+      {
+        "stage": "validate",
+        "outcome": "complete"
+      },
+      {
+        "stage": "verify-boot",
+        "outcome": "complete",
+        "detail": "first boot"
+      },
+      {
+        "stage": "publish",
+        "outcome": "complete"
+      }
+    ],
+    "files": [
+      {
+        "path": "264 mods (bundled in pack)",
+        "outcome": "installed"
+      },
+      {
+        "path": "0 client-only",
+        "outcome": "skipped-client-only"
+      }
+    ],
+    "warnings": []
+  },
+  "published": {
+    "serverId": "4ed3a83e-4334-46da-aefa-6b7f4e5e5a72",
+    "jarsEnabled": 262,
+    "jarsDisabled": 2,
+    "disabled": [
+      "appleskin-forge-mc1.20.1-2.5.1.jar",
+      "ClearSky-Universal-1.20.1-1.0.0.jar"
+    ]
+  },
+  "error": null,
+  "finishedAt": "2026-10-29T05:34:18.503Z",
+  "durationSeconds": 163.2
+}

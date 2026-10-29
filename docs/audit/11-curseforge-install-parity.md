@@ -38,14 +38,35 @@ versioned server jar — never guessing when nothing is found.
 
 ## Evidence (real packs, real Java 17, real Pipeline, throwaway data roots)
 
-| Pack | Route | Result |
-|---|---|---|
-| `936875-server-8853081.zip` (1.0 GB Forge 1.20.1-47.4.23 prebuilt, 332 jars) | A / prebuilt | `status=complete`; `verify-boot: complete (first boot)`; **327 jars + 5 L2-disabled** |
-| `392141-server-6290699.zip` (281 MB SkyFactory 5, ships `forge-1.20.1-47.4.0-installer.jar`) | A / shipped installer executed | `status=complete`; `verify-boot: complete (first boot)`; **262 jars + 2 L2-disabled** |
+**Durable artifacts** (written by each harness before its throwaway root is deleted; an earlier version of
+this doc cited numbers no surviving artifact supported):
+
+| Pack | Route | Result | Artifact |
+|---|---|---|---|
+| `936875-server-8853081.zip` (1.0 GB Forge 1.20.1-47.4.23 prebuilt, 332 bundled jars) | A / prebuilt | `status=complete`; `verify-boot: complete (first boot)`; **327 jars + 5 L2-disabled** | [`curseforge-install.json`](../evidence/curseforge-install.json) |
+| `392141-server-6290699.zip` (281 MB SkyFactory 5, ships `forge-1.20.1-47.4.0-installer.jar`) | A / shipped installer executed | `status=complete`; **262 jars + 2 L2-disabled** | [`curseforge-skyfactory5-install-run2.json`](../evidence/curseforge-skyfactory5-install-run2.json) |
 
 Both installs logged `[L2] … → mods-disabled` entries (`appleskin`, `emi`, `emitrades`,
 `BetterAdvancements`, `no-telemetry`, `ClearSky`), proving the shared L2 stage runs on the CurseForge route,
-and both reached `Done (` inside the staged transaction and published.
+and both reached `Done (` inside the staged transaction and published. The SF5 numbers **262 + 2** match the
+reference's own SF5 key-mode run (`.data/servers/cu-skyfactory-5-keymode`, 262 + 2).
+
+### SF5 install verification is FLAKY — recorded honestly
+
+The first instrumented SF5 run **failed** (`curseforge-skyfactory5-install.json`, `status=failed`):
+`process exited (code 0) before Done (` with a Forge mixin crash (`saturn`, `balm`, `skyfactorytweaks`,
+`citadel`, `ae2` mixins in the stack) during world start. An immediate re-run passed cleanly (262 + 2,
+`verify-boot: complete (first boot)`). Same archive, same Java, same code.
+
+- Verdict: **intermittent first-boot crash in the pack itself (SF5 Forge 1.20.1 mixin set), not a
+  deterministic installer defect.** Parity with the reference is therefore "passes, but not every run".
+- The reference recorded SF5 as PASS once; it did not characterise flakiness, so this is new information,
+  not a regression against it.
+- Fix applied alongside: a failed verification now records the auto-fix rounds/fixes it attempted
+  (`finalizeFailure` in `pipeline.ts`), so a future intermittent failure is attributable from the report
+  instead of being a bare "did not reach `Done (`".
+- CF route-A report rows no longer claim `"0 mods"` when the archive bundled the mods: the report now
+  reports the staged jar count (`"332 mods (bundled in pack)"`), which was a genuine reporting bug.
 
 - `node scripts/unit.mjs`: **263/263 pass** (2 new `inspectStagedZip` regression tests).
 - `npm run verify`: **PASS 10/10**.

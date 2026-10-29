@@ -20,10 +20,32 @@ const pipeline = new Pipeline({ dataRoot: root, send: () => {}, getWindow: () =>
 const started = Date.now();
 const log = (line) => console.log(`[${((Date.now() - started) / 1000).toFixed(1)}s] ${line}`);
 
+// Durable evidence before the throwaway root is deleted (see verify-prominence-fix.mjs for why).
+const evidenceFile = process.argv[4] ?? path.join(process.cwd(), 'docs', 'evidence', 'curseforge-install.json');
+const evidence = {
+  harness: 'verify-cf-install.mjs',
+  startedAt: new Date().toISOString(),
+  pack: zipName,
+  packBytes: fs.statSync(target).size,
+  javaPath,
+  preview: null,
+  report: null,
+  published: null,
+  error: null,
+};
+function writeEvidence(data) {
+  data.finishedAt = new Date().toISOString();
+  data.durationSeconds = Math.round((Date.now() - started) / 100) / 10;
+  fs.mkdirSync(path.dirname(evidenceFile), { recursive: true });
+  fs.writeFileSync(evidenceFile, `${JSON.stringify(data, null, 2)}\n`);
+  console.log(`evidence written: ${evidenceFile}`);
+}
+
 try {
   log(`data root ${root}`);
   const preview = await pipeline.preview({ kind: 'curseForgeServerZip', zipName }, 'cf-preview');
   log(`preview: ${preview.sourceName} loader=${preview.plan.loader.kind} mc=${preview.plan.loader.minecraftVersion || '(blank)'} decisions=${preview.plan.fileDecisions.length}`);
+  evidence.preview = { sourceName: preview.sourceName, loader: preview.plan.loader.kind, mc: preview.plan.loader.minecraftVersion, decisions: preview.plan.fileDecisions.length };
   const result = await pipeline.install(
     preview.previewId,
     { name: `verify-cf-${Date.now()}`, ramMb: 4096, javaPath, eulaAccepted: true },
@@ -31,6 +53,12 @@ try {
     'cf-install',
   );
   log(`install status=${result.status} error=${result.error ?? '(none)'}`);
+  evidence.report = {
+    status: result.status,
+    stages: result.report.stages,
+    files: result.report.files,
+    warnings: result.report.warnings.slice(0, 40),
+  };
   for (const stage of result.report.stages) log(`  stage ${stage.stage}: ${stage.outcome}${stage.detail ? ` (${stage.detail})` : ''}`);
   for (const file of result.report.files) log(`  file: ${file.path} -> ${file.outcome}${file.detail ? ` (${file.detail})` : ''}`);
   for (const warning of result.report.warnings.slice(0, 8)) log(`  warning: ${warning}`);
@@ -39,16 +67,20 @@ try {
     const mods = fs.existsSync(path.join(dir, 'mods')) ? fs.readdirSync(path.join(dir, 'mods')).filter((f) => f.endsWith('.jar')) : [];
     const disabled = fs.existsSync(path.join(dir, 'mods-disabled')) ? fs.readdirSync(path.join(dir, 'mods-disabled')) : [];
     log(`published: ${mods.length} jars, ${disabled.length} disabled`);
+    evidence.published = { serverId: result.server.id, jarsEnabled: mods.length, jarsDisabled: disabled.length, disabled };
     log('PASS: CurseForge install reached Done( with verified boot');
   } else {
     log('FAIL: CurseForge install did not complete');
+    evidence.error = result.error ?? 'install did not complete';
     process.exitCode = 1;
   }
 } catch (error) {
-  console.error(`FAIL: ${error instanceof Error ? error.message : error}`);
-  if (error instanceof Error && error.stack) console.error(error.stack.split('\n').slice(0, 8).join('\n'));
+  evidence.error = error instanceof Error ? error.message : String(error);
+  console.error(`FAIL: ${evidence.error}`);
+  if (error instanceof Error) console.error(error.stack.split('\n').slice(0, 8).join('\n'));
   process.exitCode = 1;
 } finally {
+  writeEvidence(evidence);
   if (!process.exitCode) { try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 250 }); } catch {} log(`cleaned ${root}`); }
   else log(`kept for inspection: ${root}`);
 }

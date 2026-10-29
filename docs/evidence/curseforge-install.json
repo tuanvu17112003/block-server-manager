@@ -1,0 +1,61 @@
+{
+  "harness": "verify-cf-install.mjs",
+  "startedAt": "2026-10-29T05:24:05.995Z",
+  "pack": "936875-server-8853081.zip",
+  "packBytes": 736512644,
+  "javaPath": "C:\\Program Files\\Java\\jdk-17\\bin\\java.exe",
+  "preview": {
+    "sourceName": "936875-server-8853081",
+    "loader": "forge",
+    "mc": "1.20.1",
+    "decisions": 0
+  },
+  "report": {
+    "status": "complete",
+    "stages": [
+      {
+        "stage": "route-A",
+        "outcome": "complete"
+      },
+      {
+        "stage": "validate",
+        "outcome": "complete"
+      },
+      {
+        "stage": "verify-boot",
+        "outcome": "complete",
+        "detail": "first boot"
+      },
+      {
+        "stage": "publish",
+        "outcome": "complete"
+      }
+    ],
+    "files": [
+      {
+        "path": "332 mods (bundled in pack)",
+        "outcome": "installed"
+      },
+      {
+        "path": "0 client-only",
+        "outcome": "skipped-client-only"
+      }
+    ],
+    "warnings": []
+  },
+  "published": {
+    "serverId": "ad2d989a-a644-49bf-bb34-1f93227df5be",
+    "jarsEnabled": 327,
+    "jarsDisabled": 5,
+    "disabled": [
+      "appleskin-forge-mc1.20.1-2.5.1.jar",
+      "BetterAdvancements-Forge-1.20.1-0.6.0.73.jar",
+      "emi-1.1.24+1.20.1+forge.jar",
+      "emitrades-forge-1.2.1+mc1.20.1.jar",
+      "no-telemetry-1.10.0.jar"
+    ]
+  },
+  "error": null,
+  "finishedAt": "2026-10-29T05:27:20.168Z",
+  "durationSeconds": 194.2
+}

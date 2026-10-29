@@ -1,0 +1,37 @@
+{
+  "harness": "verify-cf-install.mjs",
+  "startedAt": "2026-10-29T05:24:13.447Z",
+  "pack": "392141-server-6290699.zip",
+  "packBytes": 295045888,
+  "javaPath": "C:\\Program Files\\Java\\jdk-17\\bin\\java.exe",
+  "preview": {
+    "sourceName": "392141-server-6290699",
+    "loader": "forge",
+    "mc": "1.20.1",
+    "decisions": 0
+  },
+  "report": {
+    "status": "failed",
+    "stages": [
+      {
+        "stage": "route-A",
+        "outcome": "complete"
+      }
+    ],
+    "files": [
+      {
+        "path": "264 mods (bundled in pack)",
+        "outcome": "installed"
+      },
+      {
+        "path": "0 client-only",
+        "outcome": "skipped-client-only"
+      }
+    ],
+    "warnings": []
+  },
+  "published": null,
+  "error": "The server did not reach \"Done (\" during install verification: process exited (code 0) before Done(\n\tat java.lang.Thread.run(Thread.java:842) ~[?:?] {re:mixin}\n[12:26:54] [Server thread/FATAL] [ne.mi.co.ForgeMod/]: Preparing crash report with UUID 3634fe6a-b82e-4e6c-994c-cbe63f64d905\n[12:26:54] [Server thread/ERROR] [minecraft/MinecraftServer]: This crash report has been saved to: H:\\TESTMultiAI\\20-backups\\verify-cf-1793251453446\\installer-staging\\5f414a1b-dae9-45eb-9d77-bee79c67228e\\.\\crash-reports\\crash-2026-10-29_12.26.54-server.txt\n[12:26:54] [Server thread/INFO] [minecraft/MinecraftServer]: Stopping server\n[12:26:54] [Server thread/INFO] [minecraft/MinecraftServer]: Saving worlds\n[12:26:54] [Server thread/ERROR] [minecraft/MinecraftServer]: Exception stopping the server\njava.lang.NullPointerException: Cannot invoke \"net.minecraft.server.level.ServerLevel.m_6857_()\" because \"serverlevel2\" is null\n\tat net.minecraft.server.MinecraftServer.m_129885_(MinecraftServer.java:513) ~[server-1.20.1-20230612.114412-srg.jar%23625!/:?] {re:mixin,pl:accesstransformer:B,re:computing_frames,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:saturn.mixins.json:allocations.server_directory.MinecraftServerMixin,pl:mixin:APP:balm.mixins.json:MinecraftServerMixin,pl:mixin:APP:skyfactorytweaks.mixins.json:MinecraftServerMixin,pl:mixin:APP:crafttweaker.mixins.json:common.access.server.AccessMinecraftServer,pl:mixin:APP:citadel.mixins.json:MinecraftServerMixin,pl:mixin:APP:ichunutil.mixins.json:MinecraftServerAccessorMixin,pl:mixin:APP:ae2.mixins.json:spatial.MinecraftServerMixin,pl:mixin:A}\n\tat net.minecraft.server.MinecraftServer.m_7041_(MinecraftServer.java:584) ~[server-1.20.1-20230612.114412-srg.jar%23625!/:?] {re:mixin,pl:accesstransformer:B,re:computing_frames,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:saturn.mixins.json:allocations.server_directory.MinecraftServerMixin,pl:mixin:APP:balm.mixins.json:MinecraftServerMixin,pl:mixin:APP:skyfactorytweaks.mixins.json:MinecraftServerMixin,pl:mixin:APP:crafttweaker.mixins.json:common.access.server.AccessMinecraftServer,pl:mixin:APP:citadel.mixins.json:MinecraftServerMixin,pl:mixin:APP:ichunutil.mixins.json:MinecraftServerAccessorMixin,pl:mixin:APP:ae2.mixins.json:spatial.MinecraftServerMixin,pl:mixin:A}\n\tat net.minecraft.server.dedicated.DedicatedServer.m_7041_(DedicatedServer.java:510) ~[server-1.20.1-20230612.114412-srg.jar%23625!/:?] {re:computing_frames,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B}\n\tat net.minecraft.server.MinecraftServer.m_130011_(MinecraftServer.java:689) ~[server-1.20.1-20230612.114412-srg.jar%23625!/:?] {re:mixin,pl:accesstransformer:B,re:computing_frames,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:saturn.mixins.json:allocations.server_directory.MinecraftServerMixin,pl:mixin:APP:balm.mixins.json:MinecraftServerMixin,pl:mixin:APP:skyfactorytweaks.mixins.json:MinecraftServerMixin,pl:mixin:APP:crafttweaker.mixins.json:common.access.server.AccessMinecraftServer,pl:mixin:APP:citadel.mixins.json:MinecraftServerMixin,pl:mixin:APP:ichunutil.mixins.json:MinecraftServerAccessorMixin,pl:mixin:APP:ae2.mixins.json:spatial.MinecraftServerMixin,pl:mixin:A}\n\tat net.minecraft.server.MinecraftServer.m_206580_(MinecraftServer.java:251) ~[server-1.20.1-20230612.114412-srg.jar%23625!/:?] {re:mixin,pl:accesstransformer:B,re:computing_frames,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:saturn.mixins.json:allocations.server_directory.MinecraftServerMixin,pl:mixin:APP:balm.mixins.json:MinecraftServerMixin,pl:mixin:APP:skyfactorytweaks.mixins.json:MinecraftServerMixin,pl:mixin:APP:crafttweaker.mixins.json:common.access.server.AccessMinecraftServer,pl:mixin:APP:citadel.mixins.json:MinecraftServerMixin,pl:mixin:APP:ichunutil.mixins.json:MinecraftServerAccessorMixin,pl:mixin:APP:ae2.mixins.json:spatial.MinecraftServerMixin,pl:mixin:A}\n\tat java.lang.Thread.run(Thread.java:842) ~[?:?] {re:mixin}\n[12:26:54] [Server thread/INFO] [Framework/]: Unloading server configs...\n[12:26:54] [Server thread/INFO] [Framework/]: Finished unloading server configs",
+  "finishedAt": "2026-10-29T05:26:57.298Z",
+  "durationSeconds": 163.9
+}

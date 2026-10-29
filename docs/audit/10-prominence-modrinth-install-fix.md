@@ -53,6 +53,10 @@
 
 ## Evidence (real app pipeline, no mocks)
 
+**Durable artifact:** [`docs/evidence/prominence-modrinth-install.json`](../evidence/prominence-modrinth-install.json)
+(written by the harness itself before its throwaway data root is deleted — an earlier version of this doc
+cited numbers no artifact supported; that gap is now closed).
+
 - Real cached pack `Prominence™ II Hasturian Era v4.1.5hf.mrpack` (407.9 MB) through `Pipeline.preview` →
   `Pipeline.install` with real Java 17 and a throwaway data root:
   - plan: **351 include / 211 exclude / 3 conflicts** (was 565 included / 0 excluded in the bug build)
@@ -66,6 +70,13 @@
 - Rebuilt package + installer: `npm run pack:win` → `release/Block-Server-Manager-0.2.0-Setup.exe`
   (116.0 MB, SHA-256 `FB5182752ADD566935CC5295402F94A0555C030901967ABD0E9216D2D97E9340`);
   `pack:verify` **PASS 3/3**, `pack:verify:installer` **PASS 6/6**.
+
+### Scope note (what this run does and does not prove)
+
+It proves the engine fix on the Prominence Modrinth source (the failing pack from the report). It does
+**not** constitute matrix-level parity with the reference's 12/12 live sweep — see
+[12-reference-conformance-audit.md](12-reference-conformance-audit.md) §C for which packs still lack
+app-side evidence.
 
 ## Notes
 

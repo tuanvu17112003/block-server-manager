@@ -690,8 +690,16 @@ export class Pipeline {
             const res = await installCurseforge({ zipPath, projectId, dir: stagingDir, dataRoot: this.ctx.dataRoot, cacheDir: this.cacheDir(), onProgress, signal });
             // WP-4.5: never publish blank route-A/B metadata; prefer the engine's inferred values.
             const inferred = this.applyCurseForgeMetadata(held, res, installInput, report);
-            report.files.push({ path: `${res.installed} mods`, outcome: 'installed' });
+            // Route A prebuilt packs ship mods *inside the archive*, so the engine's manifest counters
+            // are 0/0 even though the tree is full. Report the tree that actually exists instead of
+            // publishing "0 mods" next to 300+ jars (misleading audit record).
+            const shippedJars = Pipeline.stagedJarCount(stagingDir);
+            report.files.push({
+              path: res.installed > 0 ? `${res.installed} mods` : `${shippedJars} mods (bundled in pack)`,
+              outcome: 'installed',
+            });
             report.files.push({ path: `${res.skippedClientOnly} client-only`, outcome: 'skipped-client-only' });
+            if (res.skippedOptional > 0) report.files.push({ path: `${res.skippedOptional} optional`, outcome: 'skipped-optional' });
             report.warnings.push(...res.warnings);
             for (const m of res.manuallyRequired) report.warnings.push(`manually required: ${m.pageUrl} (${m.reason})`);
             report.stages.push({ stage: `route-${res.route}`, outcome: 'complete' });
@@ -774,7 +782,7 @@ export class Pipeline {
       const status = (err as { code?: string }).code === 'cancelled' ? 'cancelled' : 'failed';
       // Re-insert only a preview that failed before the staged transaction mutated anything.
       if (!mutationStarted) this.previews.set(previewId, held);
-      return this.finalizeFailure(status, report, message);
+      return this.finalizeFailure(status, report, message, { fixes: autoFixFixes, rounds: autoFixRounds });
     }
   }
 
@@ -854,11 +862,45 @@ export class Pipeline {
   }
 
   /** Terminal failure/cancel result: the transaction has already removed staging and any record. */
-  private finalizeFailure(status: 'failed' | 'cancelled', report: PipelineInstallReport, error: string | null): PipelineInstallResult {
+  private finalizeFailure(
+    status: 'failed' | 'cancelled',
+    report: PipelineInstallReport,
+    error: string | null,
+    autoFix?: { fixes: AutoFixEntry[]; rounds: number },
+  ): PipelineInstallResult {
     report.status = status;
+    // A failed verification must still say what the auto-fix loop tried: otherwise an intermittent
+    // boot crash (seen on SkyFactory 5) leaves an unattributable "did not reach Done (" with nothing
+    // recorded about the rounds that already ran and the jars they moved.
+    const fixes = autoFix?.fixes ?? [];
+    const rounds = autoFix?.rounds ?? 0;
+    if (fixes.length > 0 || rounds > 0) {
+      for (const fix of fixes) {
+        report.files.push({
+          path: `mods/${fix.jar ?? fix.mod}`,
+          outcome: fix.action === 'disabled' ? 'disabled-by-autofix' : 'added-by-autofix',
+          detail: `round ${fix.round}: ${fix.action} ${fix.mod}`,
+        });
+      }
+      report.stages.push({
+        stage: 'verify-boot',
+        outcome: 'failed',
+        detail: `${fixes.length} auto-fix(es) in ${rounds} round(s) before giving up`,
+      });
+    }
     if (error) report.errors.push(error);
     log(`[pipeline] ${status}${error ? `: ${error}` : ''}`);
     return { status, server: null, report, error };
+  }
+
+  /** Count the `.jar` files a staged install actually produced (archive-bundled mods are not counted
+   *  by the engine's manifest loop). Best effort: a read failure reports 0 rather than failing a build. */
+  private static stagedJarCount(dir: string): number {
+    try {
+      return fs.readdirSync(path.join(dir, 'mods')).filter(name => /\.jar$/i.test(name)).length;
+    } catch {
+      return 0;
+    }
   }
 
   /** Full report skeleton shared by every terminal outcome (success/failure/cancel). */

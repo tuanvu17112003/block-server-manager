@@ -39,7 +39,7 @@
 | 1 | Optional mods default **off** + checkbox (`design:105-106,222,231`; `specs:209`) | default **on** (`pipeline.ts:284-287` `optionalDefaultKeep`, `helpers.ts:125-131`, `PipelineReview.tsx:68`) | DIFFERENT — inverted. Deliberate in ADR-0013 ("optional entries stay included by default") but contradicts the reference design |
 | 2 | Update flow: re-resolve → diff → swap (`design:33,110-111` G-E) | no pack-update code or IPC; sidecar has no hashes/version/file IDs; CF `files: []` (`pipeline.ts:680-684,707-710`) | GAP — the reference's update design cannot be built on this sidecar |
 | 3 | "Every run teaches the next" (`client-mod-method-research.md:76-77`) | `appendLearned` writes `<dataRoot>/state/…`, but install-time resolvers never pass `learnedFile` (`pipeline.ts:447,668,784`), so only the frozen bundled file is read | DIFFERENT — learning affects later *starts*, not later *downloads* |
-| 4 | Spike records `l2Disabled` in the sidecar (`modrinth.mjs:103,108`) | `startWithAutoFix` returns `l2` (`core.ts:1061,1064`); `pipeline.ts:616-618` discards it; no `l2Disabled` anywhere | GAP — users cannot see why dozens of jars were moved |
+| 4 | Spike records `l2Disabled` in the sidecar (`modrinth.mjs:103,108`) | `startWithAutoFix` returns `l2` (`core.ts:1061,1064`); `pipeline.ts:616-618` discards it; no `l2Disabled` anywhere | GAP — users cannot see why dozens of jars were moved. **Partially mitigated:** the report now records the verified-boot fix list (including failed attempts), but L2's own disabled list is still not surfaced |
 | 5 | L3 budget: 15 min, 8 rounds (`core.mjs:339,425`) | install loop 8 min / 6 rounds (`pipeline.ts:610-611`); runtime loop 8 rounds with **no timeout** (`server-process.ts:318`) | DIFFERENT — big packs can miss the verify window; hung boots never reach L3 |
 | 6 | Learn once, after the loop proves success (`modrinth.mjs:135`) | runtime appends per round **before** success (`server-process.ts:361-371`) | DIFFERENT — poisoned learned file for unattributed crashes |
 | 7 | Keyless = explicit opt-in, mode banner (`curseforge-policy.md:126,132`) | keyless is the silent default; only a Settings hint (`secrets.ts:103`) | GAP — the highest policy risk |
@@ -56,20 +56,30 @@
 
 ## C. Result parity vs `modpack-install-results.md` (12/12 PASS)
 
-Reference recorded real `Done (` for 12 packs. The app has real `Done (` evidence for **3 distinct packs**:
+Reference recorded real `Done (` for 12 packs, each backed by `.data/servers/<srv>/logs/latest.log`.
+The app has durable, artifact-backed `Done (` evidence for **4 distinct packs**:
 
-| Reference pack | App evidence |
-|---|---|
-| Prominence II CF | YES — `Hasturian2CurseForge` (327 jars, 21 L2-disabled, `Done (12.592s)`) |
-| (Craft to Exile — not in reference matrix) | YES — `CrafttoExile` (`Done (13.170s)`) |
-| Cobbleverse | YES — `e2e-cobbleverse` + `CobbelMon-Modrinth` (`Done (1.697s)` / `Done (1.128s)`) |
-| Prominence II Modrinth | Reproduced this session through the real pipeline (`scripts/verify-prominence-fix.mjs`, 348 jars, 15 disabled, verified boot) but the older installed server `Test` has no `Done (` in its log |
-| SkyBlock Enhanced, BattleArmory TACZ, Slimes Adventure, Zombie Invade | **NO EVIDENCE** |
-| Dungeon Heroes, RLCraft, SkyFactory 5, DawnCraft, Otherworld D&D | **NO EVIDENCE** (SF5 key-mode e2e exercises download/classify only, no sidecar/boot) |
+| Reference pack | App evidence | Verdict |
+|---|---|---|
+| Prominence II CF | `install-report.json` + `installer.log` + `msm-install.json` (`32f26095`, 575 installed, 347+21, `verify-boot: complete`) | MATCH (575 vs 576 = client-only counting) |
+| Cobbleverse | `4cde18a0` / `ef90e51f` reports + `Done (3.884s)` / `Done (1.128s)` | MATCH (114 total jars = ref 99+15) |
+| Prominence II Modrinth | [`docs/evidence/prominence-modrinth-install.json`](../evidence/prominence-modrinth-install.json) — 351/211/3 plan, 348+15 jars, 1 autofix, `verify-boot: complete` | MATCH on outcome (348 vs reference 340+0; counts differ by data-version) |
+| SkyFactory 5 | `e2e-sf5-keymode` (264 jars, boot only) + [`curseforge-skyfactory5-install-run2.json`](../evidence/curseforge-skyfactory5-install-run2.json) (262+2, verified boot) | PARTIAL — passes, but install verification is **flaky** (see below) |
+| SkyBlock Enhanced, BattleArmory TACZ, Slimes Adventure, Zombie Invade, Dungeon Heroes (671029), RLCraft, DawnCraft, Otherworld D&D | none | **NO-EVIDENCE** (8 packs) |
 
-So "matches the reference's 12/12" is **not proven** on this side. What is proven: the shared engine
-that produced the reference's 12/12 is ported faithfully (section A), and the app's own verified installs
-reach `Done (` — this session added SF5 (installer route) and a prebuilt 1.0 GB Forge pack.
+Two further real runs have artifacts but no reference counterpart: `09e62b62` (CF project 936875 — 327 jars,
+`Done (13.170s)`, [`docs/evidence/curseforge-install.json`](../evidence/curseforge-install.json)) and
+CraftToExile.
+
+**SkyFactory 5 flakiness (new finding):** one instrumented run failed with a Forge mixin crash before
+`Done (` and the immediate re-run passed. Same archive, Java and code — an intermittent first-boot crash in
+the pack, not a deterministic installer defect. The reference recorded SF5 as PASS once and did not
+characterise flakiness. A failed verification now records the auto-fix rounds it attempted so this is
+attributable next time.
+
+So "matches the reference's 12/12" is **not proven** on this side: the shared engine that produced the
+reference's 12/12 is ported faithfully (section A) and 4 packs have their own verified evidence, but 8 matrix
+packs have never been run through this app.
 
 ## D. Prior claim corrected
 
