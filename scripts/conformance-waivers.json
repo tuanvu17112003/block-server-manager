@@ -1,0 +1,36 @@
+{
+  "comment": "Explicit deferrals for docs/research/2026-10-29-universal-modpack-install.md §2 formats that have no registered adapter. Read by scripts/conformance-spec.mjs, which fails if a format here also has an adapter (stale waiver) or if a format has neither. Rule (docs/audit/24-deviations-register.md): a recorded deviation is data, an unrecorded one is a QA failure — so every deferral must carry a reason.",
+  "schema": "priority = the §2 table priority; format = the §2 table name; reason = one line, why it is not implemented yet",
+  "waivers": [
+    {
+      "priority": 1,
+      "format": "MCBBS",
+      "reason": "regional format, no public spec and no real artefact on hand; E4, unmeasured."
+    },
+    {
+      "priority": 2,
+      "format": "CurseForge client",
+      "reason": "the working engine (curseforge.ts) already installs it; only the adapter wrapper is missing — plan C3, RD-1/D1."
+    },
+    {
+      "priority": 4,
+      "format": "HMCL server",
+      "reason": "no real artefact measured; not on the C0-C8 critical path."
+    },
+    {
+      "priority": 9,
+      "format": "GDLauncher",
+      "reason": "no real artefact measured; gdlpack.json is hash-only resolution and needs provider work first."
+    },
+    {
+      "priority": 10,
+      "format": "Technic",
+      "reason": "no real artefact measured; Solder read API only, lowest install share."
+    },
+    {
+      "priority": 12,
+      "format": "SPC output",
+      "reason": "partially reachable today via curseforge.ts flat-manifest handling (curseforge.ts:494); no adapter of its own."
+    }
+  ]
+}
