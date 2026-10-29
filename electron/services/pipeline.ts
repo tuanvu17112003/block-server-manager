@@ -22,13 +22,23 @@ import { makeCuratedResolver, appendLearned } from './installer/curated';
 import { resolveMrpack, splitDeps, installModrinth, fetchModrinthDependency, type MrIndex } from './installer/modrinth';
 import { installCurseforge, inspectStagedZip, inspectCurseForgeProject, type InstallCfResult } from './installer/curseforge';
 import { effectiveCacheDir } from './storage';
+import {
+  adapterRegistry, buildArchiveIndex, createAdapterIo, type PackRecipe, type PlannedFile,
+} from './adapters/index';
+import { installRecipe } from './installer/recipe';
+import { downloadFirstAvailable } from './installer/core';
 
 // ---- public source contract (renderer `PipelineSourceRequest`) ----
 export type PipelineSourceRequest =
   | { kind: 'modrinthRemote'; projectId: string; versionId: string; loader?: PipelineLoaderPin; javaPath?: string }
   | { kind: 'localMrpack'; sourceId: string }
   | { kind: 'curseForgeServerZip'; zipName: string }
-  | { kind: 'curseforgeProject'; projectId: number };
+  | { kind: 'curseforgeProject'; projectId: number }
+  // ---- P1b: format-agnostic inputs, resolved by the pack adapter layer ----
+  /** An FTB pack resolved from the public API (no key). `versionId` omitted ⇒ latest. */
+  | { kind: 'ftbProject'; packId: number; versionId?: number }
+  /** A launcher archive handed to the adapter registry; the format is detected from its contents. */
+  | { kind: 'packArchive'; sourceId: string };
 
 export type PipelineFileAction = 'include' | 'exclude' | 'awaitingUserChoice';
 export type PipelineFileChoice = 'include' | 'exclude';
@@ -61,7 +71,7 @@ export interface PipelineArtifactSnapshot {
 }
 
 export interface PipelineSourcePin {
-  source: 'modrinth' | 'curseforge' | 'localMrpack' | 'unknown';
+  source: 'modrinth' | 'curseforge' | 'localMrpack' | 'ftb' | 'packArchive' | 'unknown';
   projectId?: string | number;
   versionId?: string;
   zipName?: string;
@@ -103,6 +113,8 @@ interface HeldPreview {
   index?: MrIndex;
   slug?: string | null;
   zipPath?: string;
+  /** P1b: canonical recipe produced by the pack adapter layer (FTB / detected archives). */
+  recipe?: PackRecipe;
 }
 
 export interface PipelineInstallChoices { files: Record<string, PipelineFileChoice>; approvedReplacements: string[]; autoDeleteCurseForgeZip: boolean }
@@ -490,6 +502,52 @@ export class Pipeline {
       warnings.push(meta.hasServerPack
         ? 'Official API key mode: the latest server pack (serverPackFileId) will be installed.'
         : 'Official API key mode: no server pack on the latest file; the client pack is resolved from manifest.json.');
+    } else if (source.kind === 'ftbProject' || source.kind === 'packArchive') {
+      // ---- P1b: format detected by the adapter layer, not by the UI source kind ----
+      this.jobs.progress(jobId, { progress: 15, stage: 'detecting pack format' });
+      const adapterIo = createAdapterIo(message => log(message));
+      let detectCtx: { provider?: { kind: string; ids: Record<string, string | number | undefined> }; archive?: Awaited<ReturnType<typeof buildArchiveIndex>> };
+      if (source.kind === 'ftbProject') {
+        detectCtx = { provider: { kind: 'ftb', ids: { packId: source.packId, versionId: source.versionId } } };
+      } else {
+        const archivePath = assertRegularArchiveFile(source.sourceId, 'modpack archive');
+        held.artifactPath = source.sourceId;
+        detectCtx = { archive: await buildArchiveIndex(source.sourceId) };
+      }
+
+      const recipe = await adapterRegistry.resolve(detectCtx, adapterIo);
+      held.recipe = recipe;
+      held.sourceName = recipe.name;
+      held.loader = { kind: recipe.loader, minecraftVersion: recipe.mc, loaderVersion: recipe.loaderVersion };
+      held.sourcePin = source.kind === 'ftbProject'
+        ? { source: 'ftb', projectId: source.packId, ...(source.versionId === undefined ? {} : { versionId: String(source.versionId) }), artifact: null }
+        : { source: 'packArchive', sourceId: source.sourceId, artifact: null };
+      log(`[adapters] ${recipe.formatId}: "${recipe.name}" ${recipe.loader} ${recipe.loaderVersion ?? '(unpinned)'} MC ${recipe.mc}, ${recipe.files.length} files`);
+      for (const entry of recipe.resolution) log(`[adapters]   ${entry.field} ← ${entry.source}`);
+      for (const warning of recipe.warnings) {
+        warnings.push(`${warning.rule}${warning.path ? ` (${warning.path})` : ''}: ${warning.message}`);
+      }
+
+      // Canonical side resolution (L1). The boot-time L2/L3 layer still has the final say, which is the
+      // whole point: `unknown` stays a normal server candidate here instead of being silently excluded.
+      const curated = makeCuratedResolver({
+        platform: recipe.formatId.startsWith('curseforge') ? 'curseforge' : 'modrinth',
+        packSlug: null,
+        presentPaths: recipe.files.map(file => file.path),
+      });
+      for (const file of recipe.files) {
+        const declared = file.side === 'unknown' ? 'required' : file.side;
+        const verdict = curated.resolve(file.path, declared);
+        const mapped = mapFilePolicy({
+          path: file.path,
+          serverEnv: file.side === 'unknown' ? null : file.side,
+          clientEnv: null,
+          curated: verdict,
+          curatedProtect: verdict.protect,
+        });
+        warnings.push(...mapped.warnings);
+        decisions.push(mapped.decision);
+      }
     }
 
     const previewId = randomUUID();
@@ -682,6 +740,67 @@ export class Pipeline {
               files: held.index.files.map(file => file.path),
               loader: held.loader.kind, mc: held.loader.minecraftVersion,
             };
+          } else if (held.recipe) {
+            // ---- P1b: install from the canonical recipe produced by a pack adapter ----
+            const resolvedDecisions = held.fileDecisions.map(decision => {
+              const choice = choices.files[decision.path];
+              return choice ? { ...decision, action: choice, reason: 'userChoice' as const } : decision;
+            });
+            const excludeFiles = new Set(
+              resolvedDecisions.filter(d => d.action === 'exclude').map(d => d.path),
+            );
+            const includeFiles = new Set(
+              resolvedDecisions
+                .filter(d => d.action === 'include' && (d.reason === 'userChoice' || d.reason === 'optionalDefaultKeep'))
+                .map(d => d.path),
+            );
+            const res = await installRecipe({
+              recipe: held.recipe,
+              dir: stagingDir,
+              javaExe: input.javaPath?.trim() || 'java',
+              cacheDir: this.cacheDir(),
+              excludeFiles,
+              includeFiles,
+              onProgress,
+              ...(signal ? { signal } : {}),
+            });
+            report.files.push({ path: `${res.installed} files`, outcome: 'installed' });
+            if (res.skippedUnsupported > 0) report.files.push({ path: `${res.skippedUnsupported} client-only`, outcome: 'skipped-client-only' });
+            if (res.skippedOptional > 0) report.files.push({ path: `${res.skippedOptional} optional`, outcome: 'skipped-optional' });
+            if (res.skippedUserExcluded > 0) report.files.push({ path: `${res.skippedUserExcluded} plan-excluded`, outcome: 'skipped-user-choice' });
+            report.warnings.push(...res.warnings);
+            report.stages.push({ stage: 'download', outcome: 'complete' });
+
+            // The recipe declares the loader exactly, so record it before publish.
+            const loaderName = LOADER_DTO[held.recipe.loader] ?? held.recipe.loader;
+            installInput.loader = loaderName;
+            installInput.mcVersion = held.recipe.mc;
+            if (held.recipe.loaderVersion) installInput.loaderVersion = held.recipe.loaderVersion;
+            report.loader = {
+              kind: REPORT_LOADER_KIND[held.recipe.loader] ?? held.recipe.loader,
+              minecraftVersion: held.recipe.mc,
+              loaderVersion: held.recipe.loaderVersion,
+            };
+
+            // Keep the L2/L3 defense active for adapter installs too: a pack that lies about sidedness
+            // must still be caught by the jar scan and the boot-decides auto-fix loop.
+            autoFixContext = {
+              platform: held.recipe.formatId.startsWith('curseforge') ? 'curseforge' : 'modrinth',
+              mc: held.recipe.mc,
+              loader: held.recipe.loader,
+              protectBasenames: makeCuratedResolver({
+                platform: held.recipe.formatId.startsWith('curseforge') ? 'curseforge' : 'modrinth',
+                packSlug: null,
+                presentPaths: held.recipe.files.map(file => file.path),
+              }).protectBasenames,
+              fetchDependency: null,
+            };
+            sidecarData = {
+              platform: held.recipe.formatId,
+              files: held.recipe.files.map(file => file.path),
+              loader: held.recipe.loader,
+              mc: held.recipe.mc,
+            };
           } else if (held.zipPath || held.source.kind === 'curseForgeServerZip' || held.source.kind === 'curseforgeProject') {
             const zipPath = held.zipPath ?? (held.source.kind === 'curseForgeServerZip'
               ? path.join(this.ctx.dataRoot, 'curseforge-import', held.source.zipName)
@@ -821,6 +940,17 @@ export class Pipeline {
   private assertInstallableSource(held: HeldPreview): void {
     if (held.source.kind === 'curseForgeServerZip' || held.source.kind === 'curseforgeProject') {
       this.assertCurseForgeMetadata(held.loader.kind, held.loader.minecraftVersion);
+      return;
+    }
+    if (held.recipe) {
+      // A recipe already passed `validateRecipe` (exact MC, safe paths, resolvable sources) at preview.
+      // This adds the install-time policy gate that applies to every source kind.
+      if (!held.recipe.mc.trim() || !held.recipe.loader.trim()) {
+        throw appError('validation',
+          `The ${held.recipe.formatId} adapter did not resolve an exact Minecraft version and loader, so the pack `
+          + 'cannot be installed safely. Blank metadata is never published.');
+      }
+      assertSupportedNewInstallLoader(held.recipe.loader);
       return;
     }
     assertSupportedNewInstallLoader(held.loader.kind);

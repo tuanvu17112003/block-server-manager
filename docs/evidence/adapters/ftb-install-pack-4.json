@@ -1,0 +1,88 @@
+{
+  "harness": "verify-ftb-install.mjs",
+  "startedAt": "2026-10-29T10:44:54.505Z",
+  "packId": 4,
+  "versionId": null,
+  "javaPath": "C:\\Program Files\\Java\\jre1.8.0_503\\bin\\java.exe",
+  "dataRoot": "(deleted after success)",
+  "preview": {
+    "sourceName": "FTB Presents Stoneblock 2",
+    "loader": {
+      "kind": "forge",
+      "minecraftVersion": "1.12.2",
+      "loaderVersion": "14.23.5.2847"
+    },
+    "include": 1426,
+    "exclude": 0,
+    "conflicts": [
+      "mods/Controlling-3.0.9.jar",
+      "mods/MouseTweaks-2.10-mc1.12.2.jar",
+      "mods/Xaeros_Minimap_20.18.0_Forge_1.12.jar",
+      "mods/CraftPresence-1.12.2-1.6.6.jar",
+      "config/MouseTweaks.cfg",
+      "config/craftpresence.properties"
+    ],
+    "totalFiles": 1432,
+    "sourcePin": {
+      "source": "ftb",
+      "projectId": 4,
+      "artifact": null
+    },
+    "warnings": [
+      "mods/Controlling-3.0.9.jar: community exclude: controlling",
+      "mods/MouseTweaks-2.10-mc1.12.2.jar: community exclude: MouseTweaks",
+      "mods/Xaeros_Minimap_20.18.0_Forge_1.12.jar: community exclude: Xaeros_Minimap",
+      "mods/CraftPresence-1.12.2-1.6.6.jar: community exclude: craftpresence",
+      "config/MouseTweaks.cfg: community exclude: MouseTweaks",
+      "config/craftpresence.properties: community exclude: craftpresence"
+    ]
+  },
+  "install": {
+    "status": "complete",
+    "serverId": "b67380d4-3385-49e6-b11e-014462851fbc",
+    "loader": {
+      "kind": "forge",
+      "minecraftVersion": "1.12.2",
+      "loaderVersion": "14.23.5.2847"
+    },
+    "files": [
+      {
+        "path": "1426 files",
+        "outcome": "installed"
+      },
+      {
+        "path": "6 plan-excluded",
+        "outcome": "skipped-user-choice"
+      }
+    ],
+    "stages": [
+      {
+        "stage": "download",
+        "outcome": "complete"
+      },
+      {
+        "stage": "validate",
+        "outcome": "complete"
+      },
+      {
+        "stage": "verify-boot",
+        "outcome": "complete",
+        "detail": "first boot"
+      },
+      {
+        "stage": "publish",
+        "outcome": "complete"
+      }
+    ],
+    "warnings": [
+      "6 files excluded by the reviewed plan"
+    ],
+    "error": null,
+    "autofix": null
+  },
+  "published": null,
+  "error": null,
+  "verdict": "PASS",
+  "finishedAt": "2026-10-29T10:54:26.578Z",
+  "durationSeconds": 572.1
+}

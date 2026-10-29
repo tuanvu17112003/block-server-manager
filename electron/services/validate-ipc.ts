@@ -124,7 +124,7 @@ const BACKUP_RESTORE_MODES = ['in-place', 'reset'] as const;
 const MODRINTH_INDEXES = ['relevance', 'downloads', 'follows', 'newest', 'updated'] as const;
 const PIPELINE_LOADER_KINDS = ['vanilla', 'fabric', 'forge', 'neoForge', 'quilt'] as const;
 const PIPELINE_FILE_CHOICES = ['include', 'exclude'] as const;
-const PIPELINE_SOURCE_KINDS = ['modrinthRemote', 'localMrpack', 'curseForgeServerZip', 'curseforgeProject'] as const;
+const PIPELINE_SOURCE_KINDS = ['modrinthRemote', 'localMrpack', 'curseForgeServerZip', 'curseforgeProject', 'ftbProject', 'packArchive'] as const;
 
 function fail(command: string, detail: string): never {
   throw appError('validation', `${command}: ${detail}`);
@@ -437,6 +437,14 @@ function validatePipelineSource(command: KnownCommand, args: Args): void {
       return;
     case 'curseforgeProject':
       requireInt(command, source, 'projectId', { min: 1 });
+      return;
+    // ---- P1b: format-agnostic sources resolved by the pack adapter layer ----
+    case 'ftbProject':
+      requireInt(command, source, 'packId', { min: 1 });
+      if (present(source, 'versionId')) requireInt(command, source, 'versionId', { min: 1 });
+      return;
+    case 'packArchive':
+      requirePathString(command, source, 'sourceId');
       return;
     default:
       fail(command, '"source.kind" is not a supported pipeline source.');

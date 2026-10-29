@@ -1,0 +1,79 @@
+{
+  "harness": "verify-ftb-install.mjs",
+  "startedAt": "2026-10-29T10:26:27.038Z",
+  "packId": 6,
+  "versionId": null,
+  "javaPath": "C:\\Program Files\\Java\\jre1.8.0_503\\bin\\java.exe",
+  "dataRoot": "C:\\Users\\tronv\\AppData\\Local\\Temp\\msm-ftb-install-4De8M5",
+  "preview": {
+    "sourceName": "FTB Omnia",
+    "loader": {
+      "kind": "forge",
+      "minecraftVersion": "1.15.2",
+      "loaderVersion": null
+    },
+    "include": 319,
+    "exclude": 2,
+    "conflicts": [
+      "mods/Blur-1.1.0-1.jar",
+      "mods/MouseTweaks-2.13-mc1.15.1.jar",
+      "mods/Controlling-6.1.1.jar",
+      "config/MouseTweaks.cfg",
+      "config/blur-client.toml"
+    ],
+    "totalFiles": 326,
+    "sourcePin": {
+      "source": "ftb",
+      "projectId": 6,
+      "artifact": null
+    },
+    "warnings": [
+      "ftb.modloader-missing-inferred: FTB declares no modloader for this version; \"forge\" inferred from 6/154 jar names contain \"-forge-\".",
+      "mods/Blur-1.1.0-1.jar: community exclude: blur",
+      "mods/MouseTweaks-2.13-mc1.15.1.jar: community exclude: MouseTweaks",
+      "mods/Controlling-6.1.1.jar: community exclude: controlling",
+      "config/MouseTweaks.cfg: community exclude: MouseTweaks",
+      "config/blur-client.toml: community exclude: blur"
+    ]
+  },
+  "install": {
+    "status": "failed",
+    "serverId": "55a452e9-89a4-4e37-bd43-bee6588b4e99",
+    "loader": {
+      "kind": "forge",
+      "minecraftVersion": "1.15.2",
+      "loaderVersion": null
+    },
+    "files": [
+      {
+        "path": "319 files",
+        "outcome": "installed"
+      },
+      {
+        "path": "7 plan-excluded",
+        "outcome": "skipped-user-choice"
+      }
+    ],
+    "stages": [
+      {
+        "stage": "download",
+        "outcome": "complete"
+      },
+      {
+        "stage": "verify-boot",
+        "outcome": "failed",
+        "detail": "0 auto-fix(es) in 1 round(s) before giving up"
+      }
+    ],
+    "warnings": [
+      "7 files excluded by the reviewed plan"
+    ],
+    "error": "The server did not reach \"Done (\" during install verification: process exited (code 1) before Done(\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat org.spongepowered.asm.launch.MixinLaunchPlugin.init(MixinLaunchPlugin.java:153)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat org.spongepowered.asm.launch.MixinTransformationService.initialize(MixinTransformationService.java:85)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat io.github.lxgaming.mixin.launch.MixinTransformationService.lambda$initialize$2(MixinTransformationService.java:81)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat java.lang.Iterable.forEach(Unknown Source)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat io.github.lxgaming.mixin.launch.MixinTransformationService.initialize(MixinTransformationService.java:81)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat cpw.mods.modlauncher.TransformationServiceDecorator.onInitialize(TransformationServiceDecorator.java:68)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat cpw.mods.modlauncher.TransformationServicesHandler.lambda$initialiseTransformationServices$7(TransformationServicesHandler.java:107)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat java.util.HashMap$Values.forEach(Unknown Source)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat cpw.mods.modlauncher.TransformationServicesHandler.initialiseTransformationServices(TransformationServicesHandler.java:107)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat cpw.mods.modlauncher.TransformationServicesHandler.initializeTransformationServices(TransformationServicesHandler.java:59)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat cpw.mods.modlauncher.Launcher.run(Launcher.java:75)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat cpw.mods.modlauncher.Launcher.main(Launcher.java:65)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat net.minecraftforge.server.ServerMain$Runner.runLauncher(ServerMain.java:63)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat net.minecraftforge.server.ServerMain$Runner.access$100(ServerMain.java:60)\n\u001b[m\u001b[32m[17:31:37] [main/INFO] [STDERR/]: [java.lang.ThreadGroup:uncaughtException:-1]: \tat net.minecraftforge.server.ServerMain.main(ServerMain.java:57)",
+    "autofix": null
+  },
+  "published": null,
+  "error": null,
+  "verdict": "FAIL",
+  "finishedAt": "2026-10-29T10:31:38.431Z",
+  "durationSeconds": 311.4
+}

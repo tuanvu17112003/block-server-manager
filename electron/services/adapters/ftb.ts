@@ -108,24 +108,26 @@ export function normalizeFtbPath(path: string): string {
 /**
  * Resolve the destination path for one FTB file entry.
  *
- * The FTB API is inconsistent between packs, which is the whole reason this needs to be explicit:
- *  - Most packs: `path` is the full file path (`./mods/foo.jar`).
- *  - Some packs (e.g. FTB Omnia): `path` is only the *directory* (`./mods`) and the real filename is in
- *    `name` (`Bookshelf-1.15.2-5.3.9.jar`). Using `path` alone silently dropped all 155 mods and made the
- *    pack look vanilla — the canonical recipe must not depend on which convention an author shipped.
- * A directory-like `path` (no filename in it) is therefore completed with `name` when `name` looks like a
- * file. Returns '' when no safe destination can be derived.
+ * The FTB API is inconsistent between packs, which is why this cannot be guessed from extensions:
+ *  - Most packs: `path` is the full file path (`./mods/foo.jar`, with `name` equal to the last segment).
+ *  - Some packs (FTB Omnia): `path` is only the *directory* (`./mods`) and the real filename is in `name`.
+ *  - Some entries point at a directory but ship a filename with **no extension** (`./config/vanillafix`
+ *    + `config_version`), which defeats any "has a dot ⇒ it is a file" heuristic — and treating that as a
+ *    file made a later directory creation collide (EEXIST).
+ *
+ * The reliable invariant is that **`name` is always the file name** and `path` is either that full path
+ * or its parent directory. So: use `path` when it already ends with `name`, otherwise join them.
+ * Returns '' when no safe destination can be derived.
  */
 export function resolveFtbDestPath(file: Pick<FtbFile, 'path' | 'name'>): string {
   const rawPath = normalizeFtbPath(file.path ?? '');
   const rawName = (file.name ?? '').replaceAll('\\', '/').replace(/^\.\/+/, '').replace(/^\/+/, '');
   if (rawPath === '') return '';
-  const pathHasFilename = /\.[A-Za-z0-9]{1,8}$/.test(rawPath);
-  if (pathHasFilename) return rawPath;
-  // `path` is a folder: append the declared filename when it is a plain file name.
-  if (rawName !== '' && !rawName.includes('/') && /\.[A-Za-z0-9]{1,12}$/.test(rawName)) {
-    return `${rawPath.replace(/\/+$/, '')}/${rawName}`;
-  }
+  if (rawName === '') return rawPath;
+  // `path` already carries the filename.
+  if (rawPath === rawName || rawPath.endsWith(`/${rawName}`)) return rawPath;
+  // `name` is a bare filename and `path` is its directory.
+  if (!rawName.includes('/')) return `${rawPath.replace(/\/+$/, '')}/${rawName}`;
   return rawPath;
 }
 

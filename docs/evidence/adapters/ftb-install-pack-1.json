@@ -1,0 +1,86 @@
+{
+  "harness": "verify-ftb-install.mjs",
+  "startedAt": "2026-10-29T10:55:02.906Z",
+  "packId": 1,
+  "versionId": null,
+  "javaPath": "C:\\Program Files\\Java\\jre1.8.0_503\\bin\\java.exe",
+  "dataRoot": "(deleted after success)",
+  "preview": {
+    "sourceName": "FTB Academy 1.12",
+    "loader": {
+      "kind": "forge",
+      "minecraftVersion": "1.12.2",
+      "loaderVersion": "14.23.5.2846"
+    },
+    "include": 1415,
+    "exclude": 59,
+    "conflicts": [
+      "config/MouseTweaks.cfg",
+      "config/craftpresence.properties",
+      "mods/Controlling-3.0.7.jar",
+      "mods/MouseTweaks-2.10-mc1.12.2.jar",
+      "mods/CraftPresence-1.12.2-1.5.5.jar"
+    ],
+    "totalFiles": 1479,
+    "sourcePin": {
+      "source": "ftb",
+      "projectId": 1,
+      "artifact": null
+    },
+    "warnings": [
+      "config/MouseTweaks.cfg: community exclude: MouseTweaks",
+      "config/craftpresence.properties: community exclude: craftpresence",
+      "mods/Controlling-3.0.7.jar: community exclude: controlling",
+      "mods/MouseTweaks-2.10-mc1.12.2.jar: community exclude: MouseTweaks",
+      "mods/CraftPresence-1.12.2-1.5.5.jar: community exclude: craftpresence"
+    ]
+  },
+  "install": {
+    "status": "complete",
+    "serverId": "a8c97931-17bb-47f5-b5ce-18746a3dd820",
+    "loader": {
+      "kind": "forge",
+      "minecraftVersion": "1.12.2",
+      "loaderVersion": "14.23.5.2846"
+    },
+    "files": [
+      {
+        "path": "1415 files",
+        "outcome": "installed"
+      },
+      {
+        "path": "64 plan-excluded",
+        "outcome": "skipped-user-choice"
+      }
+    ],
+    "stages": [
+      {
+        "stage": "download",
+        "outcome": "complete"
+      },
+      {
+        "stage": "validate",
+        "outcome": "complete"
+      },
+      {
+        "stage": "verify-boot",
+        "outcome": "complete",
+        "detail": "first boot"
+      },
+      {
+        "stage": "publish",
+        "outcome": "complete"
+      }
+    ],
+    "warnings": [
+      "64 files excluded by the reviewed plan"
+    ],
+    "error": null,
+    "autofix": null
+  },
+  "published": null,
+  "error": null,
+  "verdict": "PASS",
+  "finishedAt": "2026-10-29T11:03:11.647Z",
+  "durationSeconds": 488.7
+}

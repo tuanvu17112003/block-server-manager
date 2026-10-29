@@ -224,9 +224,17 @@ test('resolveFtbDestPath: FTB Omnia puts the directory in `path` and the file in
   assert.equal(resolveFtbDestPath({ path: './mods', name: 'Bookshelf-1.15.2-5.3.9.jar' }), 'mods/Bookshelf-1.15.2-5.3.9.jar');
   // The common shape must be left untouched.
   assert.equal(resolveFtbDestPath({ path: './mods/shared.jar', name: 'shared.jar' }), 'mods/shared.jar');
-  // A folder path with no usable filename stays a folder.
-  assert.equal(resolveFtbDestPath({ path: './config', name: '' }), 'config');
   assert.equal(resolveFtbDestPath({ path: '', name: 'x.jar' }), '');
+});
+
+test('resolveFtbDestPath: extensionless filenames must not be mistaken for directories', () => {
+  // Real shape from FTB Stoneblock 2: path is a DIRECTORY ("config/vanillafix") and the file has no
+  // extension ("config_version"). A "has a dot ⇒ file" heuristic treated the directory as a file and a
+  // later mkdir collided with EEXIST.
+  assert.equal(resolveFtbDestPath({ path: './config/vanillafix', name: 'config_version' }), 'config/vanillafix/config_version');
+  assert.equal(resolveFtbDestPath({ path: './config/vanillafix', name: 'methods-stable_39.csv' }), 'config/vanillafix/methods-stable_39.csv');
+  // A full path whose name already matches must stay as-is.
+  assert.equal(resolveFtbDestPath({ path: './config/mod.toml', name: 'mod.toml' }), 'config/mod.toml');
 });
 
 test('buildFtbRecipe: mods without a modloader target are inferred from jar names, warned and recorded', () => {
