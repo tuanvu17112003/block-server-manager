@@ -250,6 +250,15 @@ export async function inspectStagedZip(zipPath: string): Promise<CfInspection> {
       const mMatch = loaderVersion.match(/^(\d+\.\d+(?:\.\d+)?)-/);
       minecraftVersion = mMatch ? mMatch[1] : null;
     }
+    // Prebuilt packs hide their exact metadata in `libraries/` (Forge `forge-<mc>-<ver>`,
+    // `libraries/net/minecraft/server/<mc>/`) or in a shipped installer name. Without this a
+    // perfectly runnable prebuilt pack was rejected as "blank metadata" and could never install.
+    const inferred = inferServerPackMetadata(names);
+    if (inferred) {
+      loader = loader ?? inferred.loader;
+      loaderVersion = loaderVersion ?? inferred.loaderVersion;
+      minecraftVersion = minecraftVersion ?? inferred.mc;
+    }
     return { name, classification: 'supportedServerPack', reason: prebuilt ? 'Prebuilt server pack (loader included).' : shippedInstaller ? 'Server pack with a bundled loader installer.' : 'Plain server pack (loader will be installed).', minecraftVersion, loader, loaderVersion };
   }
   return { name, classification: 'unsupported', reason: 'No mods/, loader artifacts, or installer recognized.', minecraftVersion: null, loader: null, loaderVersion: null };
