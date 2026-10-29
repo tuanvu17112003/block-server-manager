@@ -207,3 +207,17 @@ does touch it, the matrix must be re-run and this brief amended.
 - **CurseForge shape-B provider adapter** does not exist; `curseforge.*` adapters remain **E3**.
 - **Prism / ATLauncher remain E3** until a user supplies one real instance of each.
 - **Four formats deferred** with recorded reasons, now surfaced to the user instead of hidden.
+
+### A defect Item 1 created and this pass then had to fix
+
+Making `audit-adapters-real.mjs` a gate step immediately exposed a problem the brief did not foresee:
+the harness wrote `startedAt` / `finishedAt` / `durationSeconds` into its **committed** evidence file. That was
+harmless while it was a manual script, but as a gate step it meant **every `verify.mjs` run left the tree dirty**,
+and the committed `docs/evidence/adapters/real-artefact-audit.json` could never describe the tree that produced
+it — it would always be one run behind. Committing the refreshed file each time is not a fix; it is churn that
+hides real evidence changes among timestamp noise.
+
+Fixed by moving run-specific timing to the console and keeping only what was measured in the file
+(commit `c724e4c`). Verified by running the harness twice and then the full gate twice: **no diff, 12/12, tree
+clean**. Worth recording because it is the same lesson as DV-13 in a new place — a gate that mutates the tree it
+is judging is not a trustworthy judge.
