@@ -167,6 +167,8 @@ export const atlauncherAdapter: PackAdapter = {
         { field: 'loader', source: loader === 'vanilla' ? 'no launcher.loaderVersion.type' : `instance.json launcher.loaderVersion.type="${loader}"` },
         { field: 'payload', source: 'ATLauncher instance tree applied as overrides' },
       ],
+    evidenceGrade: 'E3',
+    evidenceNote: 'schema-derived from ATLauncher instance.json; NO real ATLauncher instance exists on disk, so nothing was installed. Not proof.',
     };
   },
 };

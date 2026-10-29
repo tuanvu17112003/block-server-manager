@@ -1,4 +1,4 @@
-// P1b tests: the format-agnostic recipe installer's planning rules.
+﻿// P1b tests: the format-agnostic recipe installer's planning rules.
 //
 // These are the rules that decide what a *server* gets, so they are tested without touching disk or
 // network: side mapping, plan exclusions, optional defaults, manager-owned protection.
@@ -25,6 +25,8 @@ function recipe(files: PlannedFile[]): PackRecipe {
     managerOwned: [],
     warnings: [],
     resolution: [],
+    evidenceGrade: 'E3',
+    evidenceNote: 'test fixture',
   };
 }
 
@@ -75,3 +77,4 @@ test('planRecipeFiles: manager-owned state is never installed from a pack', () =
   assert.deepEqual(plan.install.map(entry => entry.path), ['mods/ok.jar'],
     'a pack must never overwrite eula/properties/ops');
 });
+

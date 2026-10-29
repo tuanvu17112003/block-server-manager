@@ -146,6 +146,8 @@ export function buildMrpackRecipe(input: {
       { field: 'side', source: 'files[].env.server, absent â‡’ unknown' },
       ...(input.slug ? [{ field: 'project', source: `modrinth project ${input.slug}` }] : []),
     ],
+    evidenceGrade: 'E2',
+    evidenceNote: 'a real .mrpack installed through the adapter layer and reached a verified boot (docs/evidence/adapters/adapter-end-to-end-install.json): 341 mod jars published, 351 include / 211 exclude matching the existing engine.',
   };
 }
 

@@ -290,6 +290,8 @@ async function resolveHttpTree(
       { field: 'files', source: 'index.toml [[files]] metafile → *.pw.toml [download].url, fetched over HTTP' },
       { field: 'side', source: '*.pw.toml side (both/client/server), absent ⇒ both' },
     ],
+    evidenceGrade: 'E2',
+    evidenceNote: 'a real zipped packwiz pack installed end-to-end through installRecipe with a real CDN download; the HTTP-tree shape is resolve-only until a real tree is installed.',
   };
 }
 
@@ -467,6 +469,8 @@ export const packwizAdapter: PackAdapter = {
         { field: 'files', source: 'index.toml [[files]] metafile Ã¢â€ â€™ *.pw.toml [download].url' },
         { field: 'side', source: '*.pw.toml side (both/client/server), absent Ã¢â€¡â€™ both' },
       ],
+    evidenceGrade: 'E2',
+    evidenceNote: 'a real zipped packwiz pack installed end-to-end through installRecipe with a real CDN download; the HTTP-tree shape is resolve-only until a real tree is installed.',
     };
   },
 };

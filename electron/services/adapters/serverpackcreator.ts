@@ -144,6 +144,8 @@ export const serverPackCreatorAdapter: PackAdapter = {
         ...(runtime.loaderVersion ? [{ field: 'loaderVersion', source: 'manifest.json modloaderVersion' }] : []),
         { field: 'payload', source: 'archive tree applied as one root override layer (SPC builds server packs)' },
       ],
+    evidenceGrade: 'E3',
+    evidenceNote: 'a real 1 GB SPC archive resolves from its declared manifest.json, but it has not been installed end-to-end through this adapter, so resolve parity only.',
     };
   },
 };

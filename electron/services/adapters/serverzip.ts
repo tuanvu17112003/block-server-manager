@@ -147,6 +147,8 @@ export const serverZipAdapter: PackAdapter = {
         { field: 'loader', source: evidence.source ?? 'no loader evidence' },
         { field: 'payload', source: 'archive tree applied as overrides' },
       ],
+    evidenceGrade: 'E3',
+    evidenceNote: 'a bare server zip with no manifest; two real cfpack archives resolve through it, but it plans no downloads and has not been installed end-to-end through the adapter path.',
     };
   },
 };

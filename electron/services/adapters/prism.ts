@@ -152,6 +152,8 @@ export const prismAdapter: PackAdapter = {
         { field: 'loader', source: runtime.loaderUid ? `mmc-pack.json component "${runtime.loaderUid}"` : 'no loader component' },
         { field: 'payload', source: 'Prism instance tree applied as overrides (no server export exists)' },
       ],
+    evidenceGrade: 'E3',
+    evidenceNote: 'schema-derived from PrismLauncher mmc-pack.json; NO real Prism instance exists on disk, so nothing was installed. Not proof.',
     };
   },
 };

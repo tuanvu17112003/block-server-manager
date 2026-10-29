@@ -1,11 +1,11 @@
-// Pack adapter layer — the generality core.
+// Pack adapter layer â€” the generality core.
 //
 // Goal: stop special-casing individual packs and instead accept a *format*. Every adapter is a pure
 // module with two responsibilities:
-//   1. `detect()`  — decide, from archive/provider evidence only, whether this input is its format.
+//   1. `detect()`  â€” decide, from archive/provider evidence only, whether this input is its format.
 //                    Detection is by CONTENT SIGNATURE with validated keys, never by file extension:
 //                    `manifest.json` and `instance.json` are each claimed by several formats.
-//   2. `resolve()` — normalize the input into one canonical `PackRecipe`, so the shared install
+//   2. `resolve()` â€” normalize the input into one canonical `PackRecipe`, so the shared install
 //                    pipeline never needs to know which launcher produced the pack.
 //
 // Design rules taken from the online research (docs/research/2026-10-29-universal-modpack-install.md):
@@ -36,15 +36,28 @@ export type PackFormatId =
 /**
  * Canonical server-side verdict for one file. `unknown` exists because CurseForge has no
  * per-file side data at all and several formats (ATLauncher, Technic, Prism, bare zips) carry none
- * either — collapsing that into `unsupported` would silently drop server-required mods.
+ * either â€” collapsing that into `unsupported` would silently drop server-required mods.
  */
 export type FileSide = 'required' | 'optional' | 'unsupported' | 'unknown';
 
 export type LoaderFamily = 'vanilla' | 'paper' | 'fabric' | 'quilt' | 'forge' | 'neoforge' | 'hybrid';
 
+/**
+ * Evidence grade for an adapter's support, from docs/audit/19 §2. Recorded on the recipe itself so that no
+ * caller can mistake a schema-derived adapter for a proven one (invariant I3, research §9).
+ *
+ *   E1 — measured over the whole real population (a census).
+ *   E2 — a real artefact of this format was installed and booted end-to-end by this code.
+ *   E3 — schema-derived: the format was reconstructed from a spec/another implementation, with NO real
+ *        artefact installed. Explicitly NOT proof.
+ *   E4 — design only, never executed.
+ *
+ * Rule: only E2 and above may be described as "supported".
+ */
+export type EvidenceGrade = 'E1' | 'E2' | 'E3' | 'E4';
+
 /** Where a planned file's bytes come from. */
-export interface FileSource {
-  /** Direct HTTPS URLs, tried in order (mirrors allowed). */
+export interface FileSource {  /** Direct HTTPS URLs, tried in order (mirrors allowed). */
   urls?: string[];
   /** Provider coordinates when the file must be resolved through an API later. */
   provider?: { kind: 'curseforge'; projectId: number; fileId: number };
@@ -83,7 +96,7 @@ export interface PackRecipe {
   /** Stable id of the adapter that produced this recipe. */
   formatId: PackFormatId;
   name: string;
-  /** Exact Minecraft version; never guessed. Empty string means "not declared" → fail closed. */
+  /** Exact Minecraft version; never guessed. Empty string means "not declared" â†’ fail closed. */
   mc: string;
   loader: LoaderFamily;
   /** Exact loader build, or null when it must be resolved from provider metadata. */
@@ -94,11 +107,19 @@ export interface PackRecipe {
   overrides: OverrideLayer[];
   /** How the server is launched once installed. */
   launchShape: 'generated-args' | 'launch-jar' | 'runnable-jar' | 'server-jar' | 'vendor-script';
-  /** Paths the manager owns and a pack must never overwrite (world, eula, properties, ops, …). */
+  /** Paths the manager owns and a pack must never overwrite (world, eula, properties, ops, â€¦). */
   managerOwned: string[];
   warnings: RecipeWarning[];
   /** Provenance of the resolution steps, in order (which source supplied which field). */
   resolution: { field: string; source: string }[];
+  /**
+   * Evidence grade of this format's support (docs/audit/19 §2). REQUIRED, so an adapter cannot be added without
+   * stating how strongly it is proven — the omission that produced the original "fixtures as proof" error.
+   * Only 'E1'/'E2' may be presented to a user as supported.
+   */
+  evidenceGrade: EvidenceGrade;
+  /** One line explaining the grade, e.g. which real artefacts were installed. */
+  evidenceNote: string;
 }
 
 /** One entry of an archive listing; adapters never need to re-read the zip. */
@@ -121,23 +142,23 @@ export interface ArchiveIndex {
 }
 
 /**
- * The acquisition shapes — the axis that actually varies between formats.
+ * The acquisition shapes â€” the axis that actually varies between formats.
  *
- * Derived from evidence (docs/audit/21 §2, docs/audit/23 §4.1). The earlier `DetectContext` modelled only
- * `archive` ∪ `provider`, which structurally excluded the two shapes that failed in the Phase-A audit:
+ * Derived from evidence (docs/audit/21 Â§2, docs/audit/23 Â§4.1). The earlier `DetectContext` modelled only
+ * `archive` âˆª `provider`, which structurally excluded the two shapes that failed in the Phase-A audit:
  * packwiz (an HTTP tree) and Prism/ATLauncher (a local launcher instance).
  *
  * | shape      | formats                                        |
  * |------------|------------------------------------------------|
  * | archive    | Modrinth .mrpack, CurseForge client pack, author server pack, bare dump |
  * | provider   | FTB (api.modpacks.ch), Modrinth/CurseForge by id |
- * | httpTree   | packwiz (pack.toml → index.toml → *.pw.toml over HTTP) |
+ * | httpTree   | packwiz (pack.toml â†’ index.toml â†’ *.pw.toml over HTTP) |
  * | instance   | Prism mmc-pack.json, ATLauncher instance.json (payload already local) |
  */
 export type AdapterShape = 'archive' | 'provider' | 'httpTree' | 'instance';
 
 /**
- * A discriminated input. An adapter declaring `shapes: ['httpTree']` can never be handed an archive —
+ * A discriminated input. An adapter declaring `shapes: ['httpTree']` can never be handed an archive â€”
  * that is enforced by the registry, not by convention.
  */
 export type DetectInput =
@@ -180,7 +201,7 @@ export interface PackAdapter {
   readonly priority: number;
   /** Cheap content-signature test with key validation. Only called for a declared shape. */
   detect(input: DetectInput): boolean | Promise<boolean>;
-  /** Normalize to the canonical recipe. Throws `AppError('validation', …)` on unresolvable input. */
+  /** Normalize to the canonical recipe. Throws `AppError('validation', â€¦)` on unresolvable input. */
   resolve(input: DetectInput, io: AdapterIo): Promise<PackRecipe>;
 }
 
@@ -208,3 +229,4 @@ export function isSafeRelativePath(path: string): boolean {
 export function normalizePath(path: string): string {
   return path.replaceAll('\\', '/').replace(/^\.\/+/, '').replace(/^\/+/, '').toLowerCase();
 }
+

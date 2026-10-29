@@ -214,6 +214,8 @@ export function buildCurseForgeClientRecipe(manifest: CfManifest & {
       { field: 'side', source: 'manifest.json required flag only; CF has no side data' },
       { field: 'payload', source: 'overrides/ layer' },
     ],
+    evidenceGrade: 'E3',
+    evidenceNote: 'real CurseForge server-pack archives resolve (3 of 4 cached cfpack zips), but no CurseForge pack has been installed end-to-end through this adapter yet, so resolve parity only.',
   };
 }
 
@@ -349,6 +351,8 @@ export function buildCurseForgeServerPackRecipe(
       },
       { field: 'payload', source: 'whole archive tree applied as the root override layer (no manifest, no download list)' },
     ],
+    evidenceGrade: 'E3',
+    evidenceNote: 'real CurseForge server-pack archives resolve (3 of 4 cached cfpack zips), but no CurseForge pack has been installed end-to-end through this adapter yet, so resolve parity only.',
   };
 }
 

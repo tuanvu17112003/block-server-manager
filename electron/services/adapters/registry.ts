@@ -142,6 +142,18 @@ export function validateRecipe(recipe: PackRecipe): void {
   if (recipe.loader === 'hybrid') {
     throw appError('validation', `Adapter ${recipe.formatId}: hybrid loaders are not supported for new installs.`);
   }
+  // C6: every recipe must state its evidence grade. This is the structural guard against the original error —
+  // claiming a format works because a schema was implemented, with no real artefact ever installed.
+  if (!recipe.evidenceGrade) {
+    throw appError('validation',
+      `Adapter ${recipe.formatId} produced a recipe with no evidence grade. `
+      + 'Every format must state E1/E2/E3/E4 (docs/audit/19 §2) so a schema-derived adapter is never presented as supported.');
+  }
+  if (recipe.evidenceGrade !== 'E1' && recipe.evidenceGrade !== 'E2' && recipe.evidenceNote.trim() === '') {
+    throw appError('validation',
+      `Adapter ${recipe.formatId} is graded ${recipe.evidenceGrade}, which is below "supported", but gave no evidence note. `
+      + 'A below-E2 grade must explain what was and was not proven.');
+  }
   for (const file of recipe.files) {
     if (!isSafeRelativePath(file.path)) {
       throw appError('validation', `Adapter ${recipe.formatId} produced an unsafe path "${file.path}".`);

@@ -1,4 +1,4 @@
-﻿// Pack adapter layer tests: registry ordering, recipe validation contract, and the FTB adapter's
+// Pack adapter layer tests: registry ordering, recipe validation contract, and the FTB adapter's
 // pure mapping functions (verified against the real FTB API response shapes recorded in
 // docs/research/2026-10-29-claim-verification.md ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§13). No network.
 import { test } from 'node:test';
@@ -30,6 +30,8 @@ function recipe(overrides: Partial<PackRecipe> = {}): PackRecipe {
     managerOwned: ['eula.txt'],
     warnings: [],
     resolution: [],
+    evidenceGrade: 'E3',
+    evidenceNote: 'unit-test fixture',
     ...overrides,
   };
 }

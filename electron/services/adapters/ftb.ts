@@ -351,6 +351,8 @@ export function buildFtbRecipe(input: {
       { field: 'loader', source: loaderProvenance },
       ...(declaredJava !== null ? [{ field: 'javaMajor', source: 'ftb target "java"' }] : []),
     ],
+    evidenceGrade: 'E2',
+    evidenceNote: 'FTB installs were exercised end-to-end against the live API earlier in this session; the loader-build escalation failure was fault-injected and recovered.',
   };
 }
 
