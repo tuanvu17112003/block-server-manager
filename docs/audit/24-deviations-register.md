@@ -1,0 +1,93 @@
+# Deviations register (QA instrument)
+
+This file is the **single place** where any deviation from the design is recorded: by the Lead, by any
+teammate, and about the plan itself. It exists because the previous three phases each "converged" in prose
+while accumulating verified-mapping debt (docs 18, 20, 22 found 5 → 6 → 11 deviations).
+
+**Rule: if reality does not match the design, write a row here and stop. Do not improvise a fix.** An
+unrecorded improvisation is a QA failure; a recorded deviation is data.
+
+Design authority, in precedence order:
+1. `docs/research/2026-10-29-universal-modpack-install.md` (the pre-implementation spec)
+2. `docs/audit/23-synthesis-correct-design.md` (invariants I1–I3, acquisition shapes A–E, plan C0–C8)
+3. `docs/audit/22-research-conformance-diff.md` (RD-1..7, RC-1..4)
+4. `docs/audit/20-phase-a-real-artefact-findings.md` (D1..D6)
+
+---
+
+## How to record a deviation
+
+Append a row to §2 with: id, phase, what the design says (quote + file:line), what reality showed, the
+**command or evidence file** that showed it, and whether it blocks. If it blocks, say what decision is needed
+instead of making one silently.
+
+Evidence grades (from doc 19) — a claim may never exceed its grade:
+
+| Grade | Meaning |
+|---|---|
+| **E1** | whole real population measured |
+| **E2** | a real artefact of that format installed/booted end-to-end |
+| **E3** | schema-derived fixture authored by us — **not proof of correctness** |
+| **E4** | design only, no artefact ever parsed |
+
+---
+
+## 1. Session baseline (recorded before any change)
+
+| Item | Value |
+|---|---|
+| HEAD at session start | `148ec23` |
+| Unit tests | **328/328 pass** |
+| `npm run verify` | not yet run this session (run before first merge) |
+| Uncommitted work at start | P1c adapters (`packwiz`, `prism`, `atlauncher`, `serverzip`, `toml`) + tests + `verify-packwiz-archive.mjs` — **E3, deliberately uncommitted** |
+| Adapter layer status at start | **disabled by design**; registering it today would regress `.mrpack` and wrapper archives (RD-1, RD-3) |
+
+### Known deviations carried IN (from docs 20/22 — these are the work items, not new findings)
+
+| Id | Deviation | Blocking phase |
+|---|---|---|
+| RD-1 / D1 | adapter layer has no `modrinth`/`curseforge` adapter; research §8:347 required them first "so no regression" | C3 |
+| RD-3 / D4 | pipeline step 2 "Normalize" (unwrap nested zip, strip wrapper) never implemented; real 1 GB wrapper archive unclaimed | C2, C4 |
+| RD-2 / DE-2 | `detect()` models only archive∪provider; no HTTP-tree or local-instance shape | C1 |
+| RD-4 | Forge `mods.toml` side rule contradicts SPC (`core.ts:1124` all-`side=` vs platform-dependency `side`) | C7 |
+| RD-5 | no dependency rescue (`provides` alias matching) — 0 hits in `installer/` | C7 |
+| RD-6 | hand/learned exclusion matching is bare substring (`curated.ts:45,48`), no rule id | C7 |
+| RD-6b | learned file not read at install; sidecar not diffable (no hashes/sizes) | C7 |
+| RC-2 | packwiz also uses `modpack.toml` and packs may live in a subdirectory | C5 |
+| RC-4 | fixtures cannot prove detection; real-artefact sweep is mandatory | C0 |
+
+---
+
+## 2. Deviations found during this session
+
+<!-- Append rows here. Format:
+| DV-nn | phase | Design says (file:line) | Reality | Evidence (cmd/artifact) | Blocks? | Decision needed |
+-->
+
+| Id | Phase | Design says | Reality observed | Evidence | Blocks? | Decision needed |
+|---|---|---|---|---|---|---|
+| DV-01 | C2 | Research §6 step 2: *"Normalize — list entries once; unwrap single nested zip; strip a single wrapping directory"* (research line 305) | Implemented as `electron/services/adapters/normalize.ts`; the shared layer had nothing and the CF engine had its own private unwrap | `node scripts/unit.mjs` → 336/336 (8 new normalize tests). Real artefacts: `normalizeArchive('.app-data/cache/cfpack/466901-server-9296268.zip')` → `unwrapped=true nested=Prominence™_II_Hasturian_Era_4.1.5_server_pack.zip`, 2 outer entries → **3,553 effective entries** incl. root `manifest.json`. Other two CF zips are no-ops (`unwrapped=false`, 4,951 and 9,503 entries) as intended | No | none — closed |
+| DV-02 | C2 | Prefix stripping should produce the view an adapter needs | `stripPrefixFromIndex` exists but is **not yet wired into adapter detection** — adapters still see raw names. Deliberate: wiring belongs with the adapter-shape work (C1/C3) so the ownership of temp files is decided once | `grep -n 'stripPrefixFromIndex' electron/services/adapters/*.ts` → only `normalize.ts` defines/tests it | No (C3 depends) | decide in C3 whether the registry normalizes before `candidates()` or each adapter opts in |
+| DV-03 | QA | A recorded deviation must never be silently fixed | My own test zip writer declared **deflate (method 8)** while writing stored bytes, producing `invalid stored block lengths` and 3 failing tests that looked like product bugs. This is the same class as doc 20 D5 (a lying harness hides or invents defects) | First run of `adapters-normalize.test.ts` failed 3/8 with that error; fixed by declaring method 0; now 8/8 | No | none — recorded so the harness is trusted |
+| DV-04 | C2→C3 | Research §2 row 12: an SPC output archive is identified by `manifest.json` with `files[]` + `minecraftVersion` + `modloader` + `serverPackCreatorVersion`. C2 makes that manifest **visible** by unwrapping | After unwrapping, the 1 GB archive resolves to **3,553 entries including a root `manifest.json`**, yet `plain.serverzip` still fails with "no pack manifest and does not state its Minecraft version". The manifest is present with **exactly the fields research §2 row 12 predicts**: `{files, minecraftVersion, modloader, modloaderVersion, serverPackCreatorVersion}`, values `minecraftVersion="1.20.1"`, `modloader="Fabric"`, `modloaderVersion="0.19.3"`, 3,642 file entries. **No adapter reads it** — the SPC-output format has no adapter | `node scripts/audit-adapters-real.mjs --skip-packwiz` → `466901…: unwrapped … (2 → 3553 entries)` then `FAILED — This archive has no pack manifest…`; manifest content read directly from the unwrapped inner zip | **yes — blocks C4** | Needs a `serverpackcreator` adapter reading `manifest.json`. Do **not** widen `plain.serverzip` to guess; that would repeat the D4 mistake of a degraded duplicate. C4 scope, recorded now so it is not improvised. |
+| DV-05 | C2 | `plain.serverzip` should resolve a real author server pack with derivable metadata | `829758-server-7243901.zip` (4,951 entries, real payload: `start.sh`, `variables.txt`, `server-icon.png`) fails: no `version.json`, no `libraries/` maven path, no installer jar. It is an SPC-style pack too, so its `manifest.json` is the correct source — same root cause as DV-04 | same harness run | **yes — blocks C4** | same decision as DV-04; resolve via the SPC manifest adapter, not by loosening `plain.serverzip` |
+
+---
+
+## 3. QA sign-off log
+
+Each phase closes only when **all three edges** of the triangle are green (doc 23 §6): reality→spec
+(real-artefact sweep), spec→code (conformance script), code→reality (real install + verified boot). Unit tests
+alone are explicitly **not** sufficient.
+
+| Phase | reality→spec | spec→code | code→reality | Signed off by | Notes |
+|---|---|---|---|---|---|
+| C0 | — | — | — | — | pending |
+| C1 | — | — | — | — | pending |
+| C2 | — | — | — | — | pending |
+| C3 | — | — | — | — | pending |
+| C4 | — | — | — | — | pending |
+| C5 | — | — | — | — | pending |
+| C6 | — | — | — | — | pending |
+| C7 | — | — | — | — | pending |
+| C8 | — | — | — | — | pending |
