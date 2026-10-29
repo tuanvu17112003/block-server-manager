@@ -508,6 +508,17 @@ export class Pipeline {
       held.sourcePin = { source: 'curseforge', zipName: source.zipName, artifact: await snapshotArtifact(zipPath, 'curseforgeZip') };
       warnings.push(insp.reason);
     } else if (source.kind === 'curseforgeProject') {
+      // ---- acquisition shape B (provider API), NOT shape A ----
+      // This branch is the CurseForge *provider* path: it asks the official API for the latest file and its
+      // server-pack id. The `curseforge.client` / `curseforge.serverpack` adapters declare `shapes: ['archive']`
+      // only, so key-mode traffic deliberately does NOT flow through them — they are not two implementations of
+      // one thing, they serve different acquisition shapes (docs/audit/23 §4.1).
+      //
+      // Recorded because the Lead's own first proposal ("route the CurseForge pipeline through the adapter
+      // layer") was wrong in exactly this way: it would have pushed a working E2 path through new code to
+      // satisfy a symmetry that does not exist, risking the 12/12 matrix for tidiness. Invariant I1 says cover
+      // the working path first. What is genuinely missing is a `curseforge.provider` adapter for shape B — see
+      // docs/audit/26 Item 2 and DV-33.
       this.jobs.progress(jobId, { progress: 15, stage: 'resolving CurseForge project' });
       const meta = await inspectCurseForgeProject(Number(source.projectId), this.ctx.dataRoot);
       if (!meta.loader || !meta.minecraftVersion) {

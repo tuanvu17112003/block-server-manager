@@ -389,6 +389,10 @@ export function looksLikeCfAuthorServerPack(names: readonly string[], variables:
 export const curseForgeClientAdapter: PackAdapter = {
   id: 'curseforge.client',
   displayName: 'CurseForge client pack (manifest.json)',
+  // Shape A only: a zip the user supplied. Key-mode installs (`source.kind === 'curseforgeProject'`) resolve via
+  // the official API and never reach an adapter — see `pipeline.ts:510` and docs/audit/26 Item 2. Declaring
+  // 'provider' here would be the same class of lie as the packwiz httpTree declaration (DV-22): the shape gate
+  // would route provider input here and `detect` would have to answer false.
   shapes: ['archive'],
   // Below Modrinth (90): an .mrpack is fully self-describing. Above every payload-only adapter, because a
   // validated CF manifest carries real metadata that `plain.serverzip` cannot see.
