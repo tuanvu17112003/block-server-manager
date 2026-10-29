@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { appError } from '../store';
-import { downloadFirstAvailable, installLoader, log, type DownloadCandidate } from './core';
+import { downloadFirstAvailable, extractZip, installLoader, log, type DownloadCandidate } from './core';
 import type { PackRecipe, PlannedFile } from '../adapters/types';
 import { MANAGER_OWNED_PATHS, isSafeRelativePath } from '../adapters/types';
 
@@ -24,6 +24,11 @@ export interface InstallRecipeOpts {
   excludeFiles?: Set<string>;
   /** Reviewed-plan force-includes for optional files that would otherwise be skipped. */
   includeFiles?: Set<string>;
+  /**
+   * The source archive, when the recipe carries override layers. Formats like packwiz and Prism ship payload
+   * inside the archive itself instead of a download list, so their layers must be extracted here.
+   */
+  archivePath?: string;
   onProgress?: (event: { stage: string; pct?: number }) => void;
   signal?: AbortSignal;
 }
@@ -83,7 +88,7 @@ async function fetchPlannedFile(
 
   // A downloaded jar that is actually an HTML error page is the classic silent poison. But a *declared*
   // zero-byte file is legitimate: empty config files exist in real packs (e.g. FTB Stoneblock 2 ships
-  // three of them, each with the SHA-1 of the empty string `da39a3ee…`). Only reject an empty result when
+  // three of them, each with the SHA-1 of the empty string `da39a3eeâ€¦`). Only reject an empty result when
   // the recipe said it should have bytes; the hash verification above already catches content lies.
   const stat = fs.statSync(dest);
   const expectsBytes = typeof file.size === 'number' && file.size > 0;
@@ -143,6 +148,36 @@ export async function installRecipe(opts: InstallRecipeOpts): Promise<InstallRec
   if (plan.skippedOptional > 0) warnings.push(`${plan.skippedOptional} optional files skipped`);
   if (plan.skippedUserExcluded > 0) warnings.push(`${plan.skippedUserExcluded} files excluded by the reviewed plan`);
 
+  // ---- override layers ----
+  // Some formats ship their payload inside the archive rather than as a download list (packwiz config/scripts,
+  // Prism's client instance tree). Those layers are extracted here, in ascending order so a later layer wins.
+  // Manager-owned state is excluded: a pack must never overwrite eula/properties/ops.
+  if (recipe.overrides.length > 0) {
+    if (!opts.archivePath) {
+      warnings.push(`overrides declared (${recipe.overrides.map(layer => layer.prefix || '(root)').join(', ')}) but no archive was supplied; skipped`);
+    } else {
+      const layers = [...recipe.overrides].sort((a, b) => a.order - b.order);
+      for (const layer of layers) {
+        onProgress({ stage: `applying payload layer ${layer.prefix || '(root)'}`, pct: 92 });
+        const managerOwned = new Set(MANAGER_OWNED_PATHS.map(entry => entry.toLowerCase()));
+        await extractZip(opts.archivePath, dir, {
+          root: layer.prefix,
+          skipExisting: true,
+          ...(signal ? { signal } : {}),
+          excludeFn: (relativePath: string): boolean => {
+            const normalized = relativePath.replaceAll('\\', '/').replace(/^\.?\/+/, '').toLowerCase();
+            if (managerOwned.has(normalized)) return true;
+            // Metadata files are not payload.
+            if (normalized.endsWith('pack.toml') || normalized.endsWith('index.toml')) return true;
+            if (normalized.endsWith('.pw.toml')) return true;
+            return false;
+          },
+        });
+        log(`[recipe] applied payload layer "${layer.prefix || '(root)'}"`);
+      }
+    }
+  }
+
   return {
     installed,
     skippedUnsupported: plan.skippedUnsupported,
@@ -151,3 +186,4 @@ export async function installRecipe(opts: InstallRecipeOpts): Promise<InstallRec
     warnings,
   };
 }
+

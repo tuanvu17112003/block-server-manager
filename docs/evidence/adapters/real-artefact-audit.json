@@ -1,6 +1,6 @@
 {
   "harness": "audit-adapters-real.mjs",
-  "startedAt": "2026-10-29T13:24:37.340Z",
+  "startedAt": "2026-10-29T13:55:53.326Z",
   "premise": "real artefacts only; no fixture authored by the harness is used as evidence",
   "archives": [
     {
@@ -15,11 +15,12 @@
         "effectiveEntryCount": 9503
       },
       "candidates": [
+        "curseforge.serverpack",
         "plain.serverzip"
       ],
       "recipe": {
-        "formatId": "plain.serverzip",
-        "name": "Server archive",
+        "formatId": "curseforge.serverpack",
+        "name": "392141-server-6290699",
         "mc": "1.20.1",
         "loader": "forge",
         "loaderVersion": "47.4.0",
@@ -31,20 +32,20 @@
         "launchShape": "runnable-jar",
         "sideCounts": {},
         "warningRules": [
-          "serverzip.manifest-less"
+          "curseforge.manifest-less-serverpack"
         ],
         "resolution": [
           {
             "field": "mc",
-            "source": "loader installer jar name"
+            "source": "CurseForge inspector + archive artifact inference"
           },
           {
             "field": "loader",
-            "source": "loader installer jar name"
+            "source": "CurseForge inspector (\"Forge\")"
           },
           {
             "field": "payload",
-            "source": "archive tree applied as overrides"
+            "source": "whole archive tree applied as the root override layer (no manifest, no download list)"
           }
         ],
         "sampleFiles": []
@@ -86,12 +87,45 @@
         "effectiveEntryCount": 4951
       },
       "candidates": [
+        "curseforge.serverpack",
         "plain.serverzip"
       ],
-      "recipe": null,
-      "validation": null,
-      "error": "This archive has no pack manifest and does not state its Minecraft version, so it cannot be installed safely. Add a manifest (Modrinth, CurseForge, packwiz, Prism or ATLauncher) or an exact Minecraft version. Evidence checked: version.json, libraries/ maven path, loader installer jar name.",
-      "ok": false,
+      "recipe": {
+        "formatId": "curseforge.serverpack",
+        "name": "829758-server-7243901",
+        "mc": "1.18.2",
+        "loader": "forge",
+        "loaderVersion": "40.2.17",
+        "javaMajor": null,
+        "fileCount": 0,
+        "overrideLayers": [
+          "(root)"
+        ],
+        "launchShape": "vendor-script",
+        "sideCounts": {},
+        "warningRules": [
+          "curseforge.manifest-less-serverpack",
+          "curseforge.metadata-from-variables-txt"
+        ],
+        "resolution": [
+          {
+            "field": "mc",
+            "source": "variables.txt MINECRAFT_VERSION (declared inside the pack)"
+          },
+          {
+            "field": "loader",
+            "source": "variables.txt MODLOADER (declared inside the pack)"
+          },
+          {
+            "field": "payload",
+            "source": "whole archive tree applied as the root override layer (no manifest, no download list)"
+          }
+        ],
+        "sampleFiles": []
+      },
+      "validation": "passed",
+      "error": null,
+      "ok": true,
       "entryCount": 4951
     },
     {
@@ -106,11 +140,12 @@
         "effectiveEntryCount": 10223
       },
       "candidates": [
+        "curseforge.serverpack",
         "plain.serverzip"
       ],
       "recipe": {
-        "formatId": "plain.serverzip",
-        "name": "Server archive",
+        "formatId": "curseforge.serverpack",
+        "name": "936875-server-8853081",
         "mc": "1.20.1",
         "loader": "forge",
         "loaderVersion": "47.4.23",
@@ -122,20 +157,20 @@
         "launchShape": "generated-args",
         "sideCounts": {},
         "warningRules": [
-          "serverzip.manifest-less"
+          "curseforge.manifest-less-serverpack"
         ],
         "resolution": [
           {
             "field": "mc",
-            "source": "libraries/ maven path"
+            "source": "CurseForge inspector + archive artifact inference"
           },
           {
             "field": "loader",
-            "source": "libraries/ maven path"
+            "source": "CurseForge inspector (\"Forge\")"
           },
           {
             "field": "payload",
-            "source": "archive tree applied as overrides"
+            "source": "whole archive tree applied as the root override layer (no manifest, no download list)"
           }
         ],
         "sampleFiles": []
@@ -273,18 +308,18 @@
   "summary": {
     "realArchives": {
       "total": 6,
-      "resolved": 4
+      "resolved": 5
     },
     "realPackwiz": {
       "total": 0,
       "resolved": 0
     },
     "formatsObserved": [
-      "plain.serverzip",
+      "curseforge.serverpack",
       "modrinth.mrpack"
     ],
     "defects": 0
   },
-  "finishedAt": "2026-10-29T13:24:46.070Z",
-  "durationSeconds": 8.7
+  "finishedAt": "2026-10-29T13:56:02.981Z",
+  "durationSeconds": 9.7
 }

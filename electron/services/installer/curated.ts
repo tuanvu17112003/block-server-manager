@@ -8,6 +8,47 @@ interface ItzgFile { globalExcludes?: unknown[]; globalForceIncludes?: unknown[]
 
 const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+/**
+ * Readable "words" of a path, for the loose matching the hand list has always needed.
+ *
+ * Jar names in real packs are decorated — `[异步粒子] AsyncParticles-20.1.3.2+1.20.1.jar`,
+ * `[平滑转移] smoothswapping-…` — so the hand entries that exist precisely for those jars (`asyncparticles`,
+ * `smoothswapping`) only ever matched the **normalized** path, where letters survive and punctuation does not.
+ * Anchoring must not lose that: the words below are the normalized path split back into runs, so a match has to
+ * cover a whole run instead of any substring of one. That is what stops `figura` matching `configurable`.
+ */
+const words = (s: string): string[] =>
+  s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+
+/**
+ * Determine whether `entry` names the mod at `filePath` — anchored, never a bare substring.
+ *
+ * The itzg `figura`/`configurable` class of defect (itzg issue #4234: the deny pattern `figura` substring-matched
+ * `configurable` and silently dropped a server-required mod across 24/24 paths, with no log line) is what this
+ * function exists to make impossible. Two forms, both anchored:
+ *
+ *   - `/regex/` — used verbatim, exactly as {@link entryTest} and the itzg data already do;
+ *   - a plain name — must equal a whole word of the path, or a word with a version suffix (`sodium-0.5.1`,
+ *     `figura1.0`), or the whole normalized path (`Cull Less Leaves`, which has no single word to equal).
+ *
+ * A prefix-either-way comparison is deliberately *not* used: it would let `figura` match `figurafix`, which is a
+ * different mod and exactly the over-match this rule removes.
+ */
+function entryMatches(entry: string, filePath: string): boolean {
+  const e = String(entry).trim();
+  if (e === '') return false;
+  if (e.startsWith('/') && e.endsWith('/') && e.length > 2) return new RegExp(e.slice(1, -1), 'i').test(filePath);
+  const target = norm(e);
+  if (target === '') return false;
+  if (norm(filePath) === target) return true;
+  return words(filePath).some((word) => {
+    if (word === target) return true;
+    if (!word.startsWith(target)) return false;
+    // A version or build suffix is not part of the name; a further letter is (`figurafix`, `figurama`).
+    return !/[a-z]/.test(word.slice(target.length));
+  });
+}
+
 function loadJsonIfExists(p: string): unknown {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; }
 }
@@ -28,7 +69,6 @@ export function makeCuratedResolver(opts: { platform: 'modrinth' | 'curseforge';
     ? ((loadJsonIfExists(opts.learnedFile) as { serverOverrides?: OverrideEntry[] })?.serverOverrides ?? [])
     : []);
   const learned = [...bundledLearned, ...runtimeLearned];
-  const present = new Set(opts.presentPaths.map(norm));
 
   const entryTest = (entry: unknown, p: string): boolean => {
     const e = String(entry);
@@ -41,20 +81,21 @@ export function makeCuratedResolver(opts: { platform: 'modrinth' | 'curseforge';
   const excludes = [...(itzg.globalExcludes ?? []), ...(opts.packSlug ? itzg.modpacks?.[opts.packSlug]?.excludes ?? [] : [])];
 
   const resolve = (filePath: string, declared: string): CuratedVerdict => {
-    // Anchored matching for the hand and learned lists (research §7 gap 5).
+    // The hand and learned lists match through `entryMatches`, anchored exactly like the itzg `entryTest`
+    // above (research §7 gap 5). They previously used bare `n.includes(norm(o.match))`, which is the
+    // `figura`/`configurable` over-exclusion class: a hand or learned entry can silently drop a different mod.
     //
-    // These previously used bare `n.includes(norm(match))`, which is the itzg `figura`/`configurable` defect
-    // class (itzg issue #4234: the deny pattern `figura` substring-matched `configurable` and silently dropped a
-    // server-required mod across 24/24 paths with no log line). A hand or learned entry names a mod, so it must
-    // match a whole path segment; `entryTest` already encodes those boundary rules and the `/regex/` form, so it
-    // is reused rather than duplicating a second matcher.
-    const hitHand = hand.find(o => entryTest(o.match, filePath)
-      && (!o.unlessPresent || ![...present].some(p => entryTest(o.unlessPresent ?? '', p))));
+    // `unlessPresent` guards ("chipped breaks only when athena is absent") are resolved against the RAW pack
+    // paths, never the normalized ones: normalized text has every separator stripped, so its `[-_.]` boundaries
+    // can never match and every guard silently evaluates to "not present".
+    const hitHand = hand.find(o => entryMatches(o.match, filePath)
+      && (!o.unlessPresent || !opts.presentPaths.some(p => entryMatches(o.unlessPresent ?? '', p))));
     if (hitHand) {
-      // Rule id in the reason so every exclusion is auditable and revocable.
+      // Every verdict names the rule that produced it, so an exclusion is auditable and revocable.
       return { env: hitHand.server, why: `hand-override[${hitHand.match}]`, protect: hitHand.server === 'required' };
     }
-    const hitLearned = learned.find(o => entryTest(o.match, filePath));
+    // The learned list has no `unlessPresent` concept — a learned entry is unconditional by construction.
+    const hitLearned = learned.find(o => entryMatches(o.match, filePath));
     if (hitLearned) return { env: hitLearned.server, why: `learned[${hitLearned.match}] ${hitLearned.why ?? ''}`.trim(), protect: false };
     const hitForce = force.find(e => entryTest(e, filePath));
     if (hitForce !== undefined) return { env: 'required', why: `community force-include: ${String(hitForce)}`, protect: true };

@@ -1,4 +1,4 @@
-﻿// Phase A evidence audit: run the adapter layer against REAL artefacts, not fixtures I authored.
+// Phase A evidence audit: run the adapter layer against REAL artefacts, not fixtures I authored.
 //
 // This is the harness the previous phase was missing. Three evidence sources, none of which I wrote:
 //   A1. real CurseForge server packs already cached on disk (plain.serverzip / curseforge paths)
@@ -77,7 +77,10 @@ async function auditArchive(label, archivePath) {
     }
     const archive = normalized.index;
     entry.entryCount = archive.entries.length;
-    const ctx = { shape: 'archive', index: archive };
+    // `path` must match production (pipeline.ts passes `path: normalized.effectivePath`): an adapter that
+    // delegates classification to the engine's `inspectStagedZip` (curseforge.serverpack) needs the file, and
+    // a harness that omits it would report a product defect that does not exist.
+    const ctx = { shape: 'archive', index: archive, path: normalized.effectivePath };
     entry.candidates = (await adapterRegistry.candidates(ctx)).map(adapter => adapter.id);
     log(`${label}: candidates = ${entry.candidates.join(', ') || '(none)'}`);
     if (entry.candidates.length === 0) throw new Error('no adapter claimed this real archive');

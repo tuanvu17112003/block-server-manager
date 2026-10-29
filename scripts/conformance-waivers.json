@@ -8,11 +8,6 @@
       "reason": "regional format, no public spec and no real artefact on hand; E4, unmeasured."
     },
     {
-      "priority": 2,
-      "format": "CurseForge client",
-      "reason": "the working engine (curseforge.ts) already installs it; only the adapter wrapper is missing — plan C3, RD-1/D1."
-    },
-    {
       "priority": 4,
       "format": "HMCL server",
       "reason": "no real artefact measured; not on the C0-C8 critical path."

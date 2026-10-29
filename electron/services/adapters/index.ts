@@ -10,6 +10,7 @@ import { AdapterRegistry } from './registry';
 import { ftbAdapter, FTB_ALLOWED_HOSTS } from './ftb';
 import { packwizAdapter } from './packwiz';
 import { modrinthAdapter } from './modrinth';
+import { curseForgeClientAdapter, curseForgeServerPackAdapter } from './curseforge';
 import { prismAdapter } from './prism';
 import { atlauncherAdapter } from './atlauncher';
 import { serverZipAdapter } from './serverzip';
@@ -17,7 +18,9 @@ import { serverZipAdapter } from './serverzip';
 /** All adapters, highest priority first (the registry re-sorts defensively). */
 export const ADAPTERS = [
   modrinthAdapter,     // 90 — highest: manifest carries per-file sides + full CDN URLs
-  packwizAdapter,      // 60 â€” declarative, the only archive format with per-file side data
+  curseForgeClientAdapter,     // 88 — manifest.json with manifestType/manifestVersion/minecraft.modLoaders[]
+  curseForgeServerPackAdapter, // 87 — author server pack: engine-readable artifacts, or declared variables.txt
+  packwizAdapter,      // 60 — declarative, the only archive format with per-file side data
   prismAdapter,        // 55 â€” mmc-pack.json
   atlauncherAdapter,   // 50 â€” instance.json carrying a `launcher` object
   ftbAdapter,          // 45/20 â€” instance.json with numeric pack ids, or the provider API
@@ -55,6 +58,11 @@ export {
   APP_JAVA_MAJORS,
 } from './ftb';
 export { modrinthAdapter, mrpackFileSide, mrpackRuntime, buildMrpackRecipe, isMrpackIndex } from './modrinth';
+export {
+  curseForgeClientAdapter, curseForgeServerPackAdapter, isCurseForgeManifest, isServerPackCreatorManifest,
+  cfManifestFileSide, cfLoaderFamily, parseCfModLoaderId, readCfVariables, buildCurseForgeClientRecipe,
+  buildCurseForgeServerPackRecipe, looksLikeCfAuthorServerPack,
+} from './curseforge';
 export { packwizAdapter, isValidPackwizPack, isPackwizFormat, packwizFileSide, packwizLoader } from './packwiz';
 export { prismAdapter, validateMmcPack, readMmcRuntime, MMC_FORMAT_VERSION, MMC_MINECRAFT_UID } from './prism';
 export { atlauncherAdapter, readAtlInstance, readAtlLoader, readAtlMc } from './atlauncher';

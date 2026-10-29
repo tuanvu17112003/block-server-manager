@@ -52,11 +52,18 @@ export function mrpackFileSide(serverEnv: string | null | undefined): { side: Fi
   return { side: 'unknown', provenance: `mrpack env.server="${value}" (unrecognised) â‡’ unknown` };
 }
 
-/** Extract loader + build + MC from an mrpack index through the engine's own parser. */
-export function mrpackRuntime(index: MrIndex): { loader: LoaderFamily; loaderVersion: string | null; mc: string } {
+/**
+ * Extract loader + build + MC from an mrpack index through the engine's own parser.
+ *
+ * `mc` is typed `string | undefined` deliberately: `splitDeps` reads `dependencies.minecraft` from the
+ * parsed JSON, which is `undefined` when the key is absent. Typing it `string` hid that case and made the
+ * caller's fail-closed guard unreachable (the `.trim()` threw a TypeError instead). An absent MC is a real
+ * input state — an invalid index — so the type must say so.
+ */
+export function mrpackRuntime(index: MrIndex): { loader: LoaderFamily; loaderVersion: string | null; mc: string | undefined } {
   const deps = splitDeps(index);
   const loader = (deps.kind ?? 'vanilla') as LoaderFamily;
-  return { loader, loaderVersion: deps.ver, mc: deps.mc };
+  return { loader, loaderVersion: deps.ver, mc: deps.mc as string | undefined };
 }
 
 /**
@@ -107,7 +114,11 @@ export function buildMrpackRecipe(input: {
       message: `${duplicatePaths} file entr${duplicatePaths === 1 ? 'y' : 'ies'} targeted an already-planned path; the first was kept.`,
     });
   }
-  if (runtime.mc.trim() === '') {
+  // `splitDeps` types `mc` as string but returns whatever the dependency map holds, so an index without
+  // `dependencies.minecraft` yields undefined. Normalise before testing: otherwise the documented fail-closed
+  // guard is unreachable and a missing dependency surfaces as a TypeError from `.trim()` rather than as a
+  // validation error naming the real problem.
+  if (typeof runtime.mc !== 'string' || runtime.mc.trim() === '') {
     throw appError('validation', 'mrpack index declares no minecraft dependency; refusing to guess a runtime.');
   }
 

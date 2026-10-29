@@ -1,4 +1,4 @@
-﻿// Installer engine â€” TypeScript port of the proven spike (H:\TestAI\modrinth-curseforge\sample\core.mjs).
+// Installer engine â€” TypeScript port of the proven spike (H:\TestAI\modrinth-curseforge\sample\core.mjs).
 // Live-validated there: 12/12 packs, 4-layer client-mod defense, old-Forge 1.12.2/Java 8,
 // Mojang-metadata java mapping, CF keyless + key-mode. Keep this file logic-identical; changes
 // need re-validation against the spike's acceptance packs.
@@ -1209,60 +1209,279 @@ export function forgeTomlIsClientOnly(text: string): { client: boolean; reason: 
   } catch {
     return { client: false, reason: null };
   }
-  // The mod's own id is the owner with a dependencies block. If several exist, examine each.
-  for (const [, entries] of byMod) {
-    const platformEntries = entries.filter(entry =>
+  // The jar's OWN block is `[[dependencies.<the first [[mods]] modId>]]` -- the block ServerPackCreator reads
+  // (`valueMap()["mods"][0]`). A second bundled mod's block is deliberately not consulted: letting a bundled
+  // library that demands a client-side platform condemn the whole jar is the over-exclusion direction.
+  const ownModId = parseForgeModId(text);
+  let owners: string[];
+  if (ownModId !== null) {
+    const key = [...byMod.keys()].find(candidate => candidate.toLowerCase() === ownModId.toLowerCase());
+    owners = key === undefined ? [] : [key];
+  } else {
+    // No readable `[[mods]]` id: judge every block and require all of them to agree on CLIENT, which is the
+    // fail-toward-keeping reading of a descriptor whose own identity could not be read.
+    owners = [...byMod.keys()];
+  }
+  let sawPlatformEntry = false;
+  for (const owner of owners) {
+    const platformEntries = (byMod.get(owner) ?? []).filter(entry =>
       entry.type?.toLowerCase() !== 'incompatible'
       && FORGE_PLATFORM_MODIDS.some(pattern => pattern.test(entry.modId)));
     if (platformEntries.length === 0) continue;
-    // A single CLIENT demand on the platform marks the mod clientside; anything else keeps it SERVER.
-    if (platformEntries.every(entry => (entry.side ?? '').toUpperCase() === 'CLIENT')) {
-      return { client: true, reason: `mods.toml platform dependency side=CLIENT (${platformEntries.length})` };
+    sawPlatformEntry = true;
+    // Every platform entry must say CLIENT; a single BOTH/SERVER keeps the mod.
+    if (!platformEntries.every(entry => (entry.side ?? '').toUpperCase() === 'CLIENT')) {
+      return { client: false, reason: null };
     }
-    return { client: false, reason: null };
   }
-  return { client: false, reason: null };
+  if (!sawPlatformEntry) return { client: false, reason: null };
+  return { client: true, reason: `mods.toml platform dependency side=CLIENT (${owners.length} block(s))` };
 }
 
-export async function scanJarSideness(jarPath: string): Promise<{ client: boolean; reasons: string[] }> {
-  const reasons: string[] = [];
+/**
+ * Rule ids every L2 exclusion/decision is attributed to (research §3.6: an exclusion that cannot be
+ * attributed to a rule id is a silent over-exclusion waiting to happen).
+ */
+export const L2_RULE = 'l2.jar-self-declaration';
+export const L2_RESCUE_RULE = 'l2.dependency-rescue';
+
+/**
+ * Platform ids Fabric and Quilt never record as real dependencies, unioned from ServerPackCreator's two
+ * scanners (`FabricScanner.kt:61-62`, `QuiltScanner.kt`): `fabricloader` and `quilt_loader` are the loaders,
+ * `java`/`minecraft` the runtime. `fabric` is deliberately absent — it is Fabric API, the most depended-on mod
+ * in the ecosystem, and refusing to record it is what made a dependency rescue impossible for it.
+ */
+const JAR_PLATFORM_MODIDS = /^(fabricloader|quilt_loader|java|minecraft)$/i;
+
+/** Read a `provides`/`depends` block that may hold bare ids or `{ id }` objects (Quilt allows both). */
+function idList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === 'string' && entry.trim() !== '') out.push(entry.trim());
+    else if (entry && typeof entry === 'object') {
+      const id = (entry as { id?: unknown }).id;
+      if (typeof id === 'string' && id.trim() !== '') out.push(id.trim());
+    }
+  }
+  return out;
+}
+
+/**
+ * The `modId` of the first `[[mods]]` block, or null.
+ *
+ * ServerPackCreator reads exactly this (`ForgeTomlScanner.kt:91`: `valueMap()["mods"][0]`) to know which
+ * `[[dependencies.<modid>]]` block is the jar's own. Kept separate from {@link parseForgeDependencies}, which
+ * only tracks `dependencies` tables.
+ */
+export function parseForgeModId(text: string): string | null {
+  let inMods = false;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.replace(/#.*$/, '').trim();
+    if (line === '') continue;
+    const header = line.match(/^\[\[?\s*([^\]]+?)\s*\]\]?$/);
+    if (header) {
+      const path = header[1]!.split('.').map(part => part.trim().replace(/^["']|["']$/g, ''));
+      inMods = path.length === 1 && path[0]!.toLowerCase() === 'mods';
+      continue;
+    }
+    if (!inMods) continue;
+    const assignment = line.match(/^modId\s*=\s*(.+)$/);
+    if (assignment) {
+      const id = assignment[1]!.trim().replace(/^["']|["']$/g, '');
+      if (id !== '') return id;
+    }
+  }
+  return null;
+}
+
+/**
+ * The mod ids a Forge/NeoForge descriptor says it needs **on the server**.
+ *
+ * Mirrors `ForgeTomlScanner.getSidenessesAndDependencies` (lines 119-145): only non-platform entries become
+ * dependencies, `type = "incompatible"` entries are skipped (they mean the opposite of a dependency) and an
+ * entry whose `side` is CLIENT is a client-only dependency, so it must not rescue anything.
+ *
+ * Read from the jar's own `[[dependencies.<modId>]]` block. When the descriptor has no readable `[[mods]]` id,
+ * every owner block is read instead — over-recording a dependency can only ever *rescue* a jar, which is the
+ * fail-toward-keeping direction the whole rule is built on.
+ */
+function forgeServerDependencies(text: string, ownModId: string | null): string[] {
+  let byMod: Map<string, ForgeDependencyEntry[]>;
+  try {
+    byMod = parseForgeDependencies(text);
+  } catch {
+    return [];
+  }
+  const keyFor = (id: string): string | undefined => [...byMod.keys()].find(key => key.toLowerCase() === id.toLowerCase());
+  const owners: string[] = [];
+  if (ownModId !== null) {
+    const key = keyFor(ownModId);
+    if (key !== undefined) owners.push(key);
+  } else {
+    owners.push(...byMod.keys());
+  }
+  const ids = new Set<string>();
+  for (const owner of owners) {
+    for (const entry of byMod.get(owner) ?? []) {
+      if ((entry.type ?? '').toLowerCase() === 'incompatible') continue;
+      if (FORGE_PLATFORM_MODIDS.some(pattern => pattern.test(entry.modId))) continue;
+      if ((entry.side ?? '').toUpperCase() === 'CLIENT') continue;
+      ids.add(entry.modId.toLowerCase());
+    }
+  }
+  return [...ids];
+}
+
+/** One jar's self-declared identity and dependencies, plus the L2 sideness verdict. */
+export interface JarDeclaration {
+  /** Basename of the jar, so a verdict always names the file it is about. */
+  file?: string;
+  /** The id other jars name in `depends` (`[[mods]] modId`, fabric `id`, quilt `quilt_loader.id`), or null. */
+  modId: string | null;
+  /** Ids this jar also answers to — fabric's `provides` (Fabric API declares `fabric`). */
+  provides: string[];
+  /** Mod ids this jar needs on the server (platform ids and client-only dependencies removed). */
+  depends: string[];
+  client: boolean;
+  reasons: string[];
+}
+
+/**
+ * Read one jar's descriptor for everything the side-resolution stack needs: its own id, its `provides`
+ * aliases, its server-side dependencies, and whether it declares itself client-only.
+ *
+ * A jar that cannot be read is not an error — it is a jar nothing is known about, which must be kept.
+ */
+export async function scanJarDeclaration(jarPath: string): Promise<JarDeclaration> {
+  const out: JarDeclaration = { file: path.basename(jarPath), modId: null, provides: [], depends: [], client: false, reasons: [] };
   try {
     const toml = await readZipEntry(jarPath, 'META-INF/mods.toml').catch(() => null)
       ?? await readZipEntry(jarPath, 'META-INF/neoforge.mods.toml').catch(() => null);
     if (toml) {
-      const verdict = forgeTomlIsClientOnly(toml.toString('utf8'));
-      if (verdict.client && verdict.reason) reasons.push(verdict.reason);
+      const text = toml.toString('utf8');
+      out.modId = parseForgeModId(text);
+      out.depends = forgeServerDependencies(text, out.modId);
+      const verdict = forgeTomlIsClientOnly(text);
+      if (verdict.client && verdict.reason) { out.client = true; out.reasons.push(verdict.reason); }
     }
-  } catch { /* unreadable */ }
+  } catch { /* unreadable descriptor -> keep */ }
   try {
     const fmj = await readZipEntry(jarPath, 'fabric.mod.json').catch(() => null)
       ?? await readZipEntry(jarPath, 'quilt.mod.json').catch(() => null);
     if (fmj) {
-      const j = JSON.parse(fmj.toString('utf8')) as { environment?: string; mixins?: (string | { config: string })[] };
-      if (j.environment === 'client') reasons.push('fabric.mod.json environment=client');
+      const j = JSON.parse(fmj.toString('utf8')) as {
+        id?: string; environment?: string; provides?: unknown; depends?: unknown;
+        mixins?: (string | { config: string })[];
+        quilt_loader?: { id?: string; provides?: unknown; depends?: unknown };
+      };
+      const quilt = j.quilt_loader;
+      out.modId = typeof j.id === 'string' ? j.id : (typeof quilt?.id === 'string' ? quilt.id : out.modId);
+      out.provides = idList(j.provides ?? quilt?.provides);
+      const block = j.depends ?? quilt?.depends;
+      const declared = Array.isArray(block)
+        ? idList(block)
+        : (block !== null && typeof block === 'object' ? Object.keys(block as Record<string, unknown>) : []);
+      out.depends = declared.filter(id => !JAR_PLATFORM_MODIDS.test(id)).map(id => id.toLowerCase());
+      if (j.environment === 'client') { out.client = true; out.reasons.push('fabric.mod.json environment=client'); }
       for (const cfg of j.mixins ?? []) {
         try {
           const name = typeof cfg === 'string' ? cfg : cfg.config;
           const mj = JSON.parse((await readZipEntry(jarPath, name)).toString('utf8')) as { environment?: string };
-          if (mj.environment === 'client') reasons.push(`mixin ${name} environment=client`);
+          if (mj.environment === 'client') { out.client = true; out.reasons.push(`mixin ${name} environment=client`); }
         } catch { /* optional config */ }
       }
     }
-  } catch { /* unreadable */ }
-  return { client: reasons.length > 0, reasons };
+  } catch { /* unreadable descriptor -> keep */ }
+  return out;
 }
+
+export async function scanJarSideness(jarPath: string): Promise<{ client: boolean; reasons: string[] }> {
+  const declaration = await scanJarDeclaration(jarPath);
+  return { client: declaration.client, reasons: declaration.reasons };
+}
+/**
+ * Pure dependency-rescue decision over a scanned mods directory.
+ *
+ * Ported from ServerPackCreator's `ModListCompiler.compileModList` loop (lines 242-256 and `dependantOf`,
+ * 280-287), which exists because a server pack that installs and then dies on load is worse than a slightly
+ * larger one. Before a jar is disabled, every *kept* jar's server-side dependencies are resolved against the
+ * disabled jar's id **and the aliases it declares in `provides`** — the alias half is load-bearing, not
+ * defensive: Fabric API declares `"id": "fabric-api"` with `"provides": ["fabric"]`, so a mod writing
+ * `depends: {"fabric": "*"}` names an id no jar in the pack calls itself.
+ *
+ * Iterated to a fixpoint like the reference: each rescue re-adds a jar to the kept set, which can put that
+ * jar's own dependencies in play and rescue a further one.
+ *
+ * Fail toward keeping throughout: an unreadable jar has no id and no dependencies, so it can never cause a
+ * disable, and a jar nothing depends on keeps its original verdict.
+ */
+export function rescueDependencies(
+  disabled: readonly JarDeclaration[],
+  kept: readonly JarDeclaration[],
+): { keep: JarDeclaration[]; stillDisabled: JarDeclaration[] } {
+  const stillDisabled = [...disabled];
+  const keep = [...kept];
+  // An id may be answered by several jars (duplicate installs, `provides` aliases): anything answered stays.
+  const answersTo = (jar: JarDeclaration): Set<string> => {
+    const ids = new Set<string>();
+    if (jar.modId) ids.add(jar.modId.toLowerCase());
+    for (const alias of jar.provides) ids.add(alias.toLowerCase());
+    return ids;
+  };
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let index = stillDisabled.length - 1; index >= 0; index -= 1) {
+      const candidate = stillDisabled[index]!;
+      const candidateIds = answersTo(candidate);
+      const dependant = keep.find(keptJar =>
+        keptJar.depends.some(dep => candidateIds.has(dep)));
+      if (!dependant) continue;
+      stillDisabled.splice(index, 1);
+      keep.push(candidate);
+      changed = true;
+      log(`[L2] ${L2_RESCUE_RULE}: keeping ${candidate.modId ?? '(no id)'} — ${dependant.modId ?? '(no id)'} depends on it`);
+    }
+  }
+  return { keep, stillDisabled };
+}
+
+/**
+ * L2: move jars that declare themselves client-only into `mods-disabled/`, rescuing any jar a *kept* jar
+ * depends on.
+ *
+ * `protect` is the community force-include set (`curated.ts` `protectBasenames`): those jars are required by
+ * data, so they are never candidates and are part of the kept set the rescue resolves against.
+ */
 export async function applyJarSideness(modsDir: string, protect: Set<string> = new Set()): Promise<{ jar: string; reasons: string[] }[]> {
   const disabledDir = path.join(path.dirname(modsDir), 'mods-disabled');
   const out: { jar: string; reasons: string[] }[] = [];
   let jars: string[] = []; try { jars = readdirSync(modsDir).filter(f => /\.jar$/i.test(f)); } catch { return out; }
+
+  // Scan everything first: the rescue needs the kept set, which is only known after every jar is read.
+  const declarations = new Map<string, JarDeclaration>();
+  for (const jar of jars) declarations.set(jar, await scanJarDeclaration(path.join(modsDir, jar)));
+
+  const candidates: JarDeclaration[] = [];
+  const kept: JarDeclaration[] = [];
   for (const jar of jars) {
-    if (protect.has(jar)) continue;
-    const { client, reasons } = await scanJarSideness(path.join(modsDir, jar));
-    if (!client) continue;
+    const declaration = declarations.get(jar)!;
+    if (protect.has(jar)) { kept.push(declaration); continue; }
+    if (declaration.client) candidates.push(declaration);
+    else kept.push(declaration);
+  }
+
+  const { stillDisabled } = rescueDependencies(candidates, kept);
+  for (const declaration of stillDisabled) {
+    const jar = declaration.file;
+    if (!jar || !existsSync(path.join(modsDir, jar))) continue;
     mkdirSync(disabledDir, { recursive: true });
     renameSync(path.join(modsDir, jar), path.join(disabledDir, jar));
+    // Every exclusion names the rule that produced it and the evidence it acted on (research §3.6).
+    const reasons = [`${L2_RULE}: ${declaration.reasons.join('; ')}`];
     out.push({ jar, reasons });
-    log(`[L2] ${jar} â†’ mods-disabled (${reasons.join('; ')})`);
+    log(`[L2] ${jar} → mods-disabled (${reasons.join('; ')})`);
   }
   return out;
 }
