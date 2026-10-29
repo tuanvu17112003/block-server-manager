@@ -8,8 +8,8 @@
     "java": 17,
     "route": "A"
   },
-  "startedAt": "2026-10-29T17:34:00.314Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T17-16-44-104Z\\skyfactory-5",
+  "startedAt": "2026-10-29T19:05:52.952Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T18-50-05-984Z\\skyfactory-5",
   "sourceKind": "curseForgeServerZip (cached)",
   "preview": {
     "sourceName": "392141-server-6290699",
@@ -62,7 +62,7 @@
     "errors": []
   },
   "published": {
-    "serverId": "7ba7ca60-e3fe-44c7-80cc-1c29da322f43",
+    "serverId": "879c69ba-0cde-4f20-bc6f-61d2b32b2830",
     "jarsEnabled": 262,
     "jarsDisabled": 2,
     "disabled": [
@@ -74,6 +74,6 @@
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T17:36:01.883Z",
-  "durationSeconds": 121.6
+  "finishedAt": "2026-10-29T19:07:50.904Z",
+  "durationSeconds": 118
 }

@@ -7,8 +7,8 @@
     "loader": "forge",
     "java": 17
   },
-  "startedAt": "2026-10-29T17:19:21.355Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T17-16-44-104Z\\battlearmorytacz",
+  "startedAt": "2026-10-29T18:52:40.290Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T18-50-05-984Z\\battlearmorytacz",
   "sourceKind": "modrinthRemote (project rQiXwLhB \"BattleArmory TACZ\", version TX0XBjIG)",
   "preview": {
     "sourceName": "BattleArmory TACZ",
@@ -89,7 +89,7 @@
     "errors": []
   },
   "published": {
-    "serverId": "bab025b1-fb13-4f6c-9309-5a2bb00df6c7",
+    "serverId": "31d32a16-1f24-4104-b9c9-adb9d0fa9df0",
     "jarsEnabled": 62,
     "jarsDisabled": 18,
     "disabled": [
@@ -117,6 +117,6 @@
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T17:23:32.431Z",
-  "durationSeconds": 251.1
+  "finishedAt": "2026-10-29T18:54:46.631Z",
+  "durationSeconds": 126.3
 }

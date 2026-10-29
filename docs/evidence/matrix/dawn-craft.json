@@ -8,8 +8,8 @@
     "java": 17,
     "route": "A/B"
   },
-  "startedAt": "2026-10-29T17:36:02.874Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T17-16-44-104Z\\dawn-craft",
+  "startedAt": "2026-10-29T19:07:51.931Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T18-50-05-984Z\\dawn-craft",
   "sourceKind": "curseforgeProject 829758 (official API key mode)",
   "preview": {
     "sourceName": "DawnCraft - 2.0.16_hf",
@@ -62,7 +62,7 @@
     "errors": []
   },
   "published": {
-    "serverId": "f8b1172d-c575-480a-a390-dd7facbe787d",
+    "serverId": "83460f16-eded-4287-bc6c-78ec4871d0e5",
     "jarsEnabled": 251,
     "jarsDisabled": 0,
     "disabled": [],
@@ -71,6 +71,6 @@
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T17:39:04.300Z",
-  "durationSeconds": 181.4
+  "finishedAt": "2026-10-29T19:11:04.392Z",
+  "durationSeconds": 192.5
 }

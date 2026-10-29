@@ -7,8 +7,8 @@
     "loader": "fabric",
     "java": 21
   },
-  "startedAt": "2026-10-29T17:27:11.329Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T17-16-44-104Z\\slimes-adventure",
+  "startedAt": "2026-10-29T18:58:36.221Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T18-50-05-984Z\\slimes-adventure",
   "sourceKind": "modrinthRemote (project 8yKzGJOG \"Slimes Adventure\", version ylSYr50H)",
   "preview": {
     "sourceName": "Slimes Adventure",
@@ -83,7 +83,7 @@
     "errors": []
   },
   "published": {
-    "serverId": "dbd58e98-7115-40bb-9e18-e35cd409a8ef",
+    "serverId": "c2301c7f-634b-4996-b05a-a2bb5f4b382e",
     "jarsEnabled": 115,
     "jarsDisabled": 4,
     "disabled": [
@@ -97,6 +97,6 @@
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T17:29:10.585Z",
-  "durationSeconds": 119.3
+  "finishedAt": "2026-10-29T19:00:40.275Z",
+  "durationSeconds": 124.1
 }

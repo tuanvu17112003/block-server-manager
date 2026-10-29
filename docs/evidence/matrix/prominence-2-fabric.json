@@ -7,8 +7,8 @@
     "loader": "fabric",
     "java": 17
   },
-  "startedAt": "2026-10-29T17:23:33.233Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T17-16-44-104Z\\prominence-2-fabric",
+  "startedAt": "2026-10-29T18:54:47.580Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T18-50-05-984Z\\prominence-2-fabric",
   "sourceKind": "modrinthRemote (project EGs3lC8D \"Prominence™ II: Hasturian Era\", version saJCoKDZ)",
   "preview": {
     "sourceName": "Prominence™ II: Hasturian Era",
@@ -119,7 +119,7 @@
     "errors": []
   },
   "published": {
-    "serverId": "19397408-369e-4e9f-b76a-f1f1574876fd",
+    "serverId": "195d77cf-5115-446c-87ac-127cb12caef6",
     "jarsEnabled": 349,
     "jarsDisabled": 14,
     "disabled": [
@@ -143,6 +143,6 @@
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T17:27:10.834Z",
-  "durationSeconds": 217.6
+  "finishedAt": "2026-10-29T18:58:35.687Z",
+  "durationSeconds": 228.1
 }

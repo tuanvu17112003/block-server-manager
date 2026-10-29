@@ -1,89 +1,89 @@
 {
-  "startedAt": "2026-10-29T17:16:44.104Z",
-  "finishedAt": "2026-10-29T17:45:47.247Z",
-  "runRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T17-16-44-104Z",
+  "startedAt": "2026-10-29T18:50:05.984Z",
+  "finishedAt": "2026-10-29T19:17:53.170Z",
+  "runRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T18-50-05-984Z",
   "results": [
     {
       "slug": "skyblock-enhanced",
       "verdict": "PASS",
-      "durationSeconds": 20.8,
+      "durationSeconds": 22.2,
       "sourceKind": "modrinthRemote (project e0oMrxjp \"SkyBlock Enhanced\", version C4s9ZcoW)",
       "error": null
     },
     {
       "slug": "cobbleverse",
       "verdict": "PASS",
-      "durationSeconds": 135.9,
+      "durationSeconds": 131.6,
       "sourceKind": "modrinthRemote (project Jkb29YJU \"COBBLEVERSE - Pokemon Adventure [Cobblemon]\", version 4SKGla61)",
       "error": null
     },
     {
       "slug": "battlearmorytacz",
       "verdict": "PASS",
-      "durationSeconds": 251.1,
+      "durationSeconds": 126.3,
       "sourceKind": "modrinthRemote (project rQiXwLhB \"BattleArmory TACZ\", version TX0XBjIG)",
       "error": null
     },
     {
       "slug": "prominence-2-fabric",
       "verdict": "PASS",
-      "durationSeconds": 217.6,
+      "durationSeconds": 228.1,
       "sourceKind": "modrinthRemote (project EGs3lC8D \"Prominence™ II: Hasturian Era\", version saJCoKDZ)",
       "error": null
     },
     {
       "slug": "slimes-adventure",
       "verdict": "PASS",
-      "durationSeconds": 119.3,
+      "durationSeconds": 124.1,
       "sourceKind": "modrinthRemote (project 8yKzGJOG \"Slimes Adventure\", version ylSYr50H)",
       "error": null
     },
     {
       "slug": "zombie-invade-100-days",
       "verdict": "PASS",
-      "durationSeconds": 100.7,
+      "durationSeconds": 121.4,
       "sourceKind": "modrinthRemote (project l9m9tuPN \"Zombie Invade 100 Days\", version M8j2mfGj)",
       "error": null
     },
     {
       "slug": "dungeon-heroes",
       "verdict": "PASS",
-      "durationSeconds": 106.2,
+      "durationSeconds": 105.4,
       "sourceKind": "curseforgeProject 671029 (official API key mode)",
       "error": null
     },
     {
       "slug": "rlcraft",
       "verdict": "PASS",
-      "durationSeconds": 81.3,
+      "durationSeconds": 84.4,
       "sourceKind": "curseforgeProject 285109 (official API key mode)",
       "error": null
     },
     {
       "slug": "skyfactory-5",
       "verdict": "PASS",
-      "durationSeconds": 121.6,
+      "durationSeconds": 118,
       "sourceKind": "curseForgeServerZip (cached)",
       "error": null
     },
     {
       "slug": "dawn-craft",
       "verdict": "PASS",
-      "durationSeconds": 181.4,
+      "durationSeconds": 192.5,
       "sourceKind": "curseforgeProject 829758 (official API key mode)",
       "error": null
     },
     {
       "slug": "otherworld-dnd",
       "verdict": "PASS",
-      "durationSeconds": 216.7,
+      "durationSeconds": 215.5,
       "sourceKind": "curseforgeProject 1418133 (official API key mode)",
       "error": null
     },
     {
       "slug": "prominence-2-hasturian-era",
       "verdict": "PASS",
-      "durationSeconds": 184.4,
+      "durationSeconds": 191.1,
       "sourceKind": "curseforgeProject 466901 (official API key mode)",
       "error": null
     }

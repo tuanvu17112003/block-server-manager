@@ -8,8 +8,8 @@
     "java": 21,
     "route": "A/B"
   },
-  "startedAt": "2026-10-29T17:30:52.065Z",
-  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T17-16-44-104Z\\dungeon-heroes",
+  "startedAt": "2026-10-29T19:02:42.417Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T18-50-05-984Z\\dungeon-heroes",
   "sourceKind": "curseforgeProject 671029 (official API key mode)",
   "preview": {
     "sourceName": "Dungeon Heroes-2.7.5.zip",
@@ -62,7 +62,7 @@
     "errors": []
   },
   "published": {
-    "serverId": "464d4c66-ae27-4cf8-a20e-f07ee99a99fc",
+    "serverId": "8f1269c9-77cf-4167-9d86-1d79d5019c90",
     "jarsEnabled": 187,
     "jarsDisabled": 0,
     "disabled": [],
@@ -71,6 +71,6 @@
   },
   "error": null,
   "verdict": "PASS",
-  "finishedAt": "2026-10-29T17:32:38.276Z",
-  "durationSeconds": 106.2
+  "finishedAt": "2026-10-29T19:04:27.793Z",
+  "durationSeconds": 105.4
 }
