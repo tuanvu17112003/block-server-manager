@@ -1,9 +1,10 @@
 // Archive index + adapter registry.
 //
-// One zip listing per input, shared by every adapter — adapters never touch the filesystem or yauzl
+// One zip listing per input, shared by every adapter â€” adapters never touch the filesystem or yauzl
 // directly, which keeps them pure and unit-testable from fixtures.
 import { listZip, readZipEntry } from '../installer/core';
 import { appError } from '../store';
+import { deferredFormatMessage, identifyDeferredFormat } from './deferred-formats';
 import type { ArchiveEntry, ArchiveIndex, DetectInput, PackAdapter, PackFormatId, PackRecipe, AdapterIo } from './types';
 import { isSafeRelativePath, normalizePath } from './types';
 import { isMinecraftVersionString } from './ftb';
@@ -98,6 +99,15 @@ export class AdapterRegistry {
    * so an unsupported archive is never reported as "unknown pack" with no evidence.
    */
   async resolve(input: DetectInput, io: AdapterIo): Promise<PackRecipe> {
+    // Item 5 runs BEFORE adapter selection, not after. A deferred format must be reported as deferred even when a
+    // catch-all adapter would happily claim the archive: `plain.serverzip` matches anything with no manifest, so
+    // checking afterwards let a GDLauncher pack fall through to it and produce the misleading "this archive has no
+    // pack manifest and does not state its Minecraft version". That is the silent-degradation shape the research
+    // records as D4 — a general adapter absorbing a specific format and losing its meaning.
+    if (input.shape === 'archive' || input.shape === 'instance') {
+      const deferred = identifyDeferredFormat(input.index);
+      if (deferred) throw appError('validation', deferredFormatMessage(deferred));
+    }
     const matched = await this.candidates(input);
     if (matched.length === 0) {
       const evidence = input.shape === 'archive' || input.shape === 'instance'
@@ -142,12 +152,12 @@ export function validateRecipe(recipe: PackRecipe): void {
   if (recipe.loader === 'hybrid') {
     throw appError('validation', `Adapter ${recipe.formatId}: hybrid loaders are not supported for new installs.`);
   }
-  // C6: every recipe must state its evidence grade. This is the structural guard against the original error —
+  // C6: every recipe must state its evidence grade. This is the structural guard against the original error â€”
   // claiming a format works because a schema was implemented, with no real artefact ever installed.
   if (!recipe.evidenceGrade) {
     throw appError('validation',
       `Adapter ${recipe.formatId} produced a recipe with no evidence grade. `
-      + 'Every format must state E1/E2/E3/E4 (docs/audit/19 §2) so a schema-derived adapter is never presented as supported.');
+      + 'Every format must state E1/E2/E3/E4 (docs/audit/19 Â§2) so a schema-derived adapter is never presented as supported.');
   }
   if (recipe.evidenceGrade !== 'E1' && recipe.evidenceGrade !== 'E2' && recipe.evidenceNote.trim() === '') {
     throw appError('validation',
@@ -168,3 +178,4 @@ export function validateRecipe(recipe: PackRecipe): void {
     throw appError('validation', `Adapter ${recipe.formatId} tried to apply client-overrides to a server install.`);
   }
 }
+
