@@ -215,7 +215,13 @@ export function buildCurseForgeClientRecipe(manifest: CfManifest & {
       { field: 'payload', source: 'overrides/ layer' },
     ],
     evidenceGrade: 'E3',
-    evidenceNote: 'real CurseForge server-pack archives resolve (3 of 4 cached cfpack zips), but no CurseForge pack has been installed end-to-end through this adapter yet, so resolve parity only.',
+    // Scope note (docs/audit/24 DV-43): this grade covers SHAPE A only — a `.zip` the user supplied. CurseForge
+    // key-mode installs (`source.kind === 'curseforgeProject'`) are acquisition shape B and do NOT come through
+    // this adapter, deliberately and permanently: the provider API returns metadata only (`CfProjectMeta` carries
+    // no file list), so a shape-B adapter could not build `recipe.files[]` and would instead have to re-implement
+    // `installCurseforge`'s ~200-line server-pack resolution rather than delegate (invariant I2). That working
+    // path stays on its own proven engine rather than being rewritten to satisfy an architectural symmetry.
+    evidenceNote: 'shape A only (a user-supplied zip): 3 of 4 real cached server-pack archives resolve. CurseForge key-mode installs are shape B and use their own proven engine — see DV-43 for why no shape-B adapter exists.',
   };
 }
 
@@ -352,7 +358,10 @@ export function buildCurseForgeServerPackRecipe(
       { field: 'payload', source: 'whole archive tree applied as the root override layer (no manifest, no download list)' },
     ],
     evidenceGrade: 'E3',
-    evidenceNote: 'real CurseForge server-pack archives resolve (3 of 4 cached cfpack zips), but no CurseForge pack has been installed end-to-end through this adapter yet, so resolve parity only.',
+    // Same scope boundary as the client recipe above (DV-43): shape A only. A CurseForge author server pack is a
+    // zip the user supplies; the key-mode provider path never reaches here and needs no adapter for the reason
+    // recorded once in DV-43 rather than repeated in every recipe.
+    evidenceNote: 'shape A only (a user-supplied zip): 3 of 4 real cached server-pack archives resolve. CurseForge key-mode installs are shape B and use their own proven engine — see DV-43.',
   };
 }
 

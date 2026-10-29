@@ -50,7 +50,7 @@ Grades are from doc 19. **Only E2+ may be called "supported".** This table is th
 | **packwiz (archive)** | **E2** | A real zipped pack installed end-to-end: loader installed, payload extracted, **128,551-byte** jar downloaded from the real CDN, metadata excluded. |
 | **packwiz (HTTP tree)** | E3→resolve | Both declared shapes work; side mapping proven (`side="client"` → `unsupported`). No real HTTP tree existed on disk to install from, so it is resolve-level only. |
 | **FTB** | **E2** | Installs exercised end-to-end against the live API earlier this session; loader-build escalation fault-injected and recovered. |
-| **CurseForge (client + server pack)** | **E2 on the legacy engine, E3 on the adapter** | The 12-pack acceptance matrix installed **6 CurseForge packs end-to-end with verified boots** (Dungeon Heroes 137.6 s, RLCraft 111.3 s, SkyFactory 5 156.6 s, DawnCraft 190 s, Otherworld D&D 237.8 s, Prominence II CF 197.4 s) — but through `curseforge.ts` (route A/B), **not** through the new `curseforge.*` adapters. So CurseForge installs are proven; routing them through the adapter layer is not. |
+| **CurseForge (client + server pack)** | **E2 on its own engine; E3 for the shape-A adapters** | The 12-pack acceptance matrix installed **6 CurseForge packs end-to-end with verified boots** (Dungeon Heroes, RLCraft, SkyFactory 5, DawnCraft, Otherworld D&D, Prominence II CF) through the key-mode provider path, which is **shape B** and needs no adapter (DV-43). The two `curseforge.*` adapters serve **shape A** — a zip the user supplies — and are E3 because that path has resolve parity only. |
 | **ServerPackCreator output** | **E3** | The real 1 GB wrapper resolves from its declared `manifest.json` (fabric 0.19.3 / 1.20.1, corroborated by three independent sources). Not installed. |
 | **Prism / ATLauncher** | **E2** | Both now rest on real third-party artefacts, not schemas: a CI-built PrismLauncher instance export (`mmc-pack.json`, sha256 `15456AB9…`) resolving **forge 47.4.0 / MC 1.20.1**, and a user-published ATLauncher `instance.json` from issue #875 (sha256 `0E2DD9DC…`) resolving **"eTards Create++" / Forge 47.2.17 / 1.20.1 / 290 mods**. Both preserved under `docs/evidence/adapters/` and checked by checksum in gate steps. Not E1: one instance each is not the population, and neither carries a server payload, so no boot was performed. |
 | **Bare server zip** | **E3** | Two real archives resolve, but it plans no downloads and was not installed via the adapter path. |
@@ -73,10 +73,13 @@ Real-artefact coverage: **6/6** cached archives resolve (was 0/6 when the sessio
 
 ## 5. What is NOT done — read this before believing anything above
 
-- **CurseForge packs install end-to-end (6/12 of the acceptance matrix) but via the legacy engine, not the new
-  adapters.** `curseforge.ts` is proven at E2; `curseforge.*` adapters remain resolve-only (E3). Closing that means
-  routing the CurseForge pipeline through the adapter layer and re-running the matrix — the machinery is shared
-  with Modrinth, so the risk is low, but it is not done and must not be claimed.
+- **CurseForge key-mode installs (6/12 of the acceptance matrix) run on their own proven engine, not on the new
+  adapters — and that is the final answer, not a gap.** This was originally written as "closing that means routing
+  the CurseForge pipeline through the adapter layer". Investigation showed that would be wrong (DV-43): the provider
+  API returns metadata only (`CfProjectMeta` has no file list), so a shape-B adapter could neither produce a
+  `recipe.files[]` nor delegate — it would have to re-implement `installCurseforge`'s server-pack resolution,
+  violating invariant I2 and risking six working packs for an architectural name. The two CurseForge `*` adapters
+  serve shape A (a zip the user supplies) and say so in their `evidenceNote`; shape B needs no adapter.
 - **C4/C5's SPC and HTTP-tree halves are resolve-level only.**
 - ~~The 12-pack live matrix was not re-run~~ — **it was, and passed 12/12** (15:29:56 → 16:01:26, every pack
   `verify-boot: complete`). This is the strongest single result of the session: 6 Modrinth + 6 CurseForge packs,
