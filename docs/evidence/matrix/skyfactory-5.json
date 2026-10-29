@@ -1,0 +1,79 @@
+{
+  "slug": "skyfactory-5",
+  "name": "SkyFactory 5",
+  "platform": "curseforge",
+  "expect": {
+    "mc": "1.20.1",
+    "loader": "forge",
+    "java": 17,
+    "route": "A"
+  },
+  "startedAt": "2026-10-29T07:09:24.386Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T06-56-29-547Z\\skyfactory-5",
+  "sourceKind": "curseForgeServerZip (cached)",
+  "preview": {
+    "sourceName": "392141-server-6290699",
+    "loader": {
+      "kind": "forge",
+      "minecraftVersion": "1.20.1",
+      "loaderVersion": "47.4.0"
+    },
+    "warningCount": 0
+  },
+  "plan": {
+    "total": 0,
+    "include": 0,
+    "exclude": 0,
+    "conflicts": []
+  },
+  "report": {
+    "status": "complete",
+    "stages": [
+      {
+        "stage": "route-A",
+        "outcome": "complete"
+      },
+      {
+        "stage": "validate",
+        "outcome": "complete"
+      },
+      {
+        "stage": "verify-boot",
+        "outcome": "complete",
+        "detail": "first boot"
+      },
+      {
+        "stage": "publish",
+        "outcome": "complete"
+      }
+    ],
+    "files": [
+      {
+        "path": "264 mods (bundled in pack)",
+        "outcome": "installed"
+      },
+      {
+        "path": "0 client-only",
+        "outcome": "skipped-client-only"
+      }
+    ],
+    "warningCount": 0,
+    "warnings": [],
+    "errors": []
+  },
+  "published": {
+    "serverId": "37b5fd3c-dcd5-47ff-8c25-b2e7c63973a3",
+    "jarsEnabled": 262,
+    "jarsDisabled": 2,
+    "disabled": [
+      "appleskin-forge-mc1.20.1-2.5.1.jar",
+      "ClearSky-Universal-1.20.1-1.0.0.jar"
+    ],
+    "verifiedBoot": "complete",
+    "verifyDetail": "first boot"
+  },
+  "error": null,
+  "verdict": "PASS",
+  "finishedAt": "2026-10-29T07:11:18.988Z",
+  "durationSeconds": 114.6
+}

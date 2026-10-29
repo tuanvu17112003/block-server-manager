@@ -1,0 +1,89 @@
+{
+  "slug": "prominence-2-hasturian-era",
+  "name": "Prominence II (CurseForge)",
+  "platform": "curseforge",
+  "expect": {
+    "mc": "1.20.1",
+    "loader": "fabric",
+    "java": 17,
+    "route": "A/B"
+  },
+  "startedAt": "2026-10-29T07:18:10.930Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T06-56-29-547Z\\prominence-2-hasturian-era",
+  "sourceKind": "curseforgeProject 466901 (official API key mode)",
+  "preview": {
+    "sourceName": "Prominence™ II Hasturian Erav v4.1.5hf",
+    "loader": {
+      "kind": "fabric",
+      "minecraftVersion": "1.20.1",
+      "loaderVersion": null
+    },
+    "warningCount": 0
+  },
+  "plan": {
+    "total": 0,
+    "include": 0,
+    "exclude": 0,
+    "conflicts": []
+  },
+  "report": {
+    "status": "complete",
+    "stages": [
+      {
+        "stage": "route-A",
+        "outcome": "complete"
+      },
+      {
+        "stage": "validate",
+        "outcome": "complete"
+      },
+      {
+        "stage": "verify-boot",
+        "outcome": "complete",
+        "detail": "1 auto-fix(es) in 2 round(s)"
+      },
+      {
+        "stage": "publish",
+        "outcome": "complete"
+      }
+    ],
+    "files": [
+      {
+        "path": "373 mods (bundled in pack)",
+        "outcome": "installed"
+      },
+      {
+        "path": "0 client-only",
+        "outcome": "skipped-client-only"
+      },
+      {
+        "path": "mods/ForgeConfigScreens-v8.0.2-1.20.1-Fabric.jar",
+        "outcome": "disabled-by-autofix",
+        "detail": "round 1: disabled forgeconfigscreens"
+      }
+    ],
+    "warningCount": 1,
+    "warnings": [
+      "auto-fix applied 1 change(s) across 2 boot round(s) before verification passed"
+    ],
+    "errors": []
+  },
+  "published": {
+    "serverId": "26ad8cc3-deec-4f5c-81f2-67d653fdede3",
+    "jarsEnabled": 368,
+    "jarsDisabled": 5,
+    "disabled": [
+      "BuildGuide-1.20-0.4.9.jar",
+      "class_nametags-1.0.1+1.20.1.jar",
+      "ForgeConfigScreens-v8.0.2-1.20.1-Fabric.jar",
+      "iris-1.7.6+mc1.20.1.jar",
+      "modmenu-7.2.2.jar"
+    ],
+    "verifiedBoot": "complete",
+    "verifyDetail": "1 auto-fix(es) in 2 round(s)"
+  },
+  "error": null,
+  "verdict": "PASS",
+  "finishedAt": "2026-10-29T07:21:30.549Z",
+  "durationSeconds": 199.6
+}

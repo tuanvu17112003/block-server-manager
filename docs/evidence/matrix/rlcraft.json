@@ -1,0 +1,76 @@
+{
+  "slug": "rlcraft",
+  "name": "RLCraft",
+  "platform": "curseforge",
+  "expect": {
+    "mc": "1.12.2",
+    "loader": "forge",
+    "java": 8,
+    "route": "A/B"
+  },
+  "startedAt": "2026-10-29T07:08:10.188Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T06-56-29-547Z\\rlcraft",
+  "sourceKind": "curseforgeProject 285109 (official API key mode)",
+  "preview": {
+    "sourceName": "RLCraft 1.12.2 - Release v2.9.3.zip",
+    "loader": {
+      "kind": "forge",
+      "minecraftVersion": "1.12.2",
+      "loaderVersion": null
+    },
+    "warningCount": 0
+  },
+  "plan": {
+    "total": 0,
+    "include": 0,
+    "exclude": 0,
+    "conflicts": []
+  },
+  "report": {
+    "status": "complete",
+    "stages": [
+      {
+        "stage": "route-A",
+        "outcome": "complete"
+      },
+      {
+        "stage": "validate",
+        "outcome": "complete"
+      },
+      {
+        "stage": "verify-boot",
+        "outcome": "complete",
+        "detail": "first boot"
+      },
+      {
+        "stage": "publish",
+        "outcome": "complete"
+      }
+    ],
+    "files": [
+      {
+        "path": "178 mods (bundled in pack)",
+        "outcome": "installed"
+      },
+      {
+        "path": "0 client-only",
+        "outcome": "skipped-client-only"
+      }
+    ],
+    "warningCount": 0,
+    "warnings": [],
+    "errors": []
+  },
+  "published": {
+    "serverId": "cbb1ef0e-0473-41df-803d-b8569e1aa829",
+    "jarsEnabled": 178,
+    "jarsDisabled": 0,
+    "disabled": [],
+    "verifiedBoot": "complete",
+    "verifyDetail": "first boot"
+  },
+  "error": null,
+  "verdict": "PASS",
+  "finishedAt": "2026-10-29T07:09:24.005Z",
+  "durationSeconds": 73.8
+}

@@ -13,7 +13,7 @@ let mainWindow: BrowserWindow | null = null;
 
 /** Gate modes run headless against throwaway data roots; they must never share a profile or lock. */
 const TEST_FLAGS = [
-  '--selftest', '--mgmttest', '--ipctest', '--e2e',
+  '--selftest', '--mgmttest', '--ipctest', '--e2e', '--matrixtest',
   '--servicestest', '--contracttest', '--uitest', '--lifetest',
   '--soak', '--quitsmoke',
 ];
@@ -271,6 +271,16 @@ if (!hasSingleInstanceLock) {
     if (process.argv.includes('--e2e')) {
       const { runE2E } = await import('./e2e');
       const ok = await runE2E(ctx);
+      app.exit(ok ? 0 : 1);
+      return;
+    }
+
+    if (process.argv.includes('--matrixtest')) {
+      // Live 12-pack acceptance matrix against the reference spike (H:\TestAI\modrinth-curseforge).
+      // Uses the real dev data root for the CurseForge key, but every pack installs into its own
+      // throwaway root and writes docs/evidence/matrix/<slug>.json before cleanup.
+      const { runMatrix } = await import('./matrix-test');
+      const ok = await runMatrix(ctx);
       app.exit(ok ? 0 : 1);
       return;
     }

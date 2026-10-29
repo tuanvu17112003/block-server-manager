@@ -687,7 +687,14 @@ export class Pipeline {
               ? path.join(this.ctx.dataRoot, 'curseforge-import', held.source.zipName)
               : undefined);
             const projectId = held.source.kind === 'curseforgeProject' ? Number(held.source.projectId) : undefined;
-            const res = await installCurseforge({ zipPath, projectId, dir: stagingDir, dataRoot: this.ctx.dataRoot, cacheDir: this.cacheDir(), onProgress, signal });
+            const res = await installCurseforge({
+              zipPath, projectId, dir: stagingDir, dataRoot: this.ctx.dataRoot, cacheDir: this.cacheDir(), onProgress, signal,
+              // The preview already resolved exact metadata (API key mode / archive inference); hand it
+              // to the engine so a bare ServerPackCreator archive is not rejected for lacking its own.
+              knownLoader: (held.loader.kind || null) as never,
+              knownMc: held.loader.minecraftVersion || null,
+              knownLoaderVersion: held.loader.loaderVersion ?? null,
+            });
             // WP-4.5: never publish blank route-A/B metadata; prefer the engine's inferred values.
             const inferred = this.applyCurseForgeMetadata(held, res, installInput, report);
             // Route A prebuilt packs ship mods *inside the archive*, so the engine's manifest counters

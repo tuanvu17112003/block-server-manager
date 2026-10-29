@@ -93,6 +93,32 @@ function loaderFromGameVersions(gameVersions: string[] | undefined): LoaderKind 
   return null;
 }
 
+/**
+ * Pick the Minecraft version a CurseForge file targets.
+ *
+ * CF files often list several MC tags for one build (DawnCraft: `1.18.1, 1.18, Forge, 1.18.2,
+ * 1.18-Snapshot`). Taking the first numeric tag gave `1.18.1` and installed the 1.18.1 Forge
+ * loader for a 1.18.2 pack — Forge then died with `ClassNotFoundException:
+ * JarInJarDependencyLocator` during boot. The author's *target* is the most specific stable
+ * release tag: prefer the highest non-snapshot `x.y.z`, and only fall back to a bare `x.y`.
+ */
+export function pickMinecraftVersion(tags: string[] | undefined): string | null {
+  const versions = (tags ?? [])
+    .filter((tag) => /^\d+\.\d+(?:\.\d+)?$/.test(tag))
+    .map((tag) => ({ raw: tag, parts: tag.split('.').map(Number) }));
+  if (versions.length === 0) return null;
+  const stable = versions.filter((v) => !(tags ?? []).some((t) => /snapshot/i.test(t) && t.startsWith(v.raw)));
+  const pool = stable.length > 0 ? stable : versions;
+  pool.sort((a, b) => {
+    for (let i = 0; i < Math.max(a.parts.length, b.parts.length); i += 1) {
+      const diff = (b.parts[i] ?? 0) - (a.parts[i] ?? 0);
+      if (diff !== 0) return diff;
+    }
+    return 0;
+  });
+  return pool[0]!.raw;
+}
+
 export async function inspectCurseForgeProject(ref: number | string, dataRoot: string): Promise<CfProjectMeta> {
   if (!cfKey(dataRoot)) throw appError('validation', 'A CurseForge API key is required for one-click installs. Add it in Settings → CurseForge API key (it is stored securely, no file editing needed).');
   const raw = String(ref).trim();
@@ -111,11 +137,36 @@ export async function inspectCurseForgeProject(ref: number | string, dataRoot: s
   const detail = await official(dataRoot, `/mods/${projectId}/files/${latest.id}`) as { data?: CfFileMeta } | null;
   const meta = detail?.data ?? latest;
   const tags = meta.gameVersions ?? [];
+  let loader: LoaderKind | null = loaderFromGameVersions(tags);
+
+  // Publishers sometimes publish a file with an incomplete gameVersions list: RLCraft's newest file
+  // (4612979) carries only ["1.12.2"] — no "Forge" tag — while the previous file has it. Rather than
+  // guessing a loader, read the recent files of the *same project* and take the loader the author has
+  // tagged on other files for the same Minecraft version. Still detection, not assumption: if no
+  // sibling file agrees, `loader` stays null and the caller fails closed.
+  if (!loader) {
+    try {
+      const siblings = await official(dataRoot, `/mods/${projectId}/files?pageSize=20&index=0`) as { data?: CfFileMeta[] } | null;
+      const mc = pickMinecraftVersion(tags);
+      const agreeing = (siblings?.data ?? [])
+        .filter((file) => file.id !== meta.id)
+        .map((file) => ({
+          loader: loaderFromGameVersions(file.gameVersions),
+          sameMc: mc !== null && (file.gameVersions ?? []).includes(mc),
+        }))
+        .filter((row): row is { loader: LoaderKind; sameMc: boolean } => row.loader !== null && row.sameMc);
+      if (agreeing.length > 0) {
+        loader = agreeing[0]!.loader;
+        log(`[curseforge] project ${projectId}: newest file has no loader tag; using "${loader}" from ${agreeing.length} sibling file(s) on the same MC version`);
+      }
+    } catch { /* keep loader null and fail closed below */ }
+  }
+
   return {
     projectId,
     name: meta.displayName ?? meta.fileName ?? `CurseForge ${projectId}`,
-    minecraftVersion: tags.find((tag) => /^\d+\.\d+(?:\.\d+)?$/.test(tag)) ?? null,
-    loader: loaderFromGameVersions(tags),
+    minecraftVersion: pickMinecraftVersion(tags),
+    loader,
     loaderVersion: null,
     hasServerPack: meta.serverPackFileId !== undefined && meta.serverPackFileId !== null,
   };
@@ -219,19 +270,61 @@ export async function searchCurseForgeModpacks(
 }
 
 // ---- staged ZIP inspection (route A classify → UI DTO) ----
-export interface CfInspection { name: string; classification: 'supportedServerPack' | 'clientExport' | 'unsupported'; reason: string; minecraftVersion: string | null; loader: string | null; loaderVersion: string | null }
+export interface CfInspection { name: string; classification: 'supportedServerPack' | 'clientExport' | 'unsupported'; reason: string; minecraftVersion: string | null; loader: string | null; loaderVersion: string | null; /** Set when this ZIP is a thin wrapper around one nested server-pack ZIP. */ nestedZip?: string }
+
+/** A ZIP is a wrapper when it has exactly one entry that is itself a `.zip` and carries no pack content. */
+export function findNestedServerPackZip(entries: { name: string }[]): string | null {
+  const files = entries.filter((e) => !e.name.endsWith('/'));
+  const nested = files.filter((e) => /\.zip$/i.test(e.name));
+  if (nested.length !== 1) return null;
+  const rest = files.filter((e) => !/\.zip$/i.test(e.name));
+  // Tolerate a readme/licence alongside the payload (Prominence II ships `readme.txt`).
+  const harmless = rest.every((e) => /\.(txt|md|html?|url|json)$/i.test(e.name));
+  return harmless ? nested[0]!.name : null;
+}
+
 export async function inspectStagedZip(zipPath: string): Promise<CfInspection> {
   const name = path.basename(zipPath);
   let entries: { name: string }[] = [];
   try { entries = await listZip(zipPath); } catch (e) { return { name, classification: 'unsupported', reason: `unreadable zip: ${(e as Error).message}`, minecraftVersion: null, loader: null, loaderVersion: null }; }
   const names = entries.map(e => e.name);
+
+  // ADR-0013: a single nested-ZIP wrapper around a recognized format is supported. Unwrap it to a
+  // sibling file and classify the real payload (Prominence II CF ships exactly this shape).
+  if (!names.includes('manifest.json')) {
+    const nested = findNestedServerPackZip(entries);
+    if (nested) {
+      const innerPath = `${zipPath}.inner-${Date.now()}.zip`;
+      try {
+        fs.writeFileSync(innerPath, await readZipEntry(zipPath, nested));
+        const inner = await inspectStagedZip(innerPath);
+        return {
+          ...inner,
+          name,
+          reason: `${inner.reason} (unwrapped from nested ZIP "${nested}")`,
+          nestedZip: nested,
+        };
+      } catch (e) {
+        return { name, classification: 'unsupported', reason: `nested ZIP "${nested}" could not be read: ${(e as Error).message}`, minecraftVersion: null, loader: null, loaderVersion: null };
+      } finally {
+        try { fs.rmSync(innerPath, { force: true }); } catch { /* best effort */ }
+      }
+    }
+  }
+
   const hasManifest = names.includes('manifest.json');
   if (hasManifest) {
     try {
       const m = JSON.parse((await readZipEntry(zipPath, 'manifest.json')).toString('utf8')) as { minecraft?: { version?: string; modLoaders?: { id?: string }[] } };
-      const loaderId = m.minecraft?.modLoaders?.find(l => l.id)?.id ?? '';
-      const [loader, ver] = loaderId.split('-');
-      return { name, classification: 'clientExport', reason: 'CurseForge client pack (manifest.json) — mods are resolved keylessly from the manifest; client-only files are skipped.', minecraftVersion: m.minecraft?.version ?? null, loader: loader ?? null, loaderVersion: ver ?? null };
+      // Only the real CurseForge schema counts. ServerPackCreator packs ship their own
+      // `manifest.json` that is a flat list of file paths — reading `minecraft.modLoaders` off it
+      // threw a TypeError and aborted the install instead of falling through to layout detection.
+      if (m && typeof m === 'object' && m.minecraft && typeof m.minecraft === 'object' && Array.isArray(m.minecraft.modLoaders)) {
+        const loaderId = m.minecraft.modLoaders.find(l => l.id)?.id ?? '';
+        const [loader, ver] = loaderId.split('-');
+        return { name, classification: 'clientExport', reason: 'CurseForge client pack (manifest.json) — mods are resolved keylessly from the manifest; client-only files are skipped.', minecraftVersion: m.minecraft.version ?? null, loader: loader ?? null, loaderVersion: ver ?? null };
+      }
+      // Not a CurseForge manifest: fall through to server-pack layout detection below.
     } catch { return { name, classification: 'unsupported', reason: 'manifest.json is not parseable.', minecraftVersion: null, loader: null, loaderVersion: null }; }
   }
   // server-pack heuristics (route A, spike-proven)
@@ -293,6 +386,10 @@ export function packShipsRunnableServer(dir: string): boolean {
 export interface InstallCfOpts extends Cancelable {
   projectId?: number; zipPath?: string; dir: string; dataRoot: string; cacheDir: string;
   onProgress?: (p: { stage: string; pct?: number }) => void;
+  /** Metadata already resolved from the official API (the archive itself may carry none). */
+  knownLoader?: LoaderKind | null;
+  knownMc?: string | null;
+  knownLoaderVersion?: string | null;
 }
 export interface InstallCfResult { route: 'A' | 'B'; installed: number; skippedClientOnly: number; skippedOptional: number; manuallyRequired: { projectId: number; fileId: number; pageUrl: string; reason: string }[]; warnings: string[]; loader: LoaderKind | null; loaderVersion: string | null; mc: string | null }
 
@@ -371,17 +468,46 @@ export async function installCurseforge(o: InstallCfOpts): Promise<InstallCfResu
 
   const entries = await listZip(clientZip);
   const names = entries.map(e => e.name);
-  const hasManifest = names.includes('manifest.json');
+  let hasManifest = names.includes('manifest.json');
+
+  // ADR-0013: unwrap a single nested-ZIP wrapper (Prominence II CF ships one) so the engine sees the
+  // real server pack. The unwrapped file lives beside the cache entry and is removed after install.
+  let innerZipPath: string | null = null;
+  if (!hasManifest) {
+    const nested = findNestedServerPackZip(entries);
+    if (nested) {
+      innerZipPath = path.join(o.cacheDir, 'cfpack', `.inner-${Date.now()}-${path.basename(nested)}`);
+      fs.mkdirSync(path.dirname(innerZipPath), { recursive: true });
+      fs.writeFileSync(innerZipPath, await readZipEntry(clientZip, nested));
+      log(`[curseforge] unwrapped nested server pack "${nested}" from ${path.basename(clientZip)}`);
+      clientZip = innerZipPath;
+      const innerEntries = await listZip(clientZip);
+      names.length = 0;
+      names.push(...innerEntries.map(e => e.name));
+      hasManifest = names.includes('manifest.json');
+    }
+  }
 
   let manifest: CfManifest | null = null, kind: LoaderKind | null = null, ver: string | null = null, mc: string | null = null, packName = path.basename(clientZip, '.zip');
   if (hasManifest) {
-    manifest = JSON.parse((await readZipEntry(clientZip, 'manifest.json')).toString('utf8')) as CfManifest;
-    const primary = manifest.minecraft.modLoaders.find(l => l.primary) ?? manifest.minecraft.modLoaders[0];
-    const idm = primary?.id?.match(/^(fabric|quilt|forge|neoforge)-(.+)$/);
-    if (!idm) throw new Error(`unsupported modLoader id: ${primary?.id}`);
-    kind = idm[1] as LoaderKind; ver = idm[2]; mc = manifest.minecraft.version; packName = manifest.name ?? packName;
-    result.route = 'B';
-  } else {
+    const parsed = JSON.parse((await readZipEntry(clientZip, 'manifest.json')).toString('utf8')) as CfManifest;
+    // Distinguish the real CurseForge manifest from ServerPackCreator's flat file-list manifest.
+    const isCurseForgeManifest = !!parsed && typeof parsed === 'object'
+      && !!parsed.minecraft && typeof parsed.minecraft === 'object'
+      && Array.isArray(parsed.minecraft.modLoaders);
+    if (!isCurseForgeManifest) {
+      // ServerPackCreator / generic manifest: treat as a plain server pack and detect from layout.
+      hasManifest = false;
+    } else {
+      manifest = parsed;
+      const primary = manifest.minecraft.modLoaders.find(l => l.primary) ?? manifest.minecraft.modLoaders[0];
+      const idm = primary?.id?.match(/^(fabric|quilt|forge|neoforge)-(.+)$/);
+      if (!idm) throw new Error(`unsupported modLoader id: ${primary?.id}`);
+      kind = idm[1] as LoaderKind; ver = idm[2]; mc = manifest.minecraft.version; packName = manifest.name ?? packName;
+      result.route = 'B';
+    }
+  }
+  if (!hasManifest) {
     kind = names.some(n => /fabric-server-launch/.test(n)) ? 'fabric'
       : names.some(n => /quilt-server-launch/.test(n)) ? 'quilt' : 'forge';
     ver = null; mc = null;
@@ -391,6 +517,15 @@ export async function installCurseforge(o: InstallCfOpts): Promise<InstallCfResu
     if (inferred) {
       kind = inferred.loader; mc = inferred.mc; ver = inferred.loaderVersion;
       log(`[curseforge] inferred metadata from archive: ${kind} ${mc}${ver ? ` ${ver}` : ''}`);
+    }
+    // The archive may be a bare ServerPackCreator output (mods/ + config/ only). The official API
+    // already told us the loader/MC for this project, so use that instead of failing closed on an
+    // archive that legitimately carries no loader evidence of its own.
+    if (!mc && o.knownMc) {
+      mc = o.knownMc;
+      if (!ver) ver = o.knownLoaderVersion ?? null;
+      if (kind === 'forge' && o.knownLoader) kind = o.knownLoader;
+      log(`[curseforge] archive carries no loader metadata; using official-API metadata: ${kind} ${mc}${ver ? ` ${ver}` : ''}`);
     }
   }
   result.loader = kind; result.loaderVersion = ver; result.mc = mc;
@@ -441,6 +576,12 @@ export async function installCurseforge(o: InstallCfOpts): Promise<InstallCfResu
       await installLoader(kind, o.dir, mc, null, await resolveJavaRuntime(), o.cacheDir, { signal });
     } else if (kind && mc && ver) {
       await installLoader(kind, o.dir, mc, ver, await resolveJavaRuntime(), o.cacheDir, { signal });
+    } else if (kind && mc) {
+      // Forge/NeoForge without a pinned build: resolve the provider's recommended build for this MC
+      // version (the same lookup `installLoader` performs for a null version) instead of failing on a
+      // pack that legitimately declares nothing — RLCraft's server pack ships only mods/ + config/.
+      log(`[curseforge] installing ${kind} ${mc} loader from provider metadata (no pinned build in pack)`);
+      await installLoader(kind, o.dir, mc, null, await resolveJavaRuntime(), o.cacheDir, { signal });
     } else if (!mc) {
       throw new Error(
         'This pack archive does not declare a Minecraft version and does not ship a runnable server. '
@@ -477,5 +618,7 @@ export async function installCurseforge(o: InstallCfOpts): Promise<InstallCfResu
     }
   }
   o.onProgress?.({ stage: 'done', pct: 95 });
+  // The unwrapped inner archive was scratch input only; the staged tree is what gets published.
+  if (innerZipPath) { try { fs.rmSync(innerZipPath, { force: true }); } catch { /* best effort */ } }
   return result;
 }

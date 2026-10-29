@@ -1,0 +1,76 @@
+{
+  "slug": "dungeon-heroes",
+  "name": "Dungeon Heroes",
+  "platform": "curseforge",
+  "expect": {
+    "mc": "1.21.1",
+    "loader": "fabric",
+    "java": 21,
+    "route": "A/B"
+  },
+  "startedAt": "2026-10-29T07:21:35.431Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T07-21-35-430Z\\dungeon-heroes",
+  "sourceKind": "curseforgeProject 671029 (official API key mode)",
+  "preview": {
+    "sourceName": "Dungeon Heroes-2.7.5.zip",
+    "loader": {
+      "kind": "fabric",
+      "minecraftVersion": "1.21.1",
+      "loaderVersion": null
+    },
+    "warningCount": 0
+  },
+  "plan": {
+    "total": 0,
+    "include": 0,
+    "exclude": 0,
+    "conflicts": []
+  },
+  "report": {
+    "status": "complete",
+    "stages": [
+      {
+        "stage": "route-A",
+        "outcome": "complete"
+      },
+      {
+        "stage": "validate",
+        "outcome": "complete"
+      },
+      {
+        "stage": "verify-boot",
+        "outcome": "complete",
+        "detail": "first boot"
+      },
+      {
+        "stage": "publish",
+        "outcome": "complete"
+      }
+    ],
+    "files": [
+      {
+        "path": "187 mods (bundled in pack)",
+        "outcome": "installed"
+      },
+      {
+        "path": "0 client-only",
+        "outcome": "skipped-client-only"
+      }
+    ],
+    "warningCount": 0,
+    "warnings": [],
+    "errors": []
+  },
+  "published": {
+    "serverId": "12c250f4-dc1d-49b8-b4d1-b74be9e6c539",
+    "jarsEnabled": 187,
+    "jarsDisabled": 0,
+    "disabled": [],
+    "verifiedBoot": "complete",
+    "verifyDetail": "first boot"
+  },
+  "error": null,
+  "verdict": "PASS",
+  "finishedAt": "2026-10-29T07:23:33.213Z",
+  "durationSeconds": 117.8
+}

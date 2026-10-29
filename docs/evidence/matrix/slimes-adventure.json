@@ -1,0 +1,102 @@
+{
+  "slug": "slimes-adventure",
+  "name": "Slimes Adventure RE",
+  "platform": "modrinth",
+  "expect": {
+    "mc": "1.21.1",
+    "loader": "fabric",
+    "java": 21
+  },
+  "startedAt": "2026-10-29T07:04:15.687Z",
+  "dataRoot": "H:\\TESTMultiAI\\20-backups\\matrix-2026-10-29T06-56-29-547Z\\slimes-adventure",
+  "sourceKind": "modrinthRemote (project 8yKzGJOG \"Slimes Adventure\", version ylSYr50H)",
+  "preview": {
+    "sourceName": "Slimes Adventure",
+    "loader": {
+      "kind": "fabric",
+      "minecraftVersion": "1.21.1",
+      "loaderVersion": "0.19.5"
+    },
+    "warningCount": 0
+  },
+  "plan": {
+    "total": 105,
+    "include": 99,
+    "exclude": 0,
+    "conflicts": [
+      "mods/ImmediatelyFast-Fabric-1.6.13+1.21.1.jar",
+      "mods/MouseTweaks-fabric-mc1.21-2.26.jar",
+      "mods/entityculling-fabric-1.10.5-mc1.21.1.jar",
+      "mods/iris-fabric-1.8.14-beta.1+mc1.21.1.jar",
+      "mods/mousetweaks-x-accessories-fix-1.4.0.jar",
+      "mods/sodium-fabric-0.8.13+mc1.21.1.jar"
+    ]
+  },
+  "report": {
+    "status": "complete",
+    "stages": [
+      {
+        "stage": "download",
+        "outcome": "complete"
+      },
+      {
+        "stage": "validate",
+        "outcome": "complete"
+      },
+      {
+        "stage": "verify-boot",
+        "outcome": "complete",
+        "detail": "first boot"
+      },
+      {
+        "stage": "publish",
+        "outcome": "complete"
+      }
+    ],
+    "files": [
+      {
+        "path": "99 files",
+        "outcome": "installed"
+      },
+      {
+        "path": "0 optional",
+        "outcome": "skipped-optional"
+      },
+      {
+        "path": "0 unsupported",
+        "outcome": "skipped-server-unsupported"
+      },
+      {
+        "path": "6 plan-excluded",
+        "outcome": "skipped-user-choice"
+      }
+    ],
+    "warningCount": 6,
+    "warnings": [
+      "mods/ImmediatelyFast-Fabric-1.6.13+1.21.1.jar: excluded by the reviewed plan",
+      "mods/MouseTweaks-fabric-mc1.21-2.26.jar: excluded by the reviewed plan",
+      "mods/entityculling-fabric-1.10.5-mc1.21.1.jar: excluded by the reviewed plan",
+      "mods/iris-fabric-1.8.14-beta.1+mc1.21.1.jar: excluded by the reviewed plan",
+      "mods/mousetweaks-x-accessories-fix-1.4.0.jar: excluded by the reviewed plan",
+      "mods/sodium-fabric-0.8.13+mc1.21.1.jar: excluded by the reviewed plan"
+    ],
+    "errors": []
+  },
+  "published": {
+    "serverId": "e1b36b79-c1b4-41d0-8532-3701984f30fa",
+    "jarsEnabled": 115,
+    "jarsDisabled": 4,
+    "disabled": [
+      "enhancedblockentities-0.10.2+1.21.jar",
+      "modmenu-11.0.4.jar",
+      "SLIMES-ADVENTURE-CLIENT-1.13.4.jar",
+      "tooltip-scroll-1.5.1+1.21.1.jar"
+    ],
+    "verifiedBoot": "complete",
+    "verifyDetail": "first boot"
+  },
+  "error": null,
+  "verdict": "PASS",
+  "finishedAt": "2026-10-29T07:06:25.275Z",
+  "durationSeconds": 129.6
+}

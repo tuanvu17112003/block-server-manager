@@ -798,6 +798,25 @@ export function selectPaperBuildById(builds: FillBuild[], buildId: number): Pape
   if (!artifact) throw new Error(`Paper build ${buildId} is not artifact-complete (${PAPER_SERVER_DOWNLOAD} needs url + size + sha256)`);
   return artifact;
 }
+/**
+ * Forge build for an exact Minecraft version, from Forge's own promotions feed.
+ * Used only when a server pack carries no manifest and no installer name (RLCraft's server pack is
+ * `mods/` + `config/` only). This is still authoritative provider metadata, not a guess: the feed is
+ * Forge's canonical "recommended/latest build for this MC version" answer.
+ */
+async function latestForgeVersion(mc: string, signal?: AbortSignal): Promise<string> {
+  const res = await fetchTrusted('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json', LOADER_ALLOWED_HOSTS, { signal });
+  if (!res.ok) throw new Error(`forge promotions HTTP ${res.status}`);
+  const body = await res.json() as { promos?: Record<string, string> };
+  const promos = body.promos ?? {};
+  const recommended = promos[`${mc}-recommended`];
+  const latest = promos[`${mc}-latest`];
+  const version = recommended ?? latest;
+  if (!version) throw new Error(`Forge publishes no build for Minecraft ${mc}`);
+  log(`[forge] ${mc}: using provider build ${version} (${recommended ? 'recommended' : 'latest'})`);
+  return version;
+}
+
 async function latestFabricLoaderVersion(mc: string, signal?: AbortSignal): Promise<string> {
   const pick = (payload: unknown): string | null => {
     const entries = Array.isArray(payload) ? payload : [];
@@ -894,8 +913,11 @@ export async function installLoader(kind: LoaderKind, dir: string, mc: string, v
     return;
   }
   if (kind === 'forge') {
-    if (!loaderVersion) throw new Error(`Forge needs an exact loader version for Minecraft ${mc} (this archive has no manifest/installer metadata). Use the author's server pack or a pack ZIP with manifest.json.`);
-    const v = `${mc}-${loaderVersion}`;
+    // A pack without a manifest/installer names no Forge build. Resolve the provider's canonical
+    // build for this MC version instead of failing (RLCraft 1.12.2 server pack ships mods only).
+    // `loaderVersion` may arrive as an empty string from archive inference, so test for truthiness.
+    const resolvedForgeVersion = (loaderVersion ?? '').trim() !== '' ? loaderVersion! : await latestForgeVersion(mc, signal);
+    const v = `${mc}-${resolvedForgeVersion}`;
     const url = `https://maven.minecraftforge.net/net/minecraftforge/forge/${v}/forge-${v}-installer.jar`;
     const jar = path.join(cacheDir, `forge-${v}-installer.jar`);
     const head = await fetchTrusted(url, LOADER_ALLOWED_HOSTS, { method: 'HEAD', signal });
