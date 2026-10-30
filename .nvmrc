@@ -1,3 +1,20 @@
 # Node.js version used for development and CI.
-# Node 20 is the documented minimum (README "Requirements"); this pins the version the project is developed against.
-20
+#
+# Must be 22.13.0 or newer. The patch level is written explicitly rather than just "22", because `node-version-file`
+# in the CI workflow honours a full version string, and 22.13.0 is the exact release where `node:sqlite` stopped
+# requiring `--experimental-sqlite`. Anything from 22.0 to 22.12 would satisfy a bare "22" while still failing.
+#
+# Why 22.13.0 specifically — three independent reasons, all discovered after the CI workflow went red on its first run
+# while the same suite passed locally on Node 24:
+#
+#   1. `electron/services/legacy-import.ts` imports `DatabaseSync` from `node:sqlite`. The module first appeared in
+#      Node 22.5.0 behind `--experimental-sqlite`; from 22.13.0 it works without the flag. On Node 20 the import fails
+#      outright: "ERR_UNKNOWN_BUILTIN_MODULE: No such built-in module: node:sqlite".
+#   2. Several dependencies declare `engines.node >= 22.12.0`, which npm reports as EBADENGINE warnings on Node 20.
+#   3. The previous value here was 20, derived from the README's "Node 20+" line rather than from what the code needs.
+#      The README was wrong, and this file faithfully copied it.
+#
+# The split that makes this easy to miss: the *application* runs on Electron's bundled Node (currently 24.x), so a
+# Node 20 machine can build and run the app fine. Only the test suite and build scripts that import application modules
+# execute on the host Node. That is precisely the class of bug CI exists to catch.
+22.13.0

@@ -77,7 +77,8 @@ Prefer to build it yourself? See [Run](#run) below.
 ## Requirements
 
 - Windows 10/11 x64. The installer and portable builds need nothing else — no Node.js, no system Java.
-- Building from source needs Node.js 20+ and npm.
+- Building from source needs Node.js **22.13.0 or newer** and npm. The floor is set by `node:sqlite` in the
+  legacy-import path; the shipped app itself runs on Electron's bundled Node, so this only affects building and testing.
 - Internet access for version/provider metadata, server/loader downloads and Java (Temurin) provisioning.
 - No system Java is required: a matching 64-bit Temurin runtime is downloaded per server when missing
   (Settings/Create can pin a JDK path instead; majors 8/17/21/25 are supported).
