@@ -90,22 +90,14 @@ export default function DrivePanel({ serverId, serverName = '', refreshKey, onDo
     void loadStatus();
   }, [loadStatus]);
 
-  /**
-   * Backups whose server no longer exists.
-   *
-   * Scoped to THIS server by name. Without that the query returned the same global list for every server, which was
-   * reported as "why does every server show this?". A backup is only orphaned relative to a server if it belongs to it
-   * neither by id nor by name — so a backup taken from the previous "Test" is correctly offered to the new "Test".
-   */
-  const [orphans, setOrphans] = useState<DriveFile[]>([]);
-  useEffect(() => {
-    if (status?.connected !== true) return;
-    void (async () => {
-      const result = await bridge?.invoke('gdrive_orphaned_backups', { serverName }) as
-        { ok: boolean; files?: DriveFile[] } | undefined;
-      if (result?.ok === true && result.files !== undefined) setOrphans(result.files);
-    })();
-  }, [status?.connected, refreshKey, serverName]);
+  // There is deliberately no "unclaimed backups" list any more.
+  //
+  // It existed so a backup whose server was gone could still be reached, but it was rendered inside EVERY server's panel and
+  // could not be acted on from any of them: the restore path refuses files outside the current server's scope, so the
+  // Download button failed every time. Reported as "remove it, it shows on every server and is annoying". A panel that
+  // cannot do anything with the information is worse than no panel, so the list is gone rather than reworked — the files
+  // remain visible in Google Drive itself, and the gdrive_adopt_backup command is still available for a future, properly
+  // placed surface (for example a one-off recovery screen rather than a per-server tab).
 
   useEffect(() => {
     if (status?.connected === true) void loadFiles();
@@ -163,22 +155,6 @@ export default function DrivePanel({ serverId, serverName = '', refreshKey, onDo
     const record = await bridge?.invoke('gdrive_restore_backup', { fileId: file.id, serverId }) as { id?: string } | undefined;
     if (record?.id === undefined) throw new Error('The backup was downloaded but not registered.');
     setNotice(`Downloaded "${file.name}". It is now in the Backups list above — use Restore there.`);
-    onDownloaded?.();
-  });
-
-  /**
-   * Download a backup that no server can claim, attaching it to this server.
-   *
-   * A separate call because the ordinary restore deliberately refuses files outside the server's own scope — the guard
-   * that stops a stale id pulling another world's archive over this one. An unclaimed file is outside every scope by
-   * definition, so the user has to state the destination explicitly, and this call is that statement.
-   */
-  const downloadUnclaimed = (file: DriveFile) => run('restore', async () => {
-    const record = await bridge?.invoke('gdrive_adopt_backup', { fileId: file.id, serverId }) as { id?: string } | undefined;
-    if (record?.id === undefined) throw new Error('The backup was downloaded but not registered.');
-    setNotice(
-      `Downloaded "${file.name}" and attached it to this server. It is now in the Backups list above — use Restore there.`,
-    );
     onDownloaded?.();
   });
 
@@ -289,45 +265,6 @@ export default function DrivePanel({ serverId, serverName = '', refreshKey, onDo
               <p className="mt-2 text-xs text-zinc-500">
                 No backups uploaded yet. Backups made from now on upload automatically.
               </p>
-            )}
-
-            {/* Backups no live server can claim. Downloading here adopts them into the CURRENT server, which is the only
-                destination this panel can reasonably mean: the file belongs to no one, so the server the user is looking
-                at is the obvious recipient. The previous behaviour called the per-server restore, which correctly refused
-                because the file is not in this server's scope — so the button produced "not in this server's Drive
-                folder" every time. */}
-            {orphans.length > 0 && (
-              <div className="mt-3 rounded border border-amber-800/60 bg-amber-950/30 p-2">
-                <p className="text-xs font-semibold text-amber-200">
-                  Unclaimed backups in your Drive ({orphans.length})
-                </p>
-                <p className="mt-1 text-[11px] text-amber-200/80">
-                  No existing server can use these. Download one to add it to <strong>{serverName || 'this server'}</strong>,
-                  then restore it from the Backups list.
-                </p>
-                <ul className="mt-2 space-y-1">
-                  {orphans.map((file) => (
-                    <li key={file.id} className="flex items-center gap-2 rounded border border-zinc-800 bg-zinc-900/60 px-2 py-1.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs text-zinc-200">{file.name}</p>
-                        <p className="text-[11px] text-zinc-500">
-                          {formatBytes(file.sizeBytes)} · {formatDate(file.createdAt)}
-                          {file.serverName !== undefined ? ` · was "${file.serverName}"` : ''}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => { void downloadUnclaimed(file); }}
-                        title={`Download and attach this backup to "${serverName || 'this server'}"`}
-                      >
-                        Download
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
             )}
 
             {files.length > 0 && (

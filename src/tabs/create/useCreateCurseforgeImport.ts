@@ -6,6 +6,7 @@ import type {
   CurseForgeModpackSearchResult,
   CurseForgeModpackSort,
   CurseForgeProjectMetaDto,
+  CurseForgeProjectVersionDto,
   CurseForgeStagedZip,
 } from '../../tauri';
 import { hasBackend, isDesktop, onCurseForgeDownload, tauriCurseForge, tauriCurseForgeKey } from '../../tauri';
@@ -33,6 +34,15 @@ export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Op
   const [cfProjectMeta, setCfProjectMeta] = useState<CurseForgeProjectMetaDto | null>(null);
   const [cfProjectBusy, setCfProjectBusy] = useState(false);
   const [cfProjectError, setCfProjectError] = useState('');
+  /**
+   * The version chosen for a one-click install.
+   *
+   * CurseForge authors publish an OPTIONAL server pack beside the client pack, and a project's newest file frequently has
+   * none. Installing then resolved the client manifest instead, which pulls client-only mods onto a server. Keeping the
+   * choice explicit — rather than defaulting to "newest" — is what lets a server install pick the version that actually
+   * has a server pack.
+   */
+  const [cfSelectedVersion, setCfSelectedVersion] = useState<CurseForgeProjectVersionDto | null>(null);
   const [cfKeyStatus, setCfKeyStatus] = useState<{ configured: boolean; source: 'safeStorage' | 'file' | null; encrypted: boolean; hint: string } | null>(null);
   const [cfSearchQuery, setCfSearchQuery] = useState('');
   const [cfSearchSort, setCfSearchSort] = useState<CurseForgeModpackSort>('popularity');
@@ -283,6 +293,8 @@ export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Op
     cfProjectMeta,
     cfProjectBusy,
     cfProjectError,
+    cfSelectedVersion,
+    setCfSelectedVersion,
     cfKeyStatus,
     refreshCurseforgeKeyStatus,
     cfSearchQuery,

@@ -519,6 +519,20 @@ export interface CurseForgeProjectMetaDto {
   hasServerPack: boolean;
 }
 
+/** One published version of a CurseForge project, as returned by curseforge_project_versions. */
+export interface CurseForgeProjectVersionDto {
+  fileId: number;
+  displayName: string;
+  fileName: string | null;
+  publishedAt: string | null;
+  minecraftVersion: string | null;
+  loader: string | null;
+  /** True when a server pack is published for this exact version — the preferred download for a server. */
+  hasServerPack: boolean;
+  serverPackFileId: number | null;
+  fileLength: number | null;
+}
+
 export type CurseForgeModpackSort = 'popularity' | 'recent' | 'name' | 'downloads';
 
 export interface CurseForgeModpackHit {
@@ -861,6 +875,16 @@ export const tauriCurseForge = {
       limit: options.limit ?? 20,
       sort: options.sort ?? 'popularity',
     }),
+  /**
+   * Published versions of a project, each flagged with whether it has a server pack.
+   *
+   * The flag is the point: authors publish an optional server pack beside the client pack, and the two are not
+   * interchangeable — a server pack is ready to run, while a client pack is a manifest whose mods must be resolved and
+   * which contains client-only mods. Without this list the installer could only take "latest", which installed the wrong
+   * one whenever a server pack existed for a different version than the newest file.
+   */
+  projectVersions: (project: string | number, limit = 30) =>
+    invokeRequired<CurseForgeProjectVersionDto[]>('curseforge_project_versions', { project: String(project), limit }),
   cancelDownload: (transferId: string) =>
     invokeRequired<boolean>('curseforge_cancel_download', { transferId }),
 };

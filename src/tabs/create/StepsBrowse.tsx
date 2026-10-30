@@ -4,6 +4,7 @@ import type { LocalMrpackSelection, ModrinthModpackDto } from '../../tauri';
 import type { Modpack } from '../../types';
 import { cfInstallable, type Kind } from './helpers';
 import { BrowseCurseforge } from './BrowseCurseforge';
+import { CurseForgeVersionPicker } from './CurseForgeVersionPicker';
 import { BrowseModrinth } from './BrowseModrinth';
 import { BrowseMock } from './BrowseMock';
 import type { CreateCatalogState } from './useCreateCatalog';
@@ -32,7 +33,29 @@ export function StepsBrowse(props: StepsBrowseProps) {
   return (
     <>
       {props.hasBackend && props.kind === 'curseforge' && (
-        <BrowseCurseforge
+        <>
+          {/* One-click install: pick the project version explicitly. The newest file is not automatically the right one for
+              a server, because the server pack is published per version and may not exist for it. */}
+          {curseforge.cfProjectId !== null && (
+            <div className="mb-3 rounded border border-zinc-800 bg-zinc-900/40 p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  {curseforge.cfProjectMeta?.name ?? `Project ${curseforge.cfProjectId}`}
+                </span>
+                {curseforge.cfSelectedVersion !== null && (
+                  <span className="ml-auto text-[11px] text-emerald-300">
+                    {curseforge.cfSelectedVersion.hasServerPack ? 'server pack' : 'client pack only'}
+                  </span>
+                )}
+              </div>
+              <CurseForgeVersionPicker
+                project={curseforge.cfProjectId}
+                selectedFileId={curseforge.cfSelectedVersion?.fileId ?? null}
+                onChoose={(version) => { curseforge.setCfSelectedVersion(version); }}
+              />
+            </div>
+          )}
+          <BrowseCurseforge
           zips={curseforge.curseforgeZips}
           selectedName={curseforge.curseforgeSelectedName}
           inspection={curseforge.selectedCurseforgeInspection}
@@ -51,6 +74,7 @@ export function StepsBrowse(props: StepsBrowseProps) {
           }}
           onBack={() => setStep(1)}
         />
+        </>
       )}
       {props.hasBackend && props.kind === 'modrinth' && (
         <BrowseModrinth

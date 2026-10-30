@@ -215,6 +215,20 @@ export async function driveListBackups(
   return { ok: true, files: await listBackups(auth.tokens.accessToken, { serverId, serverName }) };
 }
 
+/**
+ * Uploads in progress, keyed by `${serverId}:${backupId}`.
+ *
+ * De-duplication by listing Drive is not enough on its own, and the reported duplicate proves it. The automatic mirror
+ * runs in the background right after a backup is written; if the user presses "To Drive" a few seconds later, the first
+ * upload may still be streaming (measured: a 4.6 MB file took ~9 seconds end-to-end, and the two duplicate timestamps in
+ * the report were 9 seconds apart). A listing at that moment returns nothing, so both paths decided "not uploaded yet" and
+ * both uploaded.
+ *
+ * Holding the in-flight promise means the second caller AWAITS the first and receives its result instead of starting a
+ * second transfer.
+ */
+const uploadsInFlight = new Map<string, Promise<{ ok: boolean; file?: DriveFile; error?: string; needsReauth?: boolean }>>();
+
 export async function driveUploadBackup(options: {
   dataRoot: string;
   serverId: string;
@@ -228,19 +242,55 @@ export async function driveUploadBackup(options: {
   if (!fs.existsSync(options.filePath)) {
     return { ok: false, error: `Backup file is missing: ${options.filePath}` };
   }
-  const auth = await validAccessToken(options.dataRoot);
-  if (!auth.ok) return { ok: false, error: auth.error, ...(auth.needsReauth ? { needsReauth: true } : {}) };
 
-  return uploadBackup({
-    tokens: auth.tokens,
-    client: auth.client,
-    filePath: options.filePath,
-    name: driveNameFor(options.serverName, options.backupName),
-    serverId: options.serverId,
-    serverName: options.serverName,
-    ...(options.backupId !== undefined ? { backupId: options.backupId } : {}),
-    ...(options.onProgress ? { onProgress: options.onProgress } : {}),
-  });
+  // One upload per backup id at a time. Every caller — the automatic mirror and the manual button — goes through this
+  // function, so this is the only place the guarantee needs to hold.
+  const key = `${options.serverId}:${options.backupId ?? options.filePath}`;
+  const inFlight = uploadsInFlight.get(key);
+  if (inFlight !== undefined) {
+    log(`[gdrive] upload already in progress for ${key}; joining it instead of starting a second one`);
+    return inFlight;
+  }
+
+  const work = (async (): Promise<{ ok: boolean; file?: DriveFile; error?: string; needsReauth?: boolean }> => {
+    const auth = await validAccessToken(options.dataRoot);
+    if (!auth.ok) return { ok: false, error: auth.error, ...(auth.needsReauth ? { needsReauth: true } : {}) };
+
+    // If this backup is already in Drive, return that file rather than uploading a copy. Matching is on the recorded
+    // backup id, not the Drive name, because two different backups can share a display name and a name match would skip a
+    // genuine upload.
+    if (options.backupId !== undefined && options.backupId !== '') {
+      try {
+        const existing = await listBackups(auth.tokens.accessToken, {
+          serverId: options.serverId,
+          serverName: options.serverName,
+        });
+        const already = existing.find((file) => file.backupId === options.backupId);
+        if (already !== undefined) {
+          log(`[gdrive] backup ${options.backupId} is already in Drive as ${already.id}; not uploading again`);
+          return { ok: true, file: already };
+        }
+      } catch { /* a listing failure must not block an upload the user asked for */ }
+    }
+
+    return uploadBackup({
+      tokens: auth.tokens,
+      client: auth.client,
+      filePath: options.filePath,
+      name: driveNameFor(options.serverName, options.backupName),
+      serverId: options.serverId,
+      serverName: options.serverName,
+      ...(options.backupId !== undefined ? { backupId: options.backupId } : {}),
+      ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+    });
+  })();
+
+  uploadsInFlight.set(key, work);
+  try {
+    return await work;
+  } finally {
+    uploadsInFlight.delete(key);
+  }
 }
 
 export async function driveDeleteBackup(dataRoot: string, fileId: string): Promise<{ ok: boolean; error?: string }> {
