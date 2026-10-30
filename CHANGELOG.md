@@ -31,6 +31,9 @@ made the project honest about what it can prove.
   and the reason it cannot be installed, instead of a generic "unrecognized modpack" error.
 - **12-pack live acceptance matrix** (`electron . --matrixtest`) covering both Modrinth and CurseForge end-to-end with
   verified boots.
+- **Portable build**: Block-Server-Manager-x.y.z-Portable.exe, a single self-contained exe that keeps its servers,
+  settings and backups in a data folder beside itself — copy the folder to a USB stick and everything comes along.
+  Detects an unwritable location at startup and says so, instead of failing later with a permission error.
 - **Open-source publishing essentials**: MIT licence, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue and
   pull request templates, a Dependabot configuration, and a CI workflow running build, unit tests, spec conformance and
   the encoding guard on every push.

@@ -5,7 +5,7 @@ import os from 'node:os';
 import fs from 'node:fs';
 import { registerIpc, registerRuntimeHandlers, runSelfTest, type IpcContext } from './ipc';
 import { buildRuntime } from './services/runtime';
-import { dataRoot } from './services/paths';
+import { dataRoot, isPortable, portableDataRootIsWritable } from './services/paths';
 import { detectLegacy, planImport, runImport } from './services/legacy-import';
 import { initDiagnostics, installProcessHandlers, getDiagnostics, recordTimeline } from './services/diagnostics';
 
@@ -408,6 +408,30 @@ if (!hasSingleInstanceLock) {
       mirror: !app.isPackaged ? (line: string) => { /* eslint-disable-next-line no-console */ console.log(line); } : false,
     });
     diagnostics.logger.info('app starting', { version: app.getVersion(), dataRoot: ctx.dataRoot });
+
+    // A portable build keeps its data beside the exe, so it breaks in a specific way when that folder is read-only:
+    // running from a USB stick that is write-protected, a network share, or `C:\Program Files`. Without this probe the
+    // first symptom is an EACCES on the first server download, which reads as an app bug rather than "this location is
+    // not writable". Warn once, clearly, and let the app continue — reads may still work.
+    if (isPortable()) {
+      const probe = portableDataRootIsWritable();
+      if (!probe.writable) {
+        diagnostics.logger.warn('portable data root is not writable', { detail: probe.detail });
+        try {
+          dialog.showMessageBox({
+            type: 'warning',
+            title: 'Portable data folder is not writable',
+            message: 'Block Server Manager cannot write to its data folder.',
+            detail: `${probe.detail}\n\nThis build keeps its servers and settings in a "data" folder next to the exe, so `
+              + 'that you can move the whole thing to another machine. That folder is not writable right now — for example '
+              + 'a write-protected USB stick, a read-only network share, or an install under Program Files.\n\n'
+              + 'Move the app folder somewhere you can write to (your Desktop, or a Documents folder) and start it again.',
+            buttons: ['Continue anyway'],
+            noLink: true,
+          });
+        } catch { /* headless */ }
+      }
+    }
     installProcessHandlers(diagnostics.logger, {
       onFatal: (error: unknown) => {
         try {

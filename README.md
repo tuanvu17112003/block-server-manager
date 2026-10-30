@@ -53,9 +53,31 @@ than hidden, and a format whose plan downloads no files is shown as a launcher i
 Deferred with recorded reasons (`scripts/conformance-waivers.json`): MCBBS, HMCL server, GDLauncher, Technic.
 Supplying one of these produces an explanation naming the format and the reason, not a generic error.
 
+## Download
+
+Grab the latest build from the [releases page](https://github.com/tuanvu17112003/block-server-manager/releases/latest).
+Two Windows builds are published, and the difference matters:
+
+| Build | Use it when | Where it keeps your servers |
+|---|---|---|
+| `Block-Server-Manager-x.y.z-Setup.exe` | Normal use on your own PC | `%APPDATA%\Block Server Manager\data` — survives updates |
+| `Block-Server-Manager-x.y.z-Portable.exe` | USB stick, another PC, no installation wanted | `data\` **next to the exe** — move the folder and the servers move with it |
+
+The portable build is genuinely portable: it keeps everything in a `data` folder beside the executable, so copying the
+whole folder to another machine brings your servers, settings and backups with it. If that location is not writable —
+a write-protected USB stick, a read-only share, or an install under `Program Files` — the app says so at startup
+instead of failing later with a permission error.
+
+Both builds are unsigned, so SmartScreen will warn that the publisher is unknown. Choose **More info → Run anyway** if
+you are comfortable doing so. Java is not a prerequisite: a matching 64-bit Temurin runtime is downloaded per server
+when one is missing.
+
+Prefer to build it yourself? See [Run](#run) below.
+
 ## Requirements
 
-- Windows 10/11 x64 (primary target), Node.js 20+ and npm.
+- Windows 10/11 x64. The installer and portable builds need nothing else — no Node.js, no system Java.
+- Building from source needs Node.js 20+ and npm.
 - Internet access for version/provider metadata, server/loader downloads and Java (Temurin) provisioning.
 - No system Java is required: a matching 64-bit Temurin runtime is downloaded per server when missing
   (Settings/Create can pin a JDK path instead; majors 8/17/21/25 are supported).
@@ -100,11 +122,19 @@ screenshots under `artifacts/<timestamp>/`.
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 npm run pack:dir               # build + unpacked app in release/win-unpacked/
 npm run pack:verify            # packaged app: --selftest + --mgmttest
-npm run pack:win               # NSIS installer in release/
+npm run pack:win               # NSIS installer + portable exe in release/
 npm run pack:verify:installer  # silent install -> installed self-tests -> silent uninstall
 ```
 
-The installer is unsigned (SmartScreen "Unknown publisher"), per-user, and keeps app data on uninstall.
+`npm run pack:win` produces two artefacts. `electron-builder --win nsis portable` builds only one of them if you are
+iterating on packaging — note that passing the targets explicitly is needed, because the `win.target` list in
+`electron-builder.yml` is honoured by `npm run pack:win` but a bare `electron-builder` invocation can build only the
+first target depending on version.
+
+The installer is unsigned (SmartScreen "Unknown publisher"), per-user, and keeps app data on uninstall. The portable
+exe keeps its data in `data\` beside itself; the data-root decision lives in `electron/services/paths.ts` and is pinned
+by `electron/test/unit/portable-data-root.test.ts`, because a portable build that quietly writes to `%APPDATA%` would
+appear to work and then lose every server the first time the folder is moved.
 Details, artifacts and verification: [docs/packaging.md](docs/packaging.md).
 
 ## Data and secrets

@@ -12,13 +12,22 @@ files:
 asar: true
 npmRebuild: false
 win:
+  # Two artefacts with different jobs:
+  #   nsis     — normal installation, shortcuts, uninstall entry, data under %APPDATA%.
+  #   portable — one self-contained exe that unpacks and runs in place, keeping its data beside itself so the whole
+  #              folder can be moved to another machine (or a USB stick) and still have every server.
+  # The data-location difference is implemented in electron/services/paths.ts, not here: electron-builder only sets
+  # PORTABLE_EXECUTABLE_DIR, and the app reads it to choose its data root.
   target:
     - target: nsis
       arch:
         - x64
+    - target: portable
+      arch:
+        - x64
   icon: build/icon.ico
-  artifactName: Block-Server-Manager-${version}-Setup.${ext}
 nsis:
+  artifactName: Block-Server-Manager-${version}-Setup.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
@@ -28,4 +37,8 @@ nsis:
   uninstallDisplayName: Block Server Manager
   deleteAppDataOnUninstall: false
   runAfterFinish: true
+portable:
+  artifactName: Block-Server-Manager-${version}-Portable.${ext}
+  # Keep the extracted folder name stable so repeated runs reuse it instead of leaving a new temp dir each launch.
+  unpackDirName: BlockServerManager
 publish: null
