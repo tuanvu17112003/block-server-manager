@@ -89,7 +89,9 @@ export function StepsType(props: StepsTypeContainerProps) {
         // and then moving to Browse puts the choice in front of the user instead of behind them.
         void curseforge.pickSearchedCurseforgeModpack(projectId).then((ok) => { if (ok) setStep(2); });
       }}
-      onContinueToConfigure={() => { if (curseforge.cfProjectId !== null) setStep(3); }}
+      // Goes to Browse, not Configure. The version picker lives on Browse, so jumping to Configure would skip the choice
+      // this button now promises — the same defect "Use pack" had, reached by a different button.
+      onContinueToConfigure={() => { if (curseforge.cfProjectId !== null) setStep(2); }}
       onPickMockKind={(picked) => {
         pipeline.clearPipelineReview();
         setKind(picked);

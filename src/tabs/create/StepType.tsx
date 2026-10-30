@@ -289,9 +289,15 @@ export function StepType(props: StepTypeProps) {
                 <strong className="text-sm">{props.cfProjectMeta.name}</strong>
                 <span className="text-xs text-zinc-300">Minecraft {props.cfProjectMeta.minecraftVersion ?? '?'} · {props.cfProjectMeta.loader ?? '?'}</span>
               </div>
-              <p className="mt-1 text-xs text-zinc-400">Project id {props.cfProjectMeta.projectId}. {props.cfProjectMeta.hasServerPack ? 'The latest server pack is downloaded and installed.' : 'No server pack on the latest file; manifest mods are resolved keylessly.'}</p>
+              <p className="mt-1 text-xs text-zinc-400">
+                Project id {props.cfProjectMeta.projectId}. {props.cfProjectMeta.hasServerPack
+                  ? 'The next step lets you choose a version; any version with a server pack is ready to run.'
+                  : 'The next step lets you choose a version. This project has no server pack on its latest file, so a client manifest will be resolved.'}
+              </p>
               <div className="mt-3 flex justify-end">
-                <Button onClick={props.onContinueToConfigure} disabled={props.cfProjectId === null}>Continue to Configure →</Button>
+                {/* Named for what it does. It goes to Browse (where the version list lives), not to Configure, so promising
+                    "Continue to Configure" would skip the choice the next screen exists to offer. */}
+                <Button onClick={props.onContinueToConfigure} disabled={props.cfProjectId === null}>Choose a version →</Button>
               </div>
             </div>
           )}

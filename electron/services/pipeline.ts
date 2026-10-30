@@ -536,7 +536,14 @@ export class Pipeline {
       // the working path first. What is genuinely missing is a `curseforge.provider` adapter for shape B — see
       // docs/audit/26 Item 2 and DV-33.
       this.jobs.progress(jobId, { progress: 15, stage: 'resolving CurseForge project' });
-      const meta = await inspectCurseForgeProject(Number(source.projectId), this.ctx.dataRoot);
+      // Resolve the CHOSEN file, not merely the newest one.
+      //
+      // This is what the review panel displays: inspectCurseForgeProject supplies the source name, loader and Minecraft
+      // version. Passing no fileId made it resolve "latest", so a user who pinned v4.1.5 was shown a review describing
+      // v4.1.6 — the install would have been correct (installCurseforge already honoured fileId) while the preview lied,
+      // which is arguably worse than both being wrong.
+      const chosenFileId = source.kind === 'curseforgeProject' ? source.fileId : undefined;
+      const meta = await inspectCurseForgeProject(Number(source.projectId), this.ctx.dataRoot, chosenFileId);
       if (!meta.loader || !meta.minecraftVersion) {
         throw appError('validation', `CurseForge project ${source.projectId} does not declare a loader and Minecraft version.`);
       }
@@ -545,9 +552,15 @@ export class Pipeline {
       held.loader = { kind: meta.loader, minecraftVersion: meta.minecraftVersion, loaderVersion: meta.loaderVersion };
       // The key-mode artifact is only downloaded during install; the project/file pin is recorded here.
       held.sourcePin = { source: 'curseforge', projectId: Number(source.projectId), artifact: null };
+      // The warning must name what will actually be installed. Saying "the latest server pack" was wrong whenever a version
+      // was chosen, and the review panel is exactly where a user checks that the install matches their selection.
       warnings.push(meta.hasServerPack
-        ? 'Official API key mode: the latest server pack (serverPackFileId) will be installed.'
-        : 'Official API key mode: no server pack on the latest file; the client pack is resolved from manifest.json.');
+        ? (chosenFileId !== undefined
+          ? `Official API key mode: the server pack for the selected version "${meta.name}" will be installed.`
+          : 'Official API key mode: the latest server pack (serverPackFileId) will be installed.')
+        : (chosenFileId !== undefined
+          ? `The selected version "${meta.name}" has no server pack; its client manifest is resolved and client-only mods are skipped.`
+          : 'Official API key mode: no server pack on the latest file; the client pack is resolved from manifest.json.'));
     } else if (source.kind === 'ftbProject' || source.kind === 'packArchive') {
       // ---- P1b: format detected by the adapter layer, not by the UI source kind ----
       this.jobs.progress(jobId, { progress: 15, stage: 'detecting pack format' });

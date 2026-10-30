@@ -44,7 +44,21 @@ async function official(dataRoot: string, pathname: string, opts: Cancelable = {
   return r.json();
 }
 
-interface CfFileMeta { id: number; displayName?: string; fileName?: string; fileLength?: number; gameVersions?: string[]; serverPackFileId?: number }
+/**
+ * The fields this module reads from a CurseForge file record.
+ *
+ * `fileDate` is declared rather than cast at the use site: it is what the version picker shows as the publication date, and
+ * an undeclared optional field silently loses its type checking (a typo yields an empty date instead of a compile error).
+ */
+interface CfFileMeta {
+  id: number;
+  displayName?: string;
+  fileName?: string;
+  fileLength?: number;
+  gameVersions?: string[];
+  serverPackFileId?: number;
+  fileDate?: string;
+}
 async function fileMetadata(projectId: number, fileId: number, opts: Cancelable = {}): Promise<CfFileMeta> {
   const r = await fetchTrusted(`${BASE}/mods/${projectId}/files/${fileId}`, CURSEFORGE_ALLOWED_HOSTS, {
     signal: opts.signal,
@@ -119,7 +133,21 @@ export function pickMinecraftVersion(tags: string[] | undefined): string | null 
   return pool[0]!.raw;
 }
 
-export async function inspectCurseForgeProject(ref: number | string, dataRoot: string): Promise<CfProjectMeta> {
+/**
+ * Describe a CurseForge project, optionally for one specific published file.
+ *
+ * `fileId` matters for more than naming. This function supplies the loader, Minecraft version and source name used by the
+ * preview, so resolving "newest" while the user pinned an older file made the review panel describe a different pack than
+ * the one that would be installed — reported as "the review shows the latest version instead of the one I chose". The
+ * install path already honoured fileId; the preview did not, so the two disagreed.
+ *
+ * When `fileId` is absent the newest file is used, preserving the previous behaviour for callers with no choice to express.
+ */
+export async function inspectCurseForgeProject(
+  ref: number | string,
+  dataRoot: string,
+  fileId?: number,
+): Promise<CfProjectMeta> {
   if (!cfKey(dataRoot)) throw appError('validation', 'A CurseForge API key is required for one-click installs. Add it in Settings → CurseForge API key (it is stored securely, no file editing needed).');
   const raw = String(ref).trim();
   let projectId = Number(raw);
@@ -131,11 +159,22 @@ export async function inspectCurseForgeProject(ref: number | string, dataRoot: s
     projectId = Number(found?.data?.[0]?.id ?? 0);
     if (!Number.isInteger(projectId) || projectId <= 0) throw new Error(`CurseForge project "${raw}" was not found.`);
   }
-  const list = await official(dataRoot, `/mods/${projectId}/files?pageSize=1&index=0`) as { data?: CfFileMeta[] } | null;
-  const latest = list?.data?.[0];
-  if (!latest) throw new Error(`CurseForge project ${projectId} has no files.`);
-  const detail = await official(dataRoot, `/mods/${projectId}/files/${latest.id}`) as { data?: CfFileMeta } | null;
-  const meta = detail?.data ?? latest;
+
+  // Resolve the file the caller asked for, or fall back to the newest one.
+  let meta: CfFileMeta;
+  if (fileId !== undefined) {
+    const detail = await official(dataRoot, `/mods/${projectId}/files/${fileId}`) as { data?: CfFileMeta } | null;
+    if (detail?.data === undefined) {
+      throw new Error(`CurseForge file ${fileId} of project ${projectId} could not be read.`);
+    }
+    meta = detail.data;
+  } else {
+    const list = await official(dataRoot, `/mods/${projectId}/files?pageSize=1&index=0`) as { data?: CfFileMeta[] } | null;
+    const latest = list?.data?.[0];
+    if (!latest) throw new Error(`CurseForge project ${projectId} has no files.`);
+    const detail = await official(dataRoot, `/mods/${projectId}/files/${latest.id}`) as { data?: CfFileMeta } | null;
+    meta = detail?.data ?? latest;
+  }
   const tags = meta.gameVersions ?? [];
   let loader: LoaderKind | null = loaderFromGameVersions(tags);
 
@@ -246,7 +285,7 @@ export async function listCurseForgeVersions(
       fileId: Number(file.id),
       displayName: file.displayName ?? file.fileName ?? `File ${String(file.id)}`,
       fileName: file.fileName ?? null,
-      publishedAt: (file as { fileDate?: string }).fileDate ?? null,
+      publishedAt: file.fileDate ?? null,
       minecraftVersion: pickMinecraftVersion(tags),
       loader: loaderFromGameVersions(tags),
       hasServerPack: serverPackFileId !== null,

@@ -255,15 +255,27 @@ export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Op
     };
   }, []);
 
+  /**
+   * A local-import-shaped description synthesised from the API project, so the configure panel can share one code path.
+   *
+   * It must describe what will actually be installed. Two things vary with the version choice and were previously hardcoded
+   * to "latest": the name and the reason text. A user who picked an older version saw "the latest server pack will be
+   * installed" next to a title naming their version — the panel contradicted itself.
+   */
   const cfProjectInspection: CurseForgeArchiveInspection | null = cfProjectId !== null && cfProjectMeta
     ? {
-        name: cfProjectMeta.name,
-        classification: 'supportedServerPack',
-        reason: cfProjectMeta.hasServerPack
-          ? 'Official API key mode: the latest server pack (serverPackFileId) will be installed.'
-          : 'Official API key mode: no server pack on the latest file; the client pack is resolved from manifest.json.',
-        minecraftVersion: cfProjectMeta.minecraftVersion,
-        loader: cfProjectMeta.loader,
+        // The chosen version's own display name when one is picked; the project name only as a fallback.
+        name: cfSelectedVersion?.displayName ?? cfProjectMeta.name,
+        classification: cfSelectedVersion !== null && !cfSelectedVersion.hasServerPack ? 'clientExport' : 'supportedServerPack',
+        reason: cfSelectedVersion !== null
+          ? (cfSelectedVersion.hasServerPack
+            ? `Official API key mode: the server pack for the selected version "${cfSelectedVersion.displayName}" will be installed.`
+            : `The selected version "${cfSelectedVersion.displayName}" has no server pack; its client manifest is resolved and client-only mods are skipped.`)
+          : (cfProjectMeta.hasServerPack
+            ? 'Official API key mode: the latest server pack (serverPackFileId) will be installed.'
+            : 'Official API key mode: no server pack on the latest file; the client pack is resolved from manifest.json.'),
+        minecraftVersion: cfSelectedVersion?.minecraftVersion ?? cfProjectMeta.minecraftVersion,
+        loader: cfSelectedVersion?.loader ?? cfProjectMeta.loader,
         loaderVersion: cfProjectMeta.loaderVersion,
       }
     : null;
