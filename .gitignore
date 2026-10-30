@@ -4,6 +4,11 @@ node_modules/
 # Build output
 dist/
 
+# Local app data (servers, caches, backups, test artefacts). Never committed: it holds real user state and can be tens
+# of gigabytes. The `.bak-*` form covers a renamed data root kept for inspection during an investigation.
+.app-data/
+.app-data.bak-*/
+
 # Local caches / indexes (regenerable)
 .codegraph/
 
