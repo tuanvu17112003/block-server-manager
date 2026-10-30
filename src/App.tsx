@@ -1,4 +1,4 @@
-import { Component, useEffect, useState } from 'react';
+import { Component, useEffect, useRef, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import type { TabId } from './types';
 import { StoreProvider, useStore } from './store';
@@ -107,6 +107,9 @@ function Shell() {
   const [creating, setCreating] = useState(false);
   const [createSession, setCreateSession] = useState(0);
   const [firstRunCreate, setFirstRunCreate] = useState(false);
+  // Tracks that the user explicitly left the first-run wizard, so the auto-open does not fight them back into it
+  // while the backend is still empty (docs: App settings must stay reachable with zero servers).
+  const firstRunDismissedRef = useRef(false);
   const [returnTab, setReturnTab] = useState<TabId>('overview');
   const [showAppSettings, setShowAppSettings] = useState(false);
   const { servers, serversHydrated, serversLoadError, retryServers, select } = useStore();
@@ -115,10 +118,23 @@ function Shell() {
   const freshEmptyBackend = backendReady && hasBackend() && serversHydrated && servers.length === 0;
   const serverListFailed = backendReady && hasBackend() && !serversHydrated && serversLoadError !== null;
   const loadingServers = backendReady && hasBackend() && !serversHydrated && !serverListFailed;
-  const showCreate = !loadingServers && !serverListFailed && (creating || firstRunCreate || freshEmptyBackend);
+  // A fresh, empty backend used to force the Create wizard on screen (`showCreate` included `freshEmptyBackend`)
+  // and made its Back button a no-op (`cancelCreate` returned early). That locked App settings — where the
+  // CurseForge API key, download folder and Java path live — for exactly the user who has not created a server yet,
+  // even though a CurseForge install needs that key. The wizard is now a first-run *suggestion*: it still opens
+  // automatically, but the user can leave it, and leaving it shows the normal shell (Overview already renders its own
+  // "No servers yet" empty state, and the store falls back to EMPTY_SERVER so nothing dereferences undefined).
+  const showCreate = !loadingServers && !serverListFailed && (creating || firstRunCreate);
 
+  // First run: open the wizard once per empty-backend episode, without making it inescapable. Dismissing it must
+  // not immediately reopen it, so the auto-open re-arms only after the backend stops being empty.
   useEffect(() => {
-    if (freshEmptyBackend) setFirstRunCreate(true);
+    if (!freshEmptyBackend) {
+      firstRunDismissedRef.current = false;
+      return;
+    }
+    if (firstRunDismissedRef.current) return;
+    setFirstRunCreate(true);
   }, [freshEmptyBackend]);
 
   if (bridgeUnavailable !== null) {
@@ -148,7 +164,10 @@ function Shell() {
     setTab(next);
   };
   const cancelCreate = () => {
-    if (freshEmptyBackend) return;
+    // Leaving the wizard is always allowed. Previously this returned early when the backend was empty, which made
+    // the Back button silently do nothing and trapped the user in the first-run wizard — blocking App settings.
+    // The dismissal is remembered so the first-run auto-open does not push the user straight back in.
+    firstRunDismissedRef.current = true;
     setCreating(false);
     setFirstRunCreate(false);
     setTab(returnTab);
