@@ -1,0 +1,3 @@
+# Node.js version used for development and CI.
+# Node 20 is the documented minimum (README "Requirements"); this pins the version the project is developed against.
+20

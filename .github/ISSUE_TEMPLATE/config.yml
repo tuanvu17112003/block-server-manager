@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/tuanvu17112003/block-server-manager/security/advisories/new
+    about: Please report security problems privately, not as a public issue.
+  - name: Read the documentation first
+    url: https://github.com/tuanvu17112003/block-server-manager#readme
+    about: Setup, verification, packaging and the supported-format table are all in the README and docs/.

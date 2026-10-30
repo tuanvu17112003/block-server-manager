@@ -1,0 +1,60 @@
+# Dependency updates.
+#
+# Dependabot is one of the security features GitHub recommends enabling for every public repository. It is configured
+# here rather than left at defaults for two reasons:
+#
+#   1. This project pins Electron, Vite and electron-builder, where a major bump is a real migration rather than a
+#      routine update. Those majors are grouped so they arrive as one reviewable pull request instead of ten.
+#   2. `npm audit` currently reports advisories for build-time devDependencies (Vite/esbuild). Grouping keeps those
+#      from drowning out updates that actually touch shipped code.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Saigon
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      # Build tooling: a major here is a planned migration, so review it as a unit.
+      build-tooling:
+        patterns:
+          - vite
+          - esbuild
+          - rollup
+          - postcss
+          - tailwindcss
+          - autoprefixer
+      # Electron and the packager move together; a mismatch between them breaks packaging.
+      electron-stack:
+        patterns:
+          - electron
+          - electron-builder
+      # React and its types must agree.
+      react:
+        patterns:
+          - react
+          - react-dom
+          - '@types/react'
+          - '@types/react-dom'
+      # Everything else, batched.
+      other:
+        patterns:
+          - '*'
+    ignore:
+      # Node types track the Node version in .nvmrc; a major bump here usually means "upgrade Node" rather than
+      # "upgrade a library", which is a decision for a human.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: 'chore(ci)'

@@ -1,0 +1,26 @@
+# Editor configuration, so every contributor produces the same bytes.
+# Matching the repository's .gitattributes: text files are LF with a trailing newline and no tabs.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+# Trailing whitespace is meaningful in Markdown (two spaces = hard line break).
+trim_trailing_whitespace = false
+
+[*.{bat,cmd,ps1}]
+end_of_line = crlf
+
+[*.{yml,yaml}]
+indent_size = 2
+
+[package-lock.json]
+# Generated; do not reformat or the diff becomes unreadable.
+indent_size = 2
+insert_final_newline = true

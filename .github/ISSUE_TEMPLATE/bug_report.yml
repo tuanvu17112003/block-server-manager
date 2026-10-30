@@ -1,0 +1,104 @@
+name: Bug report
+description: Something is broken. Format-specific install failures are the most common bug here, so filling in the pack details matters.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+
+        **Do not report security vulnerabilities here.** Use the [Security tab](https://github.com/tuanvu17112003/block-server-manager/security) instead — a public report exposes the flaw before a fix exists.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Describe the actual behaviour. Be concrete — "it fails" tells us nothing actionable.
+      placeholder: The install reached 40% and then failed with "archive changed size during extraction".
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What should have happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shortest sequence that triggers it. If it only happens with one pack, say which one.
+      placeholder: |
+        1. Create a server from Modrinth pack "Prominence II"
+        2. Wait for the loader install
+        3. Install fails
+    validations:
+      required: true
+
+  - type: dropdown
+    id: pack-source
+    attributes:
+      label: Modpack source
+      description: Which format were you installing? This is the single most useful field for triage.
+      options:
+        - Modrinth (.mrpack URL / in-app browse)
+        - Modrinth (local .mrpack file)
+        - CurseForge (in-app browse, API key mode)
+        - CurseForge (author server pack zip)
+        - FTB
+        - packwiz
+        - Prism / MultiMC instance
+        - ATLauncher instance
+        - Other / not sure
+        - Not modpack related
+    validations:
+      required: true
+
+  - type: input
+    id: pack-name
+    attributes:
+      label: Modpack name and version
+      description: If a modpack is involved, name it. Exact version or project ID helps enormously.
+      placeholder: Prominence II Hasturian Era 3.5.2 (CurseForge project 466901)
+    validations:
+      required: false
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: Shown in App settings, or the release tag you downloaded.
+    validations:
+      required: true
+
+  - type: input
+    id: java
+    attributes:
+      label: Java version and path
+      description: If the failure is at server start, this is usually the cause. Check App settings or the server Settings tab.
+      placeholder: Temurin 17 (managed) / C:\Program Files\Java\jdk-17\bin\java.exe
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: |
+        Paste the relevant part of the console or log tail. Include the last ~30 lines around the failure.
+        This is automatically formatted as code, so no backticks needed.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else
+      description: Screenshots, whether it is reproducible every time, anything unusual about your setup.
+    validations:
+      required: false

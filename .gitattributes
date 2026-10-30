@@ -1,0 +1,51 @@
+# Normalise line endings so a commit never rewrites every line.
+#
+# Without this file, `core.autocrlf=true` on Windows converts LF to CRLF on checkout and back on commit, which
+# printed a git warning for nearly every source file in this repository and made "did I change this file?" hard to
+# answer in a diff. Text is stored as LF in the repository and checked out as CRLF on Windows; the rules below say
+# which files are text at all, because guessing is what produced the noise.
+
+# Default: detect text, store LF, check out native.
+* text=auto eol=lf
+
+# TypeScript / JavaScript / config — always text
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.cjs   text eol=lf
+*.json  text eol=lf
+*.jsonc text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+
+# Windows scripts must keep CRLF to run under cmd.exe.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Never touch these — binaries and generated artefacts.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.zip   binary
+*.gz    binary
+*.7z    binary
+*.exe   binary
+*.dll   binary
+*.node  binary
+*.jar   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+
+# Generated/lock files: leave byte-exact.
+package-lock.json  -text

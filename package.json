@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.2.0",
   "type": "module",
-  "description": "Desktop Minecraft server manager — Electron + TypeScript + React (Tauri tree archived under legacy/)",
+  "description": "Desktop Minecraft server manager — install Modrinth, CurseForge and FTB modpacks, then run and operate the servers. Electron + TypeScript + React.",
   "author": "Block Server Manager contributors",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -38,7 +38,7 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@types/yauzl": "^3.4.0",
-    "@vitejs/plugin-react": "^4.3.1",
+    "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.19",
     "concurrently": "^9.0.0",
     "cross-env": "^7.0.3",
@@ -49,7 +49,38 @@
     "react-dom": "^18.3.1",
     "tailwindcss": "^3.4.7",
     "typescript": "^5.5.4",
-    "vite": "^5.4.0",
+    "vite": "^6.4.5",
     "wait-on": "^8.0.0"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tuanvu17112003/block-server-manager.git"
+  },
+  "homepage": "https://github.com/tuanvu17112003/block-server-manager#readme",
+  "bugs": {
+    "url": "https://github.com/tuanvu17112003/block-server-manager/issues"
+  },
+  "keywords": [
+    "minecraft",
+    "minecraft-server",
+    "server-manager",
+    "modpack",
+    "modrinth",
+    "curseforge",
+    "fabric",
+    "forge",
+    "neoforge",
+    "electron",
+    "typescript",
+    "react",
+    "desktop-app",
+    "windows"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "win32"
+  ]
 }

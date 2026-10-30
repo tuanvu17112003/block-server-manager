@@ -1,0 +1,69 @@
+name: Feature request
+description: Suggest a capability or improvement.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, it is worth knowing what this project's scope decisions are, so a request does not land on
+        already-decided ground:
+
+        - Four modpack formats are **deliberately deferred** with recorded reasons: MCBBS, HMCL server, GDLauncher, and
+          Technic. Requests to add them are already logged; re-opening the decision needs new information, such as a
+          real archive of that format to test against.
+        - A format is only described as "supported" after a real pack of that format installs and boots end-to-end.
+          If your request involves a new format, mention whether you can supply a real pack.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: Describe the situation you are in, not the solution you have in mind. The problem usually has more than one fix.
+      placeholder: I manage four servers for a small community and have to click through each one to check if it is up.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like to happen
+      description: Your suggested approach. Optional if the problem is clear enough on its own.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you have considered
+      description: Including how you work around it today.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Modpack installation / format support
+        - Server lifecycle (start, stop, restart, boot diagnostics)
+        - Console
+        - Players
+        - Worlds
+        - Backups / schedules
+        - Content management (mods, plugins, datapacks)
+        - Metrics
+        - App settings / configuration
+        - Packaging / distribution
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, related issues, or anything that would help evaluate the request.
+    validations:
+      required: false

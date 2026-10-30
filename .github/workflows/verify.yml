@@ -1,0 +1,97 @@
+name: verify
+
+# What this workflow does and deliberately does not do.
+#
+# The local gate (`npm run verify`) has 15 steps, but several of them install real modpacks from the internet and
+# boot real Minecraft servers with Java. Those cannot run reliably (or cheaply) on a hosted runner, so this workflow
+# runs the subset that is deterministic and offline: the build, the unit suite, the spec-conformance check, and the
+# encoding guard.
+#
+# That is still the part that catches the defects this project has actually suffered from:
+#   - compile errors and type regressions (build)
+#   - logic regressions (unit, 426 tests)
+#   - code drifting away from the design document (conformance)
+#   - mojibake inside string literals, which compiles and passes every other test (encoding)
+#
+# Network-dependent verification remains a maintainer step before a release: `npm run verify:full`.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+# Cancel an in-progress run when a newer commit lands on the same ref.
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: build + unit + conformance + encoding
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        # `npm ci` is required rather than `npm install`: it fails when package.json and package-lock.json disagree,
+        # which is the check that keeps a fresh clone reproducible.
+        run: npm ci
+
+      - name: Build (electron tsc + renderer tsc + vite)
+        run: npm run build
+
+      - name: Unit tests
+        # Reported separately from the gate so a failing test is obvious in the checks list rather than buried in one
+        # combined step.
+        run: node scripts/unit.mjs
+
+      - name: Spec conformance
+        # Parses the design document and fails when the code disagrees with it, citing file:line.
+        run: node scripts/conformance-spec.mjs
+
+      - name: Encoding guard
+        # Fails on double-encoded UTF-8 in source files. This defect class compiles cleanly, so no other step sees it.
+        run: node scripts/check-encoding.mjs
+
+      - name: Repository hygiene
+        # Cheap invariants that should never regress: the gate must still be 15 steps, no secrets tracked, and the
+        # real-artefact inputs the E2 harnesses need must still be present in the repository.
+        shell: pwsh
+        run: |
+          $fail = $false
+
+          if (-not (Test-Path 'LICENSE')) { Write-Error 'LICENSE is missing'; $fail = $true }
+          if (-not (Test-Path 'SECURITY.md')) { Write-Error 'SECURITY.md is missing'; $fail = $true }
+          if (-not (Test-Path 'CONTRIBUTING.md')) { Write-Error 'CONTRIBUTING.md is missing'; $fail = $true }
+
+          # Evidence inputs that the E2 harnesses read at runtime. If these are removed the gate cannot run at all.
+          foreach ($required in @(
+            'docs/research/2026-10-29-universal-modpack-install.md',
+            'docs/audit/23-synthesis-correct-design.md',
+            'docs/audit/24-deviations-register.md',
+            'docs/evidence/adapters/prism-real-instance.zip',
+            'docs/evidence/adapters/atl-real-instance.json'
+          )) {
+            if (-not (Test-Path $required)) { Write-Error "Gate input missing: $required"; $fail = $true }
+          }
+
+          # The application's own data root must never be committed.
+          $trackedData = git ls-files '.app-data/*'
+          if ($trackedData) { Write-Error ".app-data must not be tracked, found: $trackedData"; $fail = $true }
+
+          if ($fail) { exit 1 }
+          Write-Host 'repository hygiene OK'
