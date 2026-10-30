@@ -53,3 +53,35 @@ release/
 
 # Internal workflow/investigation artifacts (not part of the app)
 .workflow/
+
+# ------------------------------------------------------------------------------------------------
+# Removed from GitHub on purpose (2026-10-30), still present on the developer's disk.
+#
+# Rationale: these are historical artefacts — the archived Tauri/Rust tree, pre-Electron planning documents,
+# the research corpus those plans were built from, UI screenshots from a superseded phase, regenerable logs, and
+# a testing evaluation written for the Tauri architecture that ADR-0020 retired. They add repository weight
+# without helping anyone read or run the app. They were untracked with `git rm --cached`, so a clone no longer
+# carries them and no working tree lost anything.
+#
+# NOT ignored here, because the verification gate reads them at runtime — a fresh clone must still pass
+# `npm run verify`: docs/research/2026-10-29-universal-modpack-install.md,
+# docs/research/2026-10-29-p1c-format-census.md, docs/research/2026-10-29-claim-verification.md,
+# docs/audit/23-synthesis-correct-design.md, docs/audit/24-deviations-register.md, and the two real-artefact
+# inputs docs/evidence/adapters/prism-real-instance.zip + atl-real-instance.json.
+# ------------------------------------------------------------------------------------------------
+legacy/
+tester/
+docs/research/
+# ...except the three documents the conformance gate parses at runtime (see the note above).
+!docs/research/2026-10-29-universal-modpack-install.md
+!docs/research/2026-10-29-p1c-format-census.md
+!docs/research/2026-10-29-claim-verification.md
+docs/implementation/
+docs/evidence/phase8-ui/
+docs/README.md
+docs/electron-port-plan.md
+docs/electron-completion-plan-summary.md
+docs/evidence/*.log
+docs/evidence/*.gz
+docs/evidence/*.jsonl
+

@@ -1,3 +1,0 @@
-# Rust build output + Tauri codegen (regenerable via cargo/tauri CLI).
-target/
-gen/
