@@ -5,6 +5,7 @@ import { useStore } from '../store';
 import { Badge, Button, Card, Confirm, Field, Modal, ProgressBar, inputCls } from '../components/ui';
 import { hasBackend, isElectron, onJobProgress, tauriBackups } from '../tauri';
 import type { BackupDto, BackupScheduleDto } from '../tauri';
+import DrivePanel from './DrivePanel';
 
 function errorText(error: unknown, fallback: string): string {
   return error && typeof error === 'object' && 'message' in error
@@ -278,6 +279,10 @@ export default function Backups() {
           <Button onClick={() => void backupNow()}>Start backup</Button>
         </div>
       </Modal>
+
+      {/* Google Drive upload for this server's backups. Placed next to the backup list because that is where the
+          user thinks about where backups go; a settings-tab-only connection would hide the state from here. */}
+      <DrivePanel serverId={active.id} />
 
       <Modal open={!!restore} title={`Restore "${restore?.name}"`} onClose={() => setRestore(null)}>
         <p className="text-xs text-zinc-400">

@@ -44,6 +44,12 @@ export const COMMAND_NAMES = [
   'curseforge_search_modpacks',
   'diagnostics_bundle',
   'diagnostics_recent',
+  'gdrive_connect',
+  'gdrive_delete_backup',
+  'gdrive_disconnect',
+  'gdrive_list_backups',
+  'gdrive_status',
+  'gdrive_upload_backup',
   'java_detect',
   'java_ensure',
   'java_validate',
@@ -84,6 +90,10 @@ export const COMMAND_NAMES = [
   'storage_pick_folder',
   'storage_set',
   'system_disk',
+  'update_check',
+  'update_download',
+  'update_install',
+  'update_state',
   'versions_paper',
   'versions_vanilla',
   'world_activate',
@@ -716,6 +726,21 @@ const VALIDATORS: Record<KnownCommand, CommandValidator> = {
   curseforge_key_clear: noArgs,
   diagnostics_bundle: noArgs,
   diagnostics_recent: (command, args) => { optionalIntIn(command, args, 'limit', { min: 1, max: 500 }); },
+  update_state: () => {},
+  update_check: () => {},
+  update_download: () => {},
+  update_install: () => {},
+  gdrive_status: () => {},
+  gdrive_connect: () => {},
+  gdrive_disconnect: () => {},
+  gdrive_list_backups: () => {},
+  gdrive_upload_backup: (command, args) => {
+    requireString(command, args, 'serverId', { allowEmpty: false });
+    requireString(command, args, 'backupId', { allowEmpty: false });
+  },
+  gdrive_delete_backup: (command, args) => {
+    requireString(command, args, 'fileId', { allowEmpty: false });
+  },
 };
 
 // ------------------------------------------------------------------------------------------------
@@ -806,6 +831,16 @@ export const MINIMAL_VALID_ARGS: Record<KnownCommand, Args> = {
   curseforge_inspect_zip: { name: 'pack.zip' },
   curseforge_inspect_project: { project: 123456 },
   curseforge_cancel_download: { transferId: 'transfer-1' },
+  update_state: {},
+  update_check: {},
+  update_download: {},
+  update_install: {},
+  gdrive_status: {},
+  gdrive_connect: {},
+  gdrive_disconnect: {},
+  gdrive_list_backups: {},
+  gdrive_upload_backup: { serverId: 'server-1', backupId: 'backup-1' },
+  gdrive_delete_backup: { fileId: '1AbCdEfGhIjKlMnOpQrStUv' },
 };
 
 // ------------------------------------------------------------------------------------------------

@@ -7,7 +7,7 @@ import { appError, Store, type ServerDto, type CreateServerInput } from './store
 import { Jobs } from './jobs';
 import { ServerProcesses } from './server-process';
 import { vanillaVersions, paperVersions, loadersResolve, validateLoaderPin } from './versions';
-import { installLoader, ensureServerProperties, writeEula, type LoaderKind } from './installer/core';
+import { installLoader, ensureServerProperties, writeEula, log, type LoaderKind } from './installer/core';
 import { requiredJavaMajor, offlineJavaMajor, installMajorFor, detectJava, validateJava, ensureJava } from './java';
 import { probePortAvailable, PORT_MIN, PORT_MAX } from './validate-args';
 import { publishStagedServer, assertServerNameAvailable } from './install-transaction';
@@ -21,6 +21,7 @@ import { Players } from './players';
 import { Metrics } from './metrics';
 import { Content } from './content';
 import { effectiveCacheDir } from './storage';
+import { mirrorBackupToDrive } from './gdrive';
 
 export interface Runtime {
   jobs: Jobs;
@@ -191,7 +192,17 @@ export function buildRuntime(): {
     };
     const pipeline = new Pipeline(ctx, jobs);
     const staging = new CurseForgeStaging(ctx);
-    const backupService = new Backups(ctx, processes, j);
+    // The fourth argument is Partial<BackupsRuntimeDeps>; the constructor fills every other field with its own
+    // defaults, so only the new hook is supplied here.
+    const backupService = new Backups(ctx, processes, j, {
+      // Off-remote copy: after a backup is written and recorded, mirror it to Google Drive when the user connected one.
+      // Started here and not awaited, so a slow or failing upload cannot delay or fail the backup that already exists.
+      afterBackup: (record) => {
+        void mirrorBackupToDrive(ctx.dataRoot, record).catch((error: unknown) => {
+          log(`[gdrive] auto-upload failed for ${record.name}: ${(error as Error).message}`);
+        });
+      },
+    });
     const worldService = new Worlds(ctx, processes, backupService);
     const playerService = new Players(ctx, processes);
     const metricService = new Metrics(ctx, processes);

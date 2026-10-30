@@ -42,6 +42,11 @@ logs/
 dist-electron/
 # curseforge api key (never commit)
 .app-data/curseforge-key.txt
+# Google OAuth credentials and tokens: never commit either. The client id/secret are read from the data root or
+# env at runtime, and the refresh token is the user's own credential.
+.app-data/google-oauth.json
+.app-data/gdrive-tokens.enc
+.app-data/gdrive-tokens.json
 .e2e.out
 
 # verification artifacts

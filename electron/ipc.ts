@@ -18,6 +18,14 @@ import { resetCurseForgeKeyCache } from './services/installer/curseforge';
 import { createSupportBundle, recentDiagnostics } from './services/diagnostics';
 import { getStorageInfo, setDownloadsPath } from './services/storage';
 import { canInstallNow, checkForUpdates, downloadUpdate, installUpdate, updateState } from './services/updater';
+import {
+  connect as gdriveConnect,
+  disconnect as gdriveDisconnect,
+  driveDeleteBackup,
+  driveListBackups,
+  driveStatus,
+  driveUploadBackup,
+} from './services/gdrive';
 
 export interface IpcContext {
   dataRoot: string;
@@ -123,6 +131,38 @@ const handlers: Record<string, Handler> = {
     const allowed = canInstallNow(running);
     if (!allowed.ok) throw appError('validation', allowed.reason ?? 'Update cannot be installed right now.');
     if (!installUpdate(running)) throw appError('internal', 'The updater refused to install.');
+    return true;
+  },
+
+  // ---- Google Drive backup ----
+  // The renderer never receives tokens: every command returns either a summary or a file list.
+  gdrive_status: (_a, ctx) => driveStatus(ctx.dataRoot),
+  gdrive_connect: async (_a, ctx) => {
+    const result = await gdriveConnect(ctx.dataRoot);
+    if (!result.ok) throw appError('validation', result.error ?? 'Could not connect to Google Drive.');
+    return driveStatus(ctx.dataRoot);
+  },
+  gdrive_disconnect: (_a, ctx) => { gdriveDisconnect(ctx.dataRoot); return driveStatus(ctx.dataRoot); },
+  gdrive_list_backups: (_a, ctx) => driveListBackups(ctx.dataRoot),
+  gdrive_upload_backup: async (a, ctx) => {
+    // The backup id alone is not enough to find it: listBackups is per-server, so the caller supplies the server and
+    // the lookup stays exact rather than scanning every server's backups.
+    const serverId = String(a.serverId ?? '');
+    const backup = store(ctx).listBackups(serverId).find((b) => b.id === String(a.backupId));
+    if (backup === undefined) throw appError('validation', `No backup with id ${String(a.backupId)} on server ${serverId}.`);
+    const server = store(ctx).getServer(backup.serverId);
+    const result = await driveUploadBackup({
+      dataRoot: ctx.dataRoot,
+      serverName: server?.name ?? 'server',
+      backupName: backup.name,
+      filePath: backup.path,
+    });
+    if (!result.ok) throw appError(result.needsReauth ? 'validation' : 'io', result.error ?? 'Upload failed.');
+    return result.file ?? null;
+  },
+  gdrive_delete_backup: async (a, ctx) => {
+    const result = await driveDeleteBackup(ctx.dataRoot, String(a.fileId));
+    if (!result.ok) throw appError('io', result.error ?? 'Delete failed.');
     return true;
   },
 };

@@ -86,6 +86,14 @@ export interface BackupsRuntimeDeps {
   entriesSince: (serverId: string, fromSeq: number, limit?: number) => readonly { seq: number; text: string }[];
   flushTimeoutMs: number;
   flushPollMs: number;
+  /**
+   * Called after a backup has been written and recorded, for an off-remote copy (Google Drive).
+   *
+   * Optional and synchronous from the caller's point of view: the backup has already succeeded here, so this hook must
+   * never be required for correctness and must never be able to fail the backup. Implementations start their own async
+   * work and report through the log and the Drive panel.
+   */
+  afterBackup?: (record: BackupRecord) => void;
 }
 
 export class Backups {
@@ -155,7 +163,21 @@ export class Backups {
     options: CreateBackupOptions = {},
   ): Promise<BackupRecord> {
     if (this.busy.has(serverId)) throw appError('conflict', 'A backup or restore is already running for this server.');
-    return this.doCreate(serverId, name, normalizeBackupKind(kind), jobId, options);
+    const record = await this.doCreate(serverId, name, normalizeBackupKind(kind), jobId, options);
+
+    // Off-remote copy, when the user has connected Google Drive. Deliberately fire-and-forget and never awaited by the
+    // caller: the local backup has already succeeded at this point, and making the backup operation fail because a
+    // network upload failed would turn "safe on disk, not yet in Drive" into "no backup at all". The hook is also
+    // wrapped in try/catch because a SYNCHRONOUS throw inside it would otherwise propagate and fail the backup just as
+    // surely as a rejected promise — this was caught by backup-drive-hook.test.ts, not by inspection.
+    try {
+      this.deps.afterBackup?.(record);
+    } catch (error) {
+      // JobProgress requires a `progress` value, so this reports through the log field rather than inventing a number.
+      // A thrown hook must not look like a backup failure, hence no rethrow.
+      if (jobId !== '') this.jobs.progress(jobId, { progress: 100, log: `Drive upload could not start: ${(error as Error).message}` });
+    }
+    return record;
   }
 
   private async doCreate(
