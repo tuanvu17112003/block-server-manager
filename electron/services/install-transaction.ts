@@ -12,6 +12,7 @@
 // copies to a private temp name and only then renames it into place.
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { appError, Store, type CreateServerInput, type ServerDto } from './store';
 import { launchCommand, startAndVerify, type LaunchCommand, type LoaderKind } from './installer/core';
@@ -197,9 +198,26 @@ function isRetryablePublishError(error: unknown): boolean {
   return code !== undefined && RETRYABLE_PUBLISH_CODES.has(code);
 }
 
-/** Synchronous sleep: the publish runs inside a sync section on purpose (no IPC gap). */
+/**
+ * Synchronous sleep, used only where the caller genuinely cannot yield.
+ *
+ * This blocks the Electron main thread: `Atomics.wait` parks the thread completely, so the window stops repainting and
+ * Windows marks the app "Not Responding". Measured at a 300ms request taking 311ms with no yield.
+ *
+ * It caused a real hang. An earlier version of the publish ladder retried a rename 40 times with a 400ms base delay,
+ * which is 312 seconds of blocked main thread — the app froze for over five minutes on a single failed install, and the
+ * user killed it. Total worst-case block across all four rungs was 332 seconds.
+ *
+ * Kept only for the short final-attempt paths that run inside a synchronous publish decision. Anything with a
+ * non-trivial budget must use `sleepAsync` instead.
+ */
 function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** Cooperative sleep: yields to the event loop so the UI keeps painting while a retry waits. */
+function sleepAsync(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -220,6 +238,68 @@ function renameSyncWithRetry(from: string, to: string, attempts = 10, baseDelayM
     }
   }
   throw lastError;
+}
+
+/**
+ * Async rename retry. Identical policy to the sync version, but yields between attempts.
+ *
+ * `onAttempt` receives the error and the attempt number, which is how the publish diagnostics record WHERE a failure
+ * keeps happening instead of only reporting the final exception.
+ */
+async function renameWithRetry(
+  from: string,
+  to: string,
+  options: { attempts?: number; baseDelayMs?: number; onAttempt?: (error: NodeJS.ErrnoException, attempt: number) => void } = {},
+): Promise<void> {
+  const attempts = options.attempts ?? 10;
+  const baseDelayMs = options.baseDelayMs ?? 120;
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      fs.renameSync(from, to);
+      return;
+    } catch (error) {
+      lastError = error;
+      options.onAttempt?.(error as NodeJS.ErrnoException, attempt + 1);
+      if (!isRetryablePublishError(error) || attempt === attempts - 1) throw error;
+      await sleepAsync(baseDelayMs + attempt * baseDelayMs);
+    }
+  }
+  throw lastError;
+}
+
+/** Async copy retry: same policy as the sync version, but yields between attempts so the UI keeps painting. */
+async function copyWithRetry(from: string, to: string, attempts = 5): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      copyTreeInto(from, to);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isRetryablePublishError(error) || attempt === attempts - 1) throw error;
+      await sleepAsync(250 + attempt * 250);
+    }
+  }
+  throw lastError;
+}
+
+/** One copy pass, preserving the destination's shape whether or not it already exists. */
+function copyTreeInto(from: string, to: string): void {
+  // `force: true` matters for the retry path: a previous attempt may have created part of the tree before failing, and
+  // `force: false` would then refuse to overwrite it on the next attempt, turning a transient lock into a permanent
+  // failure.
+  //
+  // When `to` already exists as a directory (the file-by-file rung creates it first), cpSync copies `from` INTO it
+  // rather than onto it, which would produce `to/<basename>/...`. Descending into the source and copying children keeps
+  // the destination shape correct regardless of whether it pre-existed.
+  if (fs.existsSync(to) && fs.statSync(to).isDirectory()) {
+    for (const entry of fs.readdirSync(from)) {
+      fs.cpSync(path.join(from, entry), path.join(to, entry), { recursive: true, force: true, errorOnExist: false });
+    }
+  } else {
+    fs.cpSync(from, to, { recursive: true, force: true, errorOnExist: false });
+  }
 }
 
 function copySyncWithRetry(from: string, to: string, attempts = 5): void {
@@ -328,6 +408,30 @@ export function recoverInterruptedPublishes(
   return result;
 }
 
+/**
+ * Names of child processes that commonly hold a staging or server directory on Windows.
+ *
+ * Captured at publish failure because the error code alone says "something has a handle" without saying what. A java
+ * process here after the verification boot is the single most useful signal: it means the JVM that was supposed to have
+ * exited had not, which points at process cleanup rather than at the filesystem.
+ */
+function describeLockingProcesses(): string {
+  try {
+    const result = spawnSync('tasklist', ['/fo', 'csv', '/nh'], { encoding: 'utf8', windowsHide: true, timeout: 3000 });
+    if (result.status !== 0 || typeof result.stdout !== 'string') return 'tasklist unavailable';
+    const interesting = /^(java|javaw|node|electron|MsMpEng|explorer)\.exe$/i;
+    const found: string[] = [];
+    for (const line of result.stdout.split('\n')) {
+      const cells = line.split('","').map((c) => c.replace(/^"|"$/g, '').trim());
+      if (cells.length < 2) continue;
+      if (interesting.test(cells[0])) found.push(`${cells[0]}(pid ${cells[1]})`);
+    }
+    return found.length > 0 ? found.join(', ') : 'none of interest';
+  } catch {
+    return 'tasklist failed';
+  }
+}
+
 export function publishStagedDirectory(from: string, to: string): void {
   fs.mkdirSync(path.dirname(to), { recursive: true });
   try {
@@ -374,6 +478,111 @@ export function publishStagedDirectory(from: string, to: string): void {
         + `data folder to your antivirus exclusions.${leftovers} Underlying error: ${detail}`,
       );
     }
+  }
+}
+
+/** One line of publish diagnostics. Collected so a failure can be attributed to a specific step. */
+export interface PublishTrace {
+  step: string;
+  startedAt: number;
+  durationMs: number;
+  ok: boolean;
+  code?: string;
+}
+
+/**
+ * Async publish ladder — the one the app actually uses.
+ *
+ * The synchronous version above remains for tests and for callers that already run off the main thread, but it must not
+ * be used from an IPC handler: its waits block the Electron main thread, which froze the window for over five minutes
+ * when the retry budget was enlarged. Every wait here yields, so the UI keeps painting while a retry is pending.
+ *
+ * Identical ladder (rename → copy → long rename → file-by-file copy), identical error reporting, but each rung records
+ * a PublishTrace. Those traces are written to the installer log, which is how the next failure gets attributed to a
+ * step rather than being summarised as a single EPERM line with no context.
+ */
+export async function publishStagedDirectoryAsync(
+  from: string,
+  to: string,
+  options: { trace?: (entry: PublishTrace) => void } = {},
+): Promise<void> {
+  const trace = (step: string, startedAt: number, ok: boolean, code?: string): void => {
+    options.trace?.({ step, startedAt, durationMs: Date.now() - startedAt, ok, ...(code !== undefined ? { code } : {}) });
+  };
+
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+
+  // ---- rung 1: atomic rename ----
+  const t1 = Date.now();
+  try {
+    await renameWithRetry(from, to, { attempts: 8, baseDelayMs: 120 });
+    trace('rename staging→final', t1, true);
+    return;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code;
+    trace('rename staging→final', t1, false, code);
+    if (code !== 'EXDEV' && !isRetryablePublishError(error)) throw error;
+    // eslint-disable-next-line no-console
+    console.warn(`[install] direct publish failed (${code ?? 'unknown'}); retrying with a copy fallback.`);
+  }
+
+  const temp = `${to}.publishing-${randomUUID()}`;
+
+  // ---- rung 2: copy to a temp sibling (does not need exclusive access to the source) ----
+  const t2 = Date.now();
+  try {
+    await copyWithRetry(from, temp);
+    trace('copy staging→temp', t2, true);
+  } catch (error) {
+    trace('copy staging→temp', t2, false, (error as NodeJS.ErrnoException).code);
+    try { fs.rmSync(temp, { recursive: true, force: true }); } catch { /* best effort */ }
+    throw appError(
+      'io',
+      `Could not publish the installed server (${(error as NodeJS.ErrnoException).code ?? 'unknown'}) while copying the `
+      + `staged files. The staging folder is intact, so Retry can finish the job. Underlying error: ${(error as Error).message}`,
+    );
+  }
+
+  // ---- rung 3: rename temp into place, waiting out a scanner (yields, so no UI freeze) ----
+  // Budget: 8 attempts at a 400ms base is ~14 seconds of waiting, deliberately short. Rung 4 copies file by file and is
+  // strictly more tolerant, so there is nothing to gain by waiting longer here — earlier the budget was 84 seconds
+  // (20 attempts) and before that 312 seconds, both of which spent a long time failing at something rung 4 can do.
+  const t3 = Date.now();
+  try {
+    await renameWithRetry(temp, to, { attempts: 8, baseDelayMs: 400 });
+    trace('rename temp→final', t3, true);
+    try { fs.rmSync(from, { recursive: true, force: true }); } catch { /* best effort */ }
+    return;
+  } catch (renameError) {
+    trace('rename temp→final', t3, false, (renameError as NodeJS.ErrnoException).code);
+    // eslint-disable-next-line no-console
+    console.warn(`[install] renaming into place failed (${(renameError as NodeJS.ErrnoException).code ?? 'unknown'}); copying file-by-file.`);
+  }
+
+  // ---- rung 4: copy temp into place file by file (a file lock no longer blocks the directory) ----
+  const t4 = Date.now();
+  try {
+    fs.mkdirSync(to, { recursive: true });
+    await copyWithRetry(temp, to, 10);
+    trace('copy temp→final', t4, true);
+    try { fs.rmSync(temp, { recursive: true, force: true }); } catch { /* best effort */ }
+    try { fs.rmSync(from, { recursive: true, force: true }); } catch { /* best effort */ }
+    return;
+  } catch (copyError) {
+    trace('copy temp→final', t4, false, (copyError as NodeJS.ErrnoException).code);
+    const code = (copyError as NodeJS.ErrnoException | null)?.code ?? 'unknown';
+    const leftovers = fs.existsSync(temp) ? ` Partial output was left at ${temp}.` : '';
+    // Name the processes that could be holding the files. The error code alone says "locked" without saying by what,
+    // which is why three rounds of fixes were guesses. A java process listed here after the verification boot means the
+    // boot process had not exited; MsMpEng means Defender is scanning; nothing of interest means the cause is elsewhere.
+    const holders = describeLockingProcesses();
+    throw appError(
+      'io',
+      `Could not publish the installed server (${code}) after four attempts, spanning renames and file copies. `
+      + `Processes that could be holding the files: ${holders}. `
+      + 'Press Retry — the staged files are kept for exactly that reason. If it keeps failing, add the app data folder '
+      + `to your antivirus exclusions.${leftovers} Underlying error: ${(copyError as Error).message}`,
+    );
   }
 }
 
@@ -477,12 +686,25 @@ export async function publishStagedServer(opts: PublishStagedServerOptions): Pro
 
     opts.onProgress?.({ stage: 'publishing', progress: 95 });
     const publishStartedAt = Date.now();
-    // Record insert → beforePublish → rename are synchronous: no IPC can interleave between them.
+    // Record insert → beforePublish → publish. The insert is synchronous so no IPC can interleave with it; the publish
+    // itself awaits, which is required: its retry waits must yield or the main thread blocks and the window freezes.
     record = store.createServer(opts.input);
     try {
       opts.beforePublish?.(record, ctx);
       flushLog();
-      (opts.publish ?? publishStagedDirectory)(stagingDir, path.join(dataRoot, 'servers', record.id));
+      const destination = path.join(dataRoot, 'servers', record.id);
+      if (opts.publish !== undefined) {
+        opts.publish(stagingDir, destination);
+      } else {
+        // Trace every rung into the installer log. Without this a failure is a single opaque EPERM line; with it the log
+        // shows which step failed, how long it waited and with what code — the evidence needed to actually diagnose it.
+        await publishStagedDirectoryAsync(stagingDir, destination, {
+          trace: (entry) => {
+            log(`publish ${entry.ok ? 'ok' : 'failed'}: ${entry.step} (${entry.durationMs}ms)${entry.code !== undefined ? ` code=${entry.code}` : ''}`);
+            flushLog();
+          },
+        });
+      }
     } catch (error) {
       rollbackRecord();
       throw error;
