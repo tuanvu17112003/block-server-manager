@@ -174,39 +174,40 @@ const handlers: Record<string, Handler> = {
     return driveListBackups(ctx.dataRoot, serverId, server?.name ?? '');
   },
   /**
-   * Backups whose owning server no longer exists.
+   * Backups that no existing server can claim.
    *
-   * Shown separately in the UI rather than mixed into a server's list, because they cannot be restored into a server
-   * that is gone — the user has to pick a destination.
+   * A backup is claimable by a server when it matches that server by id OR by name. The name half is what makes a
+   * recreated server work: delete "Test", create "Test" again, and the old backups keep the old UUID but the same name.
    *
-   * `serverName` scopes the query to what this panel can act on. Without it every server's panel showed the same global
-   * list, which was reported as "why does every server have this?" — the answer was that the list ignored the server
-   * entirely. A backup is only orphaned relative to a server if it does not belong to that server by id AND does not
-   * carry that server's name. The name half matters: when a server is deleted and recreated, its old backups keep the
-   * old UUID but the same name, so they are NOT orphans as far as the new server is concerned and must not be offered
-   * as unrecoverable.
+   * The previous version was scoped by the requesting panel's name, which was not enough. A panel for "VanillaGGDTest"
+   * still listed an orphan belonging to "Test", because "Test" is a DIFFERENT name — the condition only excluded a name
+   * that matched the panel's own. Reported as "the orphan notice still shows and Download fails", and the Download failed
+   * for the same reason: the restore path lists by id-or-name for the CURRENT server, so a file belonging to another
+   * name is genuinely not reachable from that server.
+   *
+   * So the list is now global-but-honest: it contains only files that NO live server can claim by id or by name. Those
+   * are the ones that genuinely need a destination chosen. A file claimable by another live server is not shown here,
+   * because that server's own panel lists it and Download works there.
    */
-  gdrive_orphaned_backups: async (a, ctx) => {
+  gdrive_orphaned_backups: async (_a, ctx) => {
     const servers = store(ctx).listServers();
-    const live = servers.map((server) => server.id);
-    const requestedName = String(a.serverName ?? '').trim().toLowerCase();
+    const liveIds = new Set(servers.map((server) => server.id));
+    const liveNames = new Set(servers.map((server) => server.name.trim().toLowerCase()));
     const auth = await driveListBackups(ctx.dataRoot, '', '');
     if (!auth.ok) throw appError('validation', auth.error ?? 'Google Drive is not available.');
-    const liveSet = new Set(live);
-    const liveNames = new Set(servers.map((server) => server.name.trim().toLowerCase()));
 
     const orphans = (auth.files ?? []).filter((file) => {
-      const ownedByLiveId = file.serverId !== undefined && file.serverId !== '' && liveSet.has(file.serverId);
-      if (ownedByLiveId) return false;
-      // A backup carrying the name of a server that exists is recoverable into it, so it is not an orphan for that panel.
+      // Claimed by a live server's id.
+      if (file.serverId !== undefined && file.serverId !== '' && liveIds.has(file.serverId)) return false;
+      // Claimed by a live server's name (the recreated-server case).
       const name = (file.serverName ?? '').trim().toLowerCase();
-      if (name !== '' && liveNames.has(name)) {
-        // Only exclude it from the panel that owns that name; other panels may still legitimately see it.
-        if (requestedName === '' || requestedName === name) return false;
+      if (name !== '' && liveNames.has(name)) return false;
+      // A file whose name matches a live server's filename prefix is claimable too, for uploads that predate the property.
+      for (const liveName of liveNames) {
+        if (file.name.toLowerCase().startsWith(`${liveName}__`)) return false;
       }
-      // A file with no recorded server id cannot be attributed, so it is treated as recoverable rather than hidden.
-      if (file.serverId === undefined || file.serverId === '') return true;
-      return !liveSet.has(file.serverId);
+      // Nothing can claim it, so it is genuinely unreachable without the user choosing a destination.
+      return true;
     });
     return { ok: true, files: orphans };
   },
@@ -217,6 +218,19 @@ const handlers: Record<string, Handler> = {
     const backup = store(ctx).listBackups(serverId).find((b) => b.id === String(a.backupId));
     if (backup === undefined) throw appError('validation', `No backup with id ${String(a.backupId)} on server ${serverId}.`);
     const server = store(ctx).getServer(backup.serverId);
+
+    // Skip the upload when this exact backup is already in Drive.
+    //
+    // Every new backup is mirrored automatically by the afterBackup hook, so pressing "To Drive" on a fresh backup was a
+    // SECOND upload of the same file with a different timestamped name — reported as "the first upload creates two
+    // identical backups, later ones only one". Matching is on the recorded backup id, which the upload writes into
+    // appProperties, so it identifies the file regardless of its Drive name.
+    const existing = await driveListBackups(ctx.dataRoot, backup.serverId, server?.name ?? '');
+    if (existing.ok) {
+      const already = (existing.files ?? []).find((file) => file.backupId === backup.id);
+      if (already !== undefined) return already;
+    }
+
     const result = await driveUploadBackup({
       dataRoot: ctx.dataRoot,
       serverId: backup.serverId,
@@ -292,6 +306,75 @@ const handlers: Record<string, Handler> = {
       bytes: fs.statSync(downloaded.path).size,
       kind: 'Manual',
       note: 'Downloaded from Google Drive',
+      createdAt: new Date().toISOString(),
+    });
+  },
+  /**
+   * Download a Drive backup that no existing server can claim, and attach it to the given server.
+   *
+   * `gdrive_restore_backup` intentionally verifies that the file belongs to the requesting server, which is what stops a
+   * stale or crafted file id from pulling a different world's archive over this one. An unclaimed backup is outside every
+   * server's scope by definition, so that guard rejects it — which is why the Download button on the orphan list failed
+   * with "not in this server's Drive folder" every time.
+   *
+   * This handler is the explicit way to say "yes, attach this one here". It re-checks the one thing that still matters:
+   * the file must actually be one of this app's backups and must NOT already be claimable by another live server. It must
+   * never be usable to overwrite a server with someone else's world.
+   */
+  gdrive_adopt_backup: async (a, ctx) => {
+    const fileId = String(a.fileId ?? '');
+    const serverId = String(a.serverId ?? '');
+    if (fileId === '') throw appError('validation', 'A Drive file id is required.');
+    if (serverId === '') throw appError('validation', 'A server id is required.');
+    const target = store(ctx).getServer(serverId);
+    if (target === null) throw appError('not-found', `Server ${serverId} not found.`);
+
+    // The file must exist in the full app listing.
+    const all = await driveListBackups(ctx.dataRoot, '', '');
+    if (!all.ok) throw appError('validation', all.error ?? 'Google Drive is not available.');
+    const remote = (all.files ?? []).find((file) => file.id === fileId);
+    if (remote === undefined) throw appError('not-found', 'That backup was not found in your Google Drive.');
+
+    // Refuse if another live server can claim it: the user should restore it from there, not force it here.
+    const servers = store(ctx).listServers();
+    const remoteName = (remote.serverName ?? '').trim().toLowerCase();
+    const claimedByOther = servers.some((server) => {
+      if (server.id === serverId) return false;
+      if (remote.serverId !== undefined && remote.serverId !== '' && remote.serverId === server.id) return true;
+      return remoteName !== '' && server.name.trim().toLowerCase() === remoteName;
+    });
+    if (claimedByOther) {
+      throw appError(
+        'conflict',
+        `That backup belongs to another server ("${remote.serverName ?? 'unknown'}"). Open that server's Backups tab to `
+        + 'restore it, so the right world is not overwritten.',
+      );
+    }
+
+    const backupDir = path.join(ctx.dataRoot, 'backups');
+    fs.mkdirSync(backupDir, { recursive: true });
+    const base = (remote.name.replace(/^.*__/, '') || 'backup').replace(/[\\/:*?"<>|]/g, '_');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `${base.replace(/\.zip$/, '')}-adopted-${stamp}.zip`;
+
+    const downloaded = await driveRestoreBackup({
+      dataRoot: ctx.dataRoot,
+      fileId,
+      downloadDir: backupDir,
+      fileName,
+    });
+    if (!downloaded.ok || downloaded.path === undefined) {
+      throw appError(downloaded.needsReauth ? 'validation' : 'io', downloaded.error ?? 'Download failed.');
+    }
+
+    return store(ctx).addBackup({
+      id: `b-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      serverId,
+      name: fileName.replace(/\.zip$/, ''),
+      path: downloaded.path,
+      bytes: fs.statSync(downloaded.path).size,
+      kind: 'Manual',
+      note: `Adopted from Google Drive (was "${remote.serverName ?? 'unknown server'}")`,
       createdAt: new Date().toISOString(),
     });
   },

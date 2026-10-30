@@ -946,23 +946,97 @@ export async function installLoader(kind: LoaderKind, dir: string, mc: string, v
 }
 
 // ---------- launch ----------
-function expandArgsFile(f: string, depth = 0): string[] {
+/**
+ * Extract the launch arguments from a Forge/NeoForge `run.bat`.
+ *
+ * These scripts are batch programs, not argument files, and treating them as a flat list of tokens produces a launch that
+ * exits immediately. Modern Forge (1.20.4+) writes:
+ *
+ *   java -jar forge-1.20.4-49.2.13-shim.jar --onlyCheckJava      <- checks the JVM, then EXITS 0
+ *   if %ERRORLEVEL% NEQ 0 ( ... goto :exit )
+ *   java @user_jvm_args.txt @libraries/.../win_args.txt %*       <- the real launch
+ *
+ * A naive scan collected both `java` lines, so the first JVM ran the shim, exited 0, and the install reported
+ * "process exited (code 0) before Done (" — the exact Forge failure reported after 1.20.4. The shim check is a
+ * pre-flight guard for humans, not part of the server launch.
+ *
+ * So the launch line is chosen deliberately:
+ *   - skip any line that runs the shim (`-shim.jar`, `--onlyCheckJava`), those are pre-flight checks
+ *   - skip batch control flow entirely (`if`, `goto`, `set`, `echo`, `pause`, `exit`, labels, closing parens)
+ *   - prefer the LAST launch line, because that is the one the script reaches after its guards pass
+ *   - treat `%*` as "everything after the script's own args", which for us is empty plus `nogui`
+ */
+/**
+ * Read a plain JVM argument file (`user_jvm_args.txt`, `win_args.txt`, `unix_args.txt`).
+ *
+ * These hold bare arguments, one or many per line, and never contain the word `java` — so they must be parsed differently
+ * from a `.bat` script. Mixing the two up is silent: the batch filter dropped every token, the launcher produced `nogui`
+ * alone, and java then started with no jar and no class path.
+ */
+function readArgsFile(f: string, depth = 0): string[] {
   if (depth > 4) return [];
+  let text: string;
+  try { text = readFileSync(f, 'utf8'); } catch { return []; }
   const out: string[] = [];
-  for (const line of readFileSync(f, 'utf8').split(/\r?\n/)) {
+  for (const line of text.split(/\r?\n/)) {
     const l = line.trim();
-    if (!l || l.startsWith('#') || /^@echo/i.test(l) || /^rem /i.test(l)) continue;
-    for (const tok of l.match(/(?:[^\s"]+"[^"]*"|[^\s"]+)/g) ?? []) {
-      const t = tok.replaceAll('"', '');
-      if (t === 'java' || t === 'javaw' || t === '%*') continue;
-      if (t.startsWith('@')) {
-        const ref = path.resolve(path.dirname(f), t.slice(1));
-        if (existsSync(ref)) { out.push(...expandArgsFile(ref, depth + 1)); continue; }
+    if (l === '' || l.startsWith('#') || /^rem\b/i.test(l)) continue;
+    for (const rawToken of l.match(/(?:[^\s"]+"[^"]*"|[^\s"]+)/g) ?? []) {
+      const token = rawToken.replaceAll('"', '');
+      if (token === '') continue;
+      // Nested @file references are legal inside an args file.
+      if (token.startsWith('@')) {
+        const ref = path.resolve(path.dirname(f), token.slice(1));
+        if (existsSync(ref)) out.push(...readArgsFile(ref, depth + 1));
+        continue;
       }
-      out.push(t);
+      out.push(token);
     }
   }
   return out;
+}
+
+function expandArgsFile(f: string, depth = 0): string[] {
+  if (depth > 4) return [];
+  let text: string;
+  try { text = readFileSync(f, 'utf8'); } catch { return []; }
+
+  const launchLines: string[][] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const l = line.trim();
+    if (l === '') continue;
+    // Batch syntax that is not an argument line.
+    if (/^(rem\b|::|@echo|echo\b|pause$|set\b|if\b|goto\b|exit$|exit\b|:[\w-]+$|\)$|\($|cls$|title\b|cd\b|pushd|popd)/i.test(l)) continue;
+
+    const tokens = l.match(/(?:[^\s"]+"[^"]*"|[^\s"]+)/g) ?? [];
+    // Must actually be a java launch line.
+    const isJavaLine = tokens.some((token) => /^"?java(w)?(\.exe)?"?$/i.test(token));
+    if (!isJavaLine) continue;
+    // Skip the pre-flight JVM check: it is a guard, not the server.
+    if (tokens.some((token) => /-shim\.jar$/i.test(token.replaceAll('"', '')))) continue;
+    if (tokens.some((token) => /^--onlycheckjava$/i.test(token.replaceAll('"', '')))) continue;
+
+    const args: string[] = [];
+    for (const rawToken of tokens) {
+      const token = rawToken.replaceAll('"', '');
+      if (/^java(w)?(\.exe)?$/i.test(token)) continue;
+      if (token === '%*') continue;
+      if (token.startsWith('@')) {
+        const ref = path.resolve(path.dirname(f), token.slice(1));
+        // An @reference inside a batch line points at an ARGUMENT FILE, so it is parsed as one.
+        if (existsSync(ref)) { args.push(...readArgsFile(ref)); continue; }
+        // A missing @file is not a runnable argument; passing it through makes java fail with a confusing message.
+        continue;
+      }
+      // Batch redirection/pipe artefacts must never be forwarded to the JVM.
+      if (/^[0-9]?[<>|&]/.test(token)) continue;
+      args.push(token);
+    }
+    if (args.length > 0) launchLines.push(args);
+  }
+
+  // The last valid launch line is the real one: earlier ones are guards the script only reaches on failure.
+  return launchLines.length > 0 ? launchLines[launchLines.length - 1] : [];
 }
 export interface LaunchCommand { exe: string; args: string[] }
 export function launchCommand(dir: string, javaExe: string): LaunchCommand {

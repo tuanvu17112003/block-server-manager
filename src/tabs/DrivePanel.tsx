@@ -166,6 +166,22 @@ export default function DrivePanel({ serverId, serverName = '', refreshKey, onDo
     onDownloaded?.();
   });
 
+  /**
+   * Download a backup that no server can claim, attaching it to this server.
+   *
+   * A separate call because the ordinary restore deliberately refuses files outside the server's own scope — the guard
+   * that stops a stale id pulling another world's archive over this one. An unclaimed file is outside every scope by
+   * definition, so the user has to state the destination explicitly, and this call is that statement.
+   */
+  const downloadUnclaimed = (file: DriveFile) => run('restore', async () => {
+    const record = await bridge?.invoke('gdrive_adopt_backup', { fileId: file.id, serverId }) as { id?: string } | undefined;
+    if (record?.id === undefined) throw new Error('The backup was downloaded but not registered.');
+    setNotice(
+      `Downloaded "${file.name}" and attached it to this server. It is now in the Backups list above — use Restore there.`,
+    );
+    onDownloaded?.();
+  });
+
   if (status === null) {
     return (
       <Card>
@@ -275,16 +291,19 @@ export default function DrivePanel({ serverId, serverName = '', refreshKey, onDo
               </p>
             )}
 
-            {/* Backups whose server no longer exists. Shown here rather than hidden, because a recreated server gets a
-                new id and would otherwise never see them — the practical form of losing a backup. */}
+            {/* Backups no live server can claim. Downloading here adopts them into the CURRENT server, which is the only
+                destination this panel can reasonably mean: the file belongs to no one, so the server the user is looking
+                at is the obvious recipient. The previous behaviour called the per-server restore, which correctly refused
+                because the file is not in this server's scope — so the button produced "not in this server's Drive
+                folder" every time. */}
             {orphans.length > 0 && (
               <div className="mt-3 rounded border border-amber-800/60 bg-amber-950/30 p-2">
                 <p className="text-xs font-semibold text-amber-200">
-                  Backups from servers that no longer exist ({orphans.length})
+                  Unclaimed backups in your Drive ({orphans.length})
                 </p>
                 <p className="mt-1 text-[11px] text-amber-200/80">
-                  These are safe in Drive but their server is gone. Download one to add it back to this computer, then
-                  restore it into whichever server should receive the data.
+                  No existing server can use these. Download one to add it to <strong>{serverName || 'this server'}</strong>,
+                  then restore it from the Backups list.
                 </p>
                 <ul className="mt-2 space-y-1">
                   {orphans.map((file) => (
@@ -300,8 +319,8 @@ export default function DrivePanel({ serverId, serverName = '', refreshKey, onDo
                         size="sm"
                         variant="outline"
                         disabled={busy}
-                        onClick={() => { void restoreFromDrive(file); }}
-                        title="Download to this computer and add it to the backup list"
+                        onClick={() => { void downloadUnclaimed(file); }}
+                        title={`Download and attach this backup to "${serverName || 'this server'}"`}
                       >
                         Download
                       </Button>

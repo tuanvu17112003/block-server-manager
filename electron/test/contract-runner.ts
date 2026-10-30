@@ -36,9 +36,11 @@ export const RENDERER_COMMANDS = [
   'curseforge_open_browser',
   'curseforge_open_external_browser',
   'curseforge_pick_zip',
+  'curseforge_project_versions',
   'curseforge_search_modpacks',
   'diagnostics_bundle',
   'diagnostics_recent',
+  'gdrive_adopt_backup',
   'gdrive_connect',
   'gdrive_delete_backup',
   'gdrive_disconnect',
@@ -164,7 +166,7 @@ export async function runContractTests(ctx: IpcContext, filter?: string): Promis
         const shared = readSharedCommands();
         const missing = RENDERER_COMMANDS.filter((name) => typeof merged[name] !== 'function');
         assert.deepEqual(missing, []);
-        assert.equal(RENDERER_COMMANDS.length, 88);
+        assert.equal(RENDERER_COMMANDS.length, 90);
         assert.equal(RENDERER_COMMANDS.length, shared.length);
       });
       await run.must('unknown command is not registered', async () => {
@@ -172,7 +174,7 @@ export async function runContractTests(ctx: IpcContext, filter?: string): Promis
       });
       await run.must('shared/contracts.ts COMMANDS equals the renderer command list (WP-7.1)', async () => {
         const shared = readSharedCommands();
-        assert.equal(shared.length, 88);
+        assert.equal(shared.length, 90);
         assert.equal(new Set(shared).size, shared.length, 'COMMANDS must not repeat a name');
         assert.deepEqual([...shared].sort(), [...RENDERER_COMMANDS].sort());
       });

@@ -172,6 +172,90 @@ export async function inspectCurseForgeProject(ref: number | string, dataRoot: s
   };
 }
 
+/**
+ * One selectable version of a CurseForge project.
+ *
+ * `hasServerPack` is the field that matters for installs. CurseForge authors publish an optional server pack alongside a
+ * client pack, and the two are NOT interchangeable:
+ *
+ *  - a server pack is a ready-to-run server (world config, run scripts, server-side mod set)
+ *  - a client pack is a manifest whose mods have to be resolved, and it contains client-only mods that must not run on a
+ *    server
+ *
+ * Downloading the client pack when a server pack exists produces a server that either fails to boot or silently loads
+ * client-only mods. Downloading a server pack when none exists is impossible, so the choice has to be made per version —
+ * which is why the installer now exposes the flag instead of always taking "latest file".
+ */
+export interface CfVersionChoice {
+  fileId: number;
+  displayName: string;
+  fileName: string | null;
+  publishedAt: string | null;
+  minecraftVersion: string | null;
+  loader: LoaderKind | null;
+  /** True when this exact file has a server pack published alongside it. */
+  hasServerPack: boolean;
+  /** The id of that server pack file, when present. */
+  serverPackFileId: number | null;
+  /** Human-readable size of the download, when CurseForge reports one. */
+  fileLength: number | null;
+}
+
+/**
+ * List the published versions of a CurseForge project, newest first, each with its server-pack availability.
+ *
+ * Requires the API key: the keyless routes cannot enumerate files for a project. When no key is configured the caller is
+ * told explicitly rather than silently falling back to "latest", because that fallback is exactly what installed client
+ * packs where server packs existed.
+ */
+export async function listCurseForgeVersions(
+  projectRef: number | string,
+  dataRoot: string,
+  options: { limit?: number; signal?: AbortSignal } = {},
+): Promise<CfVersionChoice[]> {
+  if (!cfKey(dataRoot)) {
+    throw appError(
+      'validation',
+      'Listing CurseForge versions needs an API key. Add one in Settings → CurseForge API key, or install from a '
+      + 'project URL / server pack ZIP instead.',
+    );
+  }
+  const limit = options.limit ?? 30;
+  const raw = String(projectRef).trim();
+  let projectId = Number(raw);
+  if (!Number.isInteger(projectId) || projectId <= 0) {
+    const slug = (raw.match(/\/modpacks\/([^/?#]+)/i)?.[1] ?? raw).replace(/[^a-z0-9_-]/gi, '');
+    if (slug === '') throw new Error('Enter a CurseForge project URL, slug or numeric id.');
+    const found = await official(dataRoot, `/mods/search?gameId=432&classId=4471&slug=${encodeURIComponent(slug)}&pageSize=1`, options.signal ? { signal: options.signal } : {}) as { data?: { id?: number }[] } | null;
+    projectId = Number(found?.data?.[0]?.id ?? 0);
+    if (projectId <= 0) throw new Error(`CurseForge project "${raw}" was not found.`);
+  }
+
+  const list = await official(
+    dataRoot,
+    `/mods/${projectId}/files?pageSize=${limit}&index=0`,
+    options.signal ? { signal: options.signal } : {},
+  ) as { data?: CfFileMeta[] } | null;
+
+  return (list?.data ?? []).map((file) => {
+    const tags = file.gameVersions ?? [];
+    const serverPackFileId = file.serverPackFileId !== undefined && file.serverPackFileId !== null
+      ? Number(file.serverPackFileId)
+      : null;
+    return {
+      fileId: Number(file.id),
+      displayName: file.displayName ?? file.fileName ?? `File ${String(file.id)}`,
+      fileName: file.fileName ?? null,
+      publishedAt: (file as { fileDate?: string }).fileDate ?? null,
+      minecraftVersion: pickMinecraftVersion(tags),
+      loader: loaderFromGameVersions(tags),
+      hasServerPack: serverPackFileId !== null,
+      serverPackFileId,
+      fileLength: typeof file.fileLength === 'number' ? file.fileLength : null,
+    };
+  });
+}
+
 // ---- official API key mode: in-app modpack browsing ----
 export interface CfModpackHit {
   projectId: number;

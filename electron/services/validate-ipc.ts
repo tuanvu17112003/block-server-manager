@@ -41,9 +41,11 @@ export const COMMAND_NAMES = [
   'curseforge_open_browser',
   'curseforge_open_external_browser',
   'curseforge_pick_zip',
+  'curseforge_project_versions',
   'curseforge_search_modpacks',
   'diagnostics_bundle',
   'diagnostics_recent',
+  'gdrive_adopt_backup',
   'gdrive_connect',
   'gdrive_delete_backup',
   'gdrive_disconnect',
@@ -463,6 +465,17 @@ function validatePipelineSource(command: KnownCommand, args: Args): void {
   }
 }
 
+/**
+ * Validate the {fileId, serverId} pair shared by every Drive download command.
+ *
+ * Both values are required: a missing file id would target nothing, and a missing server id would have no destination. The
+ * id formats are checked rather than merely non-empty, so a malformed id is rejected before any network call is made.
+ */
+function validateGdriveFileServer(command: string, args: Args): void {
+  requireString(command, args, 'fileId', { allowEmpty: false, maxLength: 200, pattern: /^[A-Za-z0-9_-]+$/, patternDetail: '"fileId" must be a Google Drive file id.' });
+  requirePathString(command, args, 'serverId');
+}
+
 const VALIDATORS: Record<KnownCommand, CommandValidator> = {
   // ---- shell / versions ----
   ping: noArgs,
@@ -743,11 +756,15 @@ const VALIDATORS: Record<KnownCommand, CommandValidator> = {
   gdrive_delete_backup: (command, args) => {
     requireString(command, args, 'fileId', { allowEmpty: false });
   },
-  gdrive_restore_backup: (command, args) => {
-    requireString(command, args, 'fileId', { allowEmpty: false });
-    requireString(command, args, 'serverId', { allowEmpty: false });
-  },
+  /**
+   * Both a Drive file id and a target server are required. Shared by the two download paths — restoring into a server the
+   * file belongs to, and adopting a file no server can claim — because the argument shape is identical and a divergent
+   * copy would let one path accept what the other rejects.
+   */
+  gdrive_restore_backup: (command, args) => validateGdriveFileServer(command, args),
   gdrive_orphaned_backups: () => {},
+  gdrive_adopt_backup: (command, args) => validateGdriveFileServer(command, args),
+  curseforge_project_versions: (command, args) => { requireString(command, args, 'project', { allowEmpty: false, maxLength: 200 }); },
 };
 
 // ------------------------------------------------------------------------------------------------
@@ -850,6 +867,8 @@ export const MINIMAL_VALID_ARGS: Record<KnownCommand, Args> = {
   gdrive_delete_backup: { fileId: '1AbCdEfGhIjKlMnOpQrStUv' },
   gdrive_restore_backup: { fileId: '1AbCdEfGhIjKlMnOpQrStUv', serverId: 'server-1' },
   gdrive_orphaned_backups: {},
+  gdrive_adopt_backup: { fileId: '1AbCdEfGhIjKlMnOpQrStUv', serverId: 'server-1' },
+  curseforge_project_versions: { project: '392141' },
 };
 
 // ------------------------------------------------------------------------------------------------

@@ -8,7 +8,7 @@ import { BrowserWindow, shell, dialog, session, type DownloadItem, type Event as
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IpcContext, Handler } from '../ipc';
-import { inspectStagedZip, inspectCurseForgeProject, searchCurseForgeModpacks, type CfModpackSort } from './installer/curseforge';
+import { inspectStagedZip, inspectCurseForgeProject, listCurseForgeVersions, searchCurseForgeModpacks, type CfModpackSort } from './installer/curseforge';
 
 interface ActiveDownload { id: string; name: string; cancel: () => void }
 
@@ -194,6 +194,15 @@ export class CurseForgeStaging {
       },
       curseforge_cancel_download: a => this.cancelDownload(String(a.transferId ?? a.id ?? '')),
       curseforge_inspect_project: a => inspectCurseForgeProject(String(a.project), this.ctx.dataRoot),
+      /**
+       * List a project's published versions with their server-pack availability, so the UI can offer a real choice.
+       *
+       * Reported gap: CurseForge installs could not pick a version at all, and authors publish an optional SERVER pack
+       * beside the client pack. The two are not interchangeable — a server pack is ready to run, a client pack is a
+       * manifest whose mods have to be resolved and which contains client-only mods — so the installer must know per
+       * version which one exists.
+       */
+      curseforge_project_versions: a => listCurseForgeVersions(String(a.project), this.ctx.dataRoot, { limit: Number(a.limit ?? 30) }),
       curseforge_search_modpacks: a => searchCurseForgeModpacks(String(a.query ?? ''), this.ctx.dataRoot, {
         offset: Number(a.offset ?? 0),
         limit: Number(a.limit ?? 20),
