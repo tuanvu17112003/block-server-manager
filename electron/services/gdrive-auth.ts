@@ -260,6 +260,20 @@ export async function authorize(options: {
 
       if (error !== null) {
         response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(FAILURE_HTML);
+        // `access_denied` is by far the most common OAuth failure for this app, and the raw code is useless to a user:
+        // it is returned both when they click "Cancel" and when Google blocks an account that is not on the project's
+        // test-user list. Distinguishing those two cases is the difference between "try again and click Allow" and an
+        // hour of confusion, so the message names the likely cause and where to fix it.
+        if (error === 'access_denied') {
+          finish({
+            ok: false,
+            error: 'Google refused the request (access_denied). Either the consent screen was cancelled, or this Google '
+              + 'account is not allowed to use the app yet. Fix it in Google Cloud Console -> APIs & Services -> OAuth '
+              + 'consent screen: either add this address as a test user, or publish the app to production so any account '
+              + 'can connect.',
+          });
+          return;
+        }
         finish({ ok: false, error: `Google returned: ${error}` });
         return;
       }
@@ -387,6 +401,19 @@ export async function refreshAccessToken(options: {
       access_token?: string; expires_in?: number; scope?: string; error?: string; error_description?: string;
     };
     if (!response.ok || json.access_token === undefined) {
+      // `invalid_grant` from the refresh endpoint is not a transient error, and its cause is specific and fixable. The
+      // most common one by far is an OAuth consent screen left in Testing: Google expires those refresh tokens after
+      // exactly seven days, so a backup feature that worked perfectly for a week stops with an opaque error. Saying so
+      // here is the difference between a user reconnecting and a user filing a bug about "backups randomly stopped".
+      if (json.error === 'invalid_grant') {
+        return {
+          ok: false,
+          error: 'Your Google authorization has expired and must be renewed. This happens when the OAuth consent screen '
+            + 'is still in "Testing" status (Google expires those tokens after 7 days), or after a password change or '
+            + 'an explicit revoke. Reconnect in the Backups tab; to stop it recurring, publish the OAuth consent screen '
+            + 'to production in Google Cloud Console.',
+        };
+      }
       return {
         ok: false,
         error: json.error_description ?? json.error ?? `Token refresh failed (${response.status})`,
