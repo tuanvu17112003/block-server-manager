@@ -69,7 +69,6 @@ export function Sidebar({
         <button
           type="button"
           onClick={onOpenAppSettings}
-          disabled={createActive}
           title="Global app settings (API key, download folder, diagnostics)"
           className={`mc-btn w-full justify-start text-left ${appSettingsActive ? 'mc-btn-default' : ''}`}
         >

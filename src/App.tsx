@@ -187,7 +187,18 @@ function Shell() {
         goCreate={openCreate}
         createActive={showCreate}
         onSelectServer={selectServerAndExit}
-        onOpenAppSettings={() => setShowAppSettings(true)}
+        onOpenAppSettings={() => {
+          // Leaving the wizard is part of opening App settings, not a side effect the user has to discover.
+          //
+          // This button used to be disabled while the wizard was open, and the first-run wizard opens AUTOMATICALLY when
+          // the backend is empty. The result: a user with no servers could not reach App settings at all — where the
+          // CurseForge API key, download folder and Java path live, all of which are needed BEFORE the first install. The
+          // reported symptom was "App settings is still locked until I create a server", which is exactly what the
+          // disabled attribute did. Closing the wizard here is safe: `firstRunDismissedRef` keeps it from reopening
+          // while the backend stays empty, and the normal shell renders its own "No servers yet" state.
+          if (showCreate) cancelCreate();
+          setShowAppSettings(true);
+        }}
         appSettingsActive={showAppSettings}
       />
       <div className="mc-app-main flex min-h-0 min-w-0 flex-1 flex-col">

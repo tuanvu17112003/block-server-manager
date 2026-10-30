@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { removeDirectorySync } from './fs-remove';
+import { removeDirectory, removeDirectorySync } from './fs-remove';
 import { appError, Store, type CreateServerInput, type ServerDto } from './store';
 import { launchCommand, startAndVerify, type LaunchCommand, type LoaderKind } from './installer/core';
 import { writeEulaFile, writePropertyValues } from './properties';
@@ -524,7 +524,7 @@ export function publishStagedDirectory(from: string, to: string): void {
     // a 400ms base reach ~4 minutes, which is far longer than any plausible scan of a single modpack and cheap when the
     // first attempt succeeds (the common case).
     renameSyncWithRetry(temp, to, 40, 400);
-    try { fs.rmSync(from, { recursive: true, force: true }); } catch { /* best effort, see below */ }
+    removeDirectorySync(from);
     return;
   } catch (renameError) {
     // Last rung: copy the temp tree into place file by file. A directory rename needs exclusive access to the whole
@@ -534,8 +534,10 @@ export function publishStagedDirectory(from: string, to: string): void {
     try {
       fs.mkdirSync(to, { recursive: true });
       copySyncWithRetry(temp, to, 10);
-      try { fs.rmSync(temp, { recursive: true, force: true }); } catch { /* best effort */ }
-      try { fs.rmSync(from, { recursive: true, force: true }); } catch { /* best effort */ }
+      // Retrying removal, not a bare rmSync: this rung runs precisely because the tree was locked, so the cleanup must
+      // expect the same lock. This is where `<id>.publishing-*` folders used to be left behind after a successful install.
+      removeDirectorySync(temp);
+      removeDirectorySync(from);
       return;
     } catch (copyError) {
       // Everything failed. Report the ORIGINAL cause; it names the step that actually blocked publishing.
@@ -609,7 +611,7 @@ export async function publishStagedDirectoryAsync(
     trace('copy staging→temp', t2, true);
   } catch (error) {
     trace('copy staging→temp', t2, false, (error as NodeJS.ErrnoException).code);
-    try { fs.rmSync(temp, { recursive: true, force: true }); } catch { /* best effort */ }
+    await removeDirectory(temp);
     throw appError(
       'io',
       `Could not publish the installed server (${(error as NodeJS.ErrnoException).code ?? 'unknown'}) while copying the `
@@ -625,7 +627,7 @@ export async function publishStagedDirectoryAsync(
   try {
     await renameWithRetry(temp, to, { attempts: 8, baseDelayMs: 400 });
     trace('rename temp→final', t3, true);
-    try { fs.rmSync(from, { recursive: true, force: true }); } catch { /* best effort */ }
+    await removeDirectory(from);
     return;
   } catch (renameError) {
     trace('rename temp→final', t3, false, (renameError as NodeJS.ErrnoException).code);
@@ -639,8 +641,12 @@ export async function publishStagedDirectoryAsync(
     fs.mkdirSync(to, { recursive: true });
     await copyWithRetry(temp, to, 10);
     trace('copy temp→final', t4, true);
-    try { fs.rmSync(temp, { recursive: true, force: true }); } catch { /* best effort */ }
-    try { fs.rmSync(from, { recursive: true, force: true }); } catch { /* best effort */ }
+    // Both cleanups go through removeDirectory so a directory that is STILL locked (which is exactly the state that pushed
+    // the publish onto this rung) is retried instead of abandoned. A bare rmSync here was how `<id>.publishing-*` folders
+    // survived a successful install: the publish had just proved the tree was locked, and the cleanup gave up on the first
+    // refusal.
+    await removeDirectory(temp);
+    await removeDirectory(from);
     return;
   } catch (copyError) {
     trace('copy temp→final', t4, false, (copyError as NodeJS.ErrnoException).code);
@@ -682,7 +688,9 @@ export async function publishStagedServer(opts: PublishStagedServerOptions): Pro
     } catch { /* log capture is best-effort */ }
   };
   const cleanupStaging = (): void => {
-    try { fs.rmSync(stagingDir, { recursive: true, force: true }); } catch { /* best effort */ }
+    // Retrying removal, because this runs on the failure path — the tree is likely still locked by whatever caused the
+    // failure, and a single rmSync attempt is what left staging folders behind forever.
+    removeDirectorySync(stagingDir);
   };
   const rollbackRecord = (): void => {
     if (!record) return;
@@ -699,7 +707,9 @@ export async function publishStagedServer(opts: PublishStagedServerOptions): Pro
     try {
       for (const entry of fs.readdirSync(path.join(dataRoot, 'servers'))) {
         if (!entry.startsWith(`${id}${PUBLISHING_SUFFIX}`)) continue;
-        try { fs.rmSync(path.join(dataRoot, 'servers', entry), { recursive: true, force: true }); } catch { /* best effort */ }
+        // Retrying removal: rollback runs right after a failed publish, which means the tree may still be locked. A bare
+        // rmSync here silently left the folder behind, and that is how invisible `<id>.publishing-*` trees accumulated.
+        removeDirectorySync(path.join(dataRoot, 'servers', entry));
       }
     } catch { /* servers dir missing is fine */ }
   };

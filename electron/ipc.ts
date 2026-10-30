@@ -177,18 +177,37 @@ const handlers: Record<string, Handler> = {
    * Backups whose owning server no longer exists.
    *
    * Shown separately in the UI rather than mixed into a server's list, because they cannot be restored into a server
-   * that is gone — the user has to pick a destination. Without this surface the files sit in Drive and no screen will
-   * ever show them, which is data loss in practice even though the bytes are safe.
+   * that is gone — the user has to pick a destination.
+   *
+   * `serverName` scopes the query to what this panel can act on. Without it every server's panel showed the same global
+   * list, which was reported as "why does every server have this?" — the answer was that the list ignored the server
+   * entirely. A backup is only orphaned relative to a server if it does not belong to that server by id AND does not
+   * carry that server's name. The name half matters: when a server is deleted and recreated, its old backups keep the
+   * old UUID but the same name, so they are NOT orphans as far as the new server is concerned and must not be offered
+   * as unrecoverable.
    */
-  gdrive_orphaned_backups: async (_a, ctx) => {
-    const live = store(ctx).listServers().map((server) => server.id);
+  gdrive_orphaned_backups: async (a, ctx) => {
+    const servers = store(ctx).listServers();
+    const live = servers.map((server) => server.id);
+    const requestedName = String(a.serverName ?? '').trim().toLowerCase();
     const auth = await driveListBackups(ctx.dataRoot, '', '');
     if (!auth.ok) throw appError('validation', auth.error ?? 'Google Drive is not available.');
     const liveSet = new Set(live);
-    // Anything not attributed to a live server is recoverable. A file with no recorded server id cannot be attributed,
-    // so it is included rather than hidden.
-    const orphans = (auth.files ?? []).filter((file) =>
-      file.serverId === undefined || file.serverId === '' || !liveSet.has(file.serverId));
+    const liveNames = new Set(servers.map((server) => server.name.trim().toLowerCase()));
+
+    const orphans = (auth.files ?? []).filter((file) => {
+      const ownedByLiveId = file.serverId !== undefined && file.serverId !== '' && liveSet.has(file.serverId);
+      if (ownedByLiveId) return false;
+      // A backup carrying the name of a server that exists is recoverable into it, so it is not an orphan for that panel.
+      const name = (file.serverName ?? '').trim().toLowerCase();
+      if (name !== '' && liveNames.has(name)) {
+        // Only exclude it from the panel that owns that name; other panels may still legitimately see it.
+        if (requestedName === '' || requestedName === name) return false;
+      }
+      // A file with no recorded server id cannot be attributed, so it is treated as recoverable rather than hidden.
+      if (file.serverId === undefined || file.serverId === '') return true;
+      return !liveSet.has(file.serverId);
+    });
     return { ok: true, files: orphans };
   },
   gdrive_upload_backup: async (a, ctx) => {
@@ -230,7 +249,13 @@ const handlers: Record<string, Handler> = {
 
     // Verify the file belongs to this server before downloading anything: a stale or crafted id must not be able to pull
     // a different world's archive over this one.
-    const listing = await driveListBackups(ctx.dataRoot, serverId);
+    //
+    // The server NAME must be passed too. Listing matches on id OR name, because a server that was deleted and recreated
+    // keeps its name but gets a new UUID — and its old backups stay reachable through the name. Omitting it here made the
+    // lookup id-only, so restoring a backup into a recreated server failed with "not in this server's Drive folder" even
+    // though the file was listed on screen a moment earlier.
+    const ownerName = store(ctx).getServer(serverId)?.name ?? '';
+    const listing = await driveListBackups(ctx.dataRoot, serverId, ownerName);
     if (!listing.ok) throw appError('validation', listing.error ?? 'Google Drive is not available.');
     const remote = (listing.files ?? []).find((file) => file.id === fileId);
     if (remote === undefined) {

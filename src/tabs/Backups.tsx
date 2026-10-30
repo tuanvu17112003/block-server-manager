@@ -324,6 +324,7 @@ export default function Backups() {
           user thinks about where backups go; a settings-tab-only connection would hide the state from here. */}
       <DrivePanel
         serverId={active.id}
+        serverName={active.name}
         refreshKey={driveRefresh}
         onDownloaded={() => { void load(); }}
       />

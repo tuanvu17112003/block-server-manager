@@ -59,8 +59,10 @@ function formatDate(iso: string): string {
   return date.toLocaleString();
 }
 
-export default function DrivePanel({ serverId, refreshKey, onDownloaded }: {
+export default function DrivePanel({ serverId, serverName = '', refreshKey, onDownloaded }: {
   serverId: string;
+  /** This server's display name. Used to scope the orphan list and to match backups after a re-create. */
+  serverName?: string;
   refreshKey?: number;
   /** Called after a Drive backup is downloaded locally, so the parent can reload its backup list. */
   onDownloaded?: () => void;
@@ -91,19 +93,19 @@ export default function DrivePanel({ serverId, refreshKey, onDownloaded }: {
   /**
    * Backups whose server no longer exists.
    *
-   * This is the answer to a real problem with the earlier design: a server's id is a fresh UUID when it is recreated, so
-   * a strict per-id list hid every old backup at exactly the moment the user needed them. These are shown separately
-   * because they cannot be restored into a server that is gone — the user must first choose where they should go.
+   * Scoped to THIS server by name. Without that the query returned the same global list for every server, which was
+   * reported as "why does every server show this?". A backup is only orphaned relative to a server if it belongs to it
+   * neither by id nor by name — so a backup taken from the previous "Test" is correctly offered to the new "Test".
    */
   const [orphans, setOrphans] = useState<DriveFile[]>([]);
   useEffect(() => {
     if (status?.connected !== true) return;
     void (async () => {
-      const result = await bridge?.invoke('gdrive_orphaned_backups') as
+      const result = await bridge?.invoke('gdrive_orphaned_backups', { serverName }) as
         { ok: boolean; files?: DriveFile[] } | undefined;
       if (result?.ok === true && result.files !== undefined) setOrphans(result.files);
     })();
-  }, [status?.connected, refreshKey]);
+  }, [status?.connected, refreshKey, serverName]);
 
   useEffect(() => {
     if (status?.connected === true) void loadFiles();
