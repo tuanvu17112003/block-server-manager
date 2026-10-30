@@ -51,6 +51,8 @@ export default function Backups() {
   const [restore, setRestore] = useState<Backup | null>(null);
   const [restoreMode, setRestoreMode] = useState<'in-place' | 'reset'>('in-place');
   const [del, setDel] = useState<Backup | null>(null);
+  // Which backup is currently being uploaded, so the row can show progress instead of letting the user click twice.
+  const [uploading, setUploading] = useState<string | null>(null);
 
   const live = active.status === 'running' || active.status === 'starting' || active.status === 'stopping';
 
@@ -189,6 +191,30 @@ export default function Backups() {
       .catch((err: unknown) => pushToast(errorText(err, 'Could not export the backup.'), 'err'));
   };
 
+  /**
+   * Upload one existing backup to Google Drive.
+   *
+   * Manual upload exists because automatic upload only covers backups taken after Drive was connected. Everything that
+   * already existed when the user pressed Connect would otherwise stay local forever — which is precisely the state a
+   * new user is in. Large backups take minutes, so the row shows "Uploading…" and the button is disabled while it runs
+   * rather than allowing a second concurrent upload of the same file.
+   */
+  const uploadBackup = async (b: Backup): Promise<void> => {
+    if (!backend) { pushToast('Google Drive needs the desktop app.', 'info'); return; }
+    setUploading(b.id);
+    try {
+      const file = await window.electronAPI!.invoke('gdrive_upload_backup', {
+        serverId: active.id,
+        backupId: b.id,
+      }) as { name?: string } | null;
+      pushToast(file?.name !== undefined ? `Uploaded "${file.name}" to Google Drive.` : 'Uploaded to Google Drive.', 'ok');
+    } catch (error) {
+      pushToast(errorText(error, 'Could not upload to Google Drive.'), 'err');
+    } finally {
+      setUploading(null);
+    }
+  };
+
   return (
     <div className="space-y-3">
       <Card>
@@ -250,6 +276,17 @@ export default function Backups() {
                   <div className="flex flex-wrap gap-1">
                     <Button size="sm" disabled={live} title={live ? 'Stop the server before restoring' : 'Restore this snapshot (pre-restore backup is taken automatically)'} onClick={() => { setRestore(b); setRestoreMode('in-place'); }}>Restore…</Button>
                     <Button size="sm" variant="outline" title="Save the ZIP to a location of your choice" onClick={() => exportBackup(b)}>Export…</Button>
+                    {/* Auto-upload only covers backups taken from now on. Without this, every backup that already
+                        existed when Drive was connected could never be uploaded — which is exactly the state a new user
+                        is in: they connect Drive, and their existing snapshots stay local forever. */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      title="Upload this backup to Google Drive now"
+                      onClick={() => { void uploadBackup(b); }}
+                    >
+                      {uploading === b.id ? 'Uploading…' : 'To Drive'}
+                    </Button>
                     <Button size="sm" variant="outline" disabled={live} title={live ? 'Stop the server before deleting' : 'Delete the archive permanently'} onClick={() => setDel(b)}>Delete</Button>
                   </div>
                 </td>

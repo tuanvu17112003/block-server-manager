@@ -199,6 +199,16 @@ export default function DrivePanel({ serverId }: { serverId: string }) {
             </Button>
           </div>
 
+          {/* A quota that is nearly full is the difference between "auto-upload works" and "backups silently stop
+              reaching the cloud weeks from now". The number alone does not convey that, so it is spelled out. */}
+          {status.quota !== undefined && status.quota.limitBytes > 0 && status.quota.remainingBytes < 2 * 1024 ** 3 && (
+            <p className="mt-2 text-xs text-amber-200">
+              Google Drive is nearly full — {formatBytes(status.quota.remainingBytes)} remains. A backup larger than that
+              will not upload, and automatic upload stops working once the Drive fills. Delete old backups here or in
+              Google Drive to make room.
+            </p>
+          )}
+
           <div className="mt-3">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
