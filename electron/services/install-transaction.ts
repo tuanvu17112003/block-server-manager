@@ -226,7 +226,11 @@ function copySyncWithRetry(from: string, to: string, attempts = 5): void {
   let lastError: unknown = null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      fs.cpSync(from, to, { recursive: true, errorOnExist: true, force: false });
+      // `force: true` matters for the retry path: a previous attempt may have created part of the tree before failing,
+      // and `force: false` would then refuse to overwrite it on the next attempt, turning a transient lock into a
+      // permanent failure. `recursive` keeps the copy complete; nothing here can be a stale destination because `to` is
+      // a fresh per-attempt temp directory.
+      fs.cpSync(from, to, { recursive: true, force: true, errorOnExist: false });
       return;
     } catch (error) {
       lastError = error;
@@ -241,6 +245,11 @@ function copySyncWithRetry(from: string, to: string, attempts = 5): void {
  * Move the staged tree into its final location. Preferred path is a single atomic `renameSync`
  * (same data root); EXDEV and transient Windows lock errors fall back to a private copy + rename so
  * a locked source never produces a half-published server. Errors surface as a friendly `io` error.
+ *
+ * The copy fallback is not merely a convenience. A rename of a directory on Windows requires that no process holds a
+ * handle to it OR has it as its working directory; a JVM that has only just been asked to stop can take a moment to
+ * release both. Copying does not need exclusive access to the source, so it succeeds where the rename cannot — which is
+ * why the retry ladder is rename (fast) → copy (tolerant) rather than repeated renames.
  */
 export function publishStagedDirectory(from: string, to: string): void {
   fs.mkdirSync(path.dirname(to), { recursive: true });
@@ -257,14 +266,20 @@ export function publishStagedDirectory(from: string, to: string): void {
   try {
     copySyncWithRetry(from, temp);
     renameSyncWithRetry(temp, to);
-    try { fs.rmSync(from, { recursive: true, force: true }); } catch { /* staging cleanup is best effort */ }
+    // Staging cleanup is best effort and happens only after the copy is safely in place. A failure here must not fail
+    // the publish: the server is already at its destination.
+    try { fs.rmSync(from, { recursive: true, force: true }); } catch { /* left for the next run to clear */ }
   } catch (error) {
     try { fs.rmSync(temp, { recursive: true, force: true }); } catch { /* best effort */ }
     const code = (error as NodeJS.ErrnoException | null)?.code ?? 'unknown';
+    const cause = (error as Error).message;
     throw appError(
       'io',
       `Could not publish the installed server (${code}) — Windows denied moving the files. `
-      + 'Antivirus/indexers or another process may still hold the staging folder; close other tools scanning the folder and retry.',
+      + 'A process is still holding the staging folder. This is usually a server process that has not finished '
+      + 'shutting down, or a virus scanner reading the freshly written jars. Wait a few seconds and press Retry; '
+      + 'if it keeps failing, exclude the app data folder from real-time scanning. '
+      + `Underlying error: ${cause}`,
     );
   }
 }

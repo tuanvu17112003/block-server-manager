@@ -1007,15 +1007,28 @@ export async function startAndVerify(dir: string, cmd: LaunchCommand, opts: { ti
       try { proc.stdin.write('stop\n'); } catch { /* already gone */ }
       const resolveNow = () => resolve({ ok, reason, tail: lines.slice(-400) });
       if (exitInfo) return resolveNow();
-      const killAt = setTimeout(() => { try { proc.kill('SIGKILL'); } catch { /* gone */ } }, 30_000);
+      // Kill the whole process TREE, not just the child handle. On Windows `child.kill()` terminates the direct child
+      // only; a JVM that has spawned helper processes leaves them holding the staging directory as their working
+      // directory, and Windows then refuses to rename it — which is the reported "Could not publish (EPERM)" during
+      // install. killProcessTree uses `taskkill /T /F`, the same mechanism already proven by runInstaller for installer
+      // JARs, and it is the reason this is a real fix rather than a longer timeout.
+      const killAt = setTimeout(() => {
+        try { killProcessTree(proc.pid ?? 0); } catch { /* gone */ }
+        try { proc.kill('SIGKILL'); } catch { /* gone */ }
+      }, 30_000);
+      if (proc.pid === undefined) {
+        // No pid means no tree to kill; fall back to the immediate handle only.
+        setTimeout(() => resolveNow(), 10_000);
+        return;
+      }
       proc.once('exit', () => { clearTimeout(killAt); resolveNow(); });
       // The published directory cannot be renamed while a JVM still holds it as its working directory. Resolving on this
-      // timer without the child having exited is what produced the reported EPERM during install: the verification boot
-      // "finished", publish ran immediately, and Windows refused to rename a folder that was still a process's cwd.
-      // So the timeout kills first and WAITS for the exit event; only a process that survives SIGKILL lets us continue,
-      // and the reason records that it happened so a later publish failure can be traced to it.
+      // timer without the child having exited is what produced the reported EPERM: the verification boot "finished",
+      // publish ran immediately, and Windows refused to rename a folder that was still a process's cwd. So the timeout
+      // kills the tree first and WAITS for the exit event; only a child that survives that lets us continue, and the
+      // ten-second grace is what gives Windows time to release the handles.
       setTimeout(() => {
-        try { proc.kill('SIGKILL'); } catch { /* gone */ }
+        try { killProcessTree(proc.pid ?? 0); } catch { /* gone */ }
         setTimeout(() => resolveNow(), 10_000);
       }, 45_000);
     };
