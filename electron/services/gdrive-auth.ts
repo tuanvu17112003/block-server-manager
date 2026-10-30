@@ -42,22 +42,98 @@ export interface OAuthClient {
 
 const OAUTH_FILE = 'google-oauth.json';
 
-export function loadOAuthClient(dataRoot: string): OAuthClient | null {
+/**
+ * Read the OAuth client from an environment variable pair or a credentials file.
+ *
+ * Two file shapes are accepted, because guessing one of them was a real defect: the file Google Cloud Console actually
+ * offers for download wraps its fields in a type object —
+ *
+ *   { "installed": { "client_id": "...", "client_secret": "...", ... } }   // "Desktop app" client (what users get)
+ *   { "web":       { "client_id": "...", "client_secret": "...", ... } }   // "Web application" client
+ *
+ * The first version of this function expected the flat shape `{ clientId, clientSecret }`, which no Google download
+ * produces. The app therefore reported "not configured" even with a perfectly valid file in place. Both shapes are now
+ * supported, plus the flat one for hand-written config.
+ *
+ * A "web" client is accepted but flagged, because it cannot use a loopback redirect unless one was registered: the user
+ * will get `redirect_uri_mismatch` from Google. Better to warn at load time than to fail mid-flow.
+ */
+export interface OAuthClientLoadResult {
+  client: OAuthClient | null;
+  /** Why loading failed, when it did — surfaced to the user instead of a blanket "not set up". */
+  error?: string;
+  /** Non-fatal note (e.g. a web client that will not work with the loopback redirect). */
+  warning?: string;
+}
+
+interface RawGoogleCredentials {
+  client_id?: unknown;
+  client_secret?: unknown;
+  redirect_uris?: unknown;
+}
+
+function normalise(value: unknown): OAuthClient | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const raw = value as RawGoogleCredentials;
+  if (typeof raw.client_id !== 'string' || raw.client_id === '') return null;
+  if (typeof raw.client_secret !== 'string' || raw.client_secret === '') return null;
+  return { clientId: raw.client_id, clientSecret: raw.client_secret };
+}
+
+export function loadOAuthClientDetailed(dataRoot: string): OAuthClientLoadResult {
   const fromEnv = {
     clientId: process.env.BSM_GOOGLE_CLIENT_ID ?? '',
     clientSecret: process.env.BSM_GOOGLE_CLIENT_SECRET ?? '',
   };
-  if (fromEnv.clientId !== '' && fromEnv.clientSecret !== '') return fromEnv;
+  if (fromEnv.clientId !== '' && fromEnv.clientSecret !== '') return { client: fromEnv };
 
   const file = path.join(dataRoot, OAUTH_FILE);
+  if (!fs.existsSync(file)) {
+    return {
+      client: null,
+      error: `No ${OAUTH_FILE} found in the app data folder.`,
+    };
+  }
+
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<OAuthClient>;
-    if (typeof parsed.clientId === 'string' && parsed.clientId !== ''
-      && typeof parsed.clientSecret === 'string' && parsed.clientSecret !== '') {
-      return { clientId: parsed.clientId, clientSecret: parsed.clientSecret };
-    }
-  } catch { /* absent or malformed — reported by the caller as "not configured" */ }
-  return null;
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    return { client: null, error: `${OAUTH_FILE} is not valid JSON: ${(error as Error).message}` };
+  }
+
+  if (typeof parsed !== 'object' || parsed === null) {
+    return { client: null, error: `${OAUTH_FILE} does not contain a JSON object.` };
+  }
+
+  const record = parsed as Record<string, unknown>;
+
+  // Google's two download shapes first, then the flat shape for hand-written files.
+  const installed = normalise(record.installed);
+  if (installed !== null) return { client: installed };
+
+  const web = normalise(record.web);
+  if (web !== null) {
+    return {
+      client: web,
+      warning: 'This is a "Web application" OAuth client. It only works if http://127.0.0.1 was registered as an '
+        + 'authorized redirect URI for it. A "Desktop app" client is the correct type for this application.',
+    };
+  }
+
+  const flat = normalise({ client_id: record.clientId, client_secret: record.clientSecret });
+  if (flat !== null) return { client: flat };
+
+  const keys = Object.keys(record);
+  return {
+    client: null,
+    error: `${OAUTH_FILE} does not contain usable credentials. Expected an "installed" object (the file Google Cloud `
+      + `Console downloads for a Desktop app client) but found keys: ${keys.length > 0 ? keys.join(', ') : '(none)'}.`,
+  };
+}
+
+export function loadOAuthClient(dataRoot: string): OAuthClient | null {
+  return loadOAuthClientDetailed(dataRoot).client;
 }
 
 const SCOPES = ['https://www.googleapis.com/auth/drive.file'];

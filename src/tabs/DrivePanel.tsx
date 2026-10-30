@@ -25,6 +25,9 @@ interface QuotaInfo {
 interface DriveStatus {
   configured: boolean;
   connected: boolean;
+  /** Why Drive cannot be used, when configured is false. Shown verbatim so the user can fix their own setup. */
+  configError?: string;
+  configWarning?: string;
   needsReauth?: boolean;
   lastError?: string;
   quota?: QuotaInfo;
@@ -126,9 +129,26 @@ export default function DrivePanel({ serverId }: { serverId: string }) {
       <Card>
         <CardTitle>Google Drive</CardTitle>
         <p className="text-sm text-zinc-400">
-          Backup upload to Google Drive is not set up in this build. A Google OAuth client must be configured before this
-          feature can be used.
+          Backup upload to Google Drive is not set up yet.
         </p>
+        {/* The specific reason, not a blanket "not configured": the most likely causes are a missing file, a file in
+            the wrong shape, or a client of the wrong type — and the user can fix all three themselves if told which. */}
+        {status.configError !== undefined && (
+          <p className="mt-2 text-xs text-amber-200">{status.configError}</p>
+        )}
+        <div className="mt-3 rounded border border-zinc-800 bg-zinc-900/60 p-2 text-xs text-zinc-400">
+          <p className="font-semibold text-zinc-300">How to set it up</p>
+          <ol className="mt-1 list-decimal space-y-1 pl-4">
+            <li>In Google Cloud Console, enable the Drive API and create an OAuth client of type <span className="font-mono">Desktop app</span>.</li>
+            <li>Download the JSON file it offers.</li>
+            <li>
+              Save it as <span className="font-mono">google-oauth.json</span> in the app data folder, replacing the
+              existing file. The <span className="font-mono">installed</span> object is read from it directly — do not
+              rewrite the file into a different shape.
+            </li>
+            <li>Restart the app, then click Connect.</li>
+          </ol>
+        </div>
       </Card>
     );
   }
@@ -136,6 +156,10 @@ export default function DrivePanel({ serverId }: { serverId: string }) {
   return (
     <Card>
       <CardTitle>Google Drive backup</CardTitle>
+
+      {status.configWarning !== undefined && (
+        <p className="mb-2 text-xs text-amber-200">{status.configWarning}</p>
+      )}
 
       {!status.connected && (
         <>

@@ -13,6 +13,7 @@ import { log } from './installer/core';
 import {
   authorize,
   loadOAuthClient,
+  loadOAuthClientDetailed,
   refreshAccessToken,
   type OAuthClient,
   type Tokens,
@@ -34,6 +35,10 @@ const TOKENS_PLAIN = 'gdrive-tokens.json';
 export interface DriveStatus {
   configured: boolean;
   connected: boolean;
+  /** Why the app cannot use Drive, when `configured` is false. Shown verbatim so the user can fix it themselves. */
+  configError?: string;
+  /** Non-fatal setup note, e.g. a web-type OAuth client that will not redirect correctly. */
+  configWarning?: string;
   accountLabel?: string;
   needsReauth?: boolean;
   lastError?: string;
@@ -169,7 +174,16 @@ async function validAccessToken(dataRoot: string): Promise<
 // ---------------------------------------------------------------------------------------------------------------
 
 export async function driveStatus(dataRoot: string): Promise<DriveStatus> {
-  if (!driveConfigured(dataRoot)) return { configured: false, connected: false };
+  // Load the credential first, so a configuration problem is reported with its cause rather than as "not set up".
+  const config = loadOAuthClientDetailed(dataRoot);
+  if (config.client === null) {
+    return {
+      configured: false,
+      connected: false,
+      ...(config.error !== undefined ? { configError: config.error } : {}),
+      ...(config.warning !== undefined ? { configWarning: config.warning } : {}),
+    };
+  }
   const tokens = loadTokens(dataRoot);
   if (tokens === null) return { configured: true, connected: false };
 
@@ -182,6 +196,7 @@ export async function driveStatus(dataRoot: string): Promise<DriveStatus> {
   return {
     configured: true,
     connected: true,
+    ...(config.warning !== undefined ? { configWarning: config.warning } : {}),
     ...(quota !== null ? { quota } : {}),
   };
 }
