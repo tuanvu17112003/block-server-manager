@@ -6,6 +6,7 @@ import { Badge, Button, Card, CardTitle, inputCls } from '../components/ui';
 import { hasBackend, tauriDiagnostics, tauriStorage } from '../tauri';
 import type { StorageInfoDto } from '../tauri';
 import { CURSEFORGE_AUTO_DELETE_KEY } from './create/helpers';
+import UpdatePanel from './UpdatePanel';
 
 /** Renderer-safe CurseForge key status (never contains the key itself). */
 interface CurseForgeKeyStatusDto {
@@ -287,6 +288,8 @@ export default function AppSettings() {
           </label>
         </div>
       </Card>
+
+      <UpdatePanel />
 
       <Card>
         <CardTitle>Diagnostics</CardTitle>

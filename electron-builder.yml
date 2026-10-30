@@ -11,13 +11,21 @@ files:
   - "!**/*.map"
 asar: true
 npmRebuild: false
+# Update feed. electron-updater reads this block from the packaged app and compares the running version against the
+# latest GitHub release. `latest.yml` is generated into release/ by electron-builder and must be uploaded with the
+# installer — without it the updater has nothing to read, and the app reports "no updates" forever.
+publish:
+  provider: github
+  owner: tuanvu17112003
+  repo: block-server-manager
+  releaseType: release
 win:
   # Two artefacts with different jobs:
-  #   nsis     — normal installation, shortcuts, uninstall entry, data under %APPDATA%.
-  #   portable — one self-contained exe that unpacks and runs in place, keeping its data beside itself so the whole
-  #              folder can be moved to another machine (or a USB stick) and still have every server.
-  # The data-location difference is implemented in electron/services/paths.ts, not here: electron-builder only sets
-  # PORTABLE_EXECUTABLE_DIR, and the app reads it to choose its data root.
+  #   nsis     — normal installation, shortcuts, uninstall entry, data under %APPDATA%. This is the ONLY target that
+  #              can self-update: the updater replaces an installed application.
+  #   portable — one self-contained exe that unpacks and runs in place, keeping its data beside itself. Auto-update is
+  #              disabled there by electron/services/updater.ts and the UI explains why, rather than pretending to
+  #              update a file it cannot replace.
   target:
     - target: nsis
       arch:
@@ -39,6 +47,4 @@ nsis:
   runAfterFinish: true
 portable:
   artifactName: Block-Server-Manager-${version}-Portable.${ext}
-  # Keep the extracted folder name stable so repeated runs reuse it instead of leaving a new temp dir each launch.
   unpackDirName: BlockServerManager
-publish: null

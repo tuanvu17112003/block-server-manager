@@ -17,6 +17,7 @@ import { clearCurseForgeKey, curseForgeKeyStatus, setCurseForgeKey } from './ser
 import { resetCurseForgeKeyCache } from './services/installer/curseforge';
 import { createSupportBundle, recentDiagnostics } from './services/diagnostics';
 import { getStorageInfo, setDownloadsPath } from './services/storage';
+import { canInstallNow, checkForUpdates, downloadUpdate, installUpdate, updateState } from './services/updater';
 
 export interface IpcContext {
   dataRoot: string;
@@ -106,6 +107,22 @@ const handlers: Record<string, Handler> = {
     fs.mkdirSync(folder, { recursive: true });
     const failure = await shell.openPath(folder);
     if (failure !== '') throw appError('io', `Could not open "${folder}": ${failure}`);
+    return true;
+  },
+
+  // ---- auto-update ----
+  // Read-only status first: the renderer polls this after any action instead of inferring state from events alone,
+  // because an event emitted before the renderer subscribed would otherwise leave the UI stale.
+  update_state: () => updateState(),
+  update_check: async () => checkForUpdates(),
+  update_download: async () => downloadUpdate(),
+  // Installing restarts the app and kills child processes, so the handler re-derives the running-server count from the
+  // store rather than trusting a number the renderer passed in.
+  update_install: async (_a, ctx) => {
+    const running = store(ctx).listServers().filter((s) => s.status === 'running' || s.status === 'starting').length;
+    const allowed = canInstallNow(running);
+    if (!allowed.ok) throw appError('validation', allowed.reason ?? 'Update cannot be installed right now.');
+    if (!installUpdate(running)) throw appError('internal', 'The updater refused to install.');
     return true;
   },
 };

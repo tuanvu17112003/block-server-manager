@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import { registerIpc, registerRuntimeHandlers, runSelfTest, type IpcContext } from './ipc';
 import { buildRuntime } from './services/runtime';
 import { dataRoot, isPortable, portableDataRootIsWritable } from './services/paths';
+import { checkForUpdates, initUpdater, onUpdateState } from './services/updater';
 import { detectLegacy, planImport, runImport } from './services/legacy-import';
 import { initDiagnostics, installProcessHandlers, getDiagnostics, recordTimeline } from './services/diagnostics';
 
@@ -449,6 +450,22 @@ if (!hasSingleInstanceLock) {
 
     createWindow();
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+
+    // Auto-update is started only after the window exists, so a slow or failing check can never delay startup. It is
+    // also deliberately delayed: the first seconds of a launch are when the user is doing something, and an update
+    // prompt then is noise. A failed check leaves the app fully functional — see services/updater.ts.
+    const updaterState = initUpdater();
+    if (updaterState.supported) {
+      setTimeout(() => { void checkForUpdates(); }, 10_000);
+      // Forward state changes to the renderer so progress appears without polling.
+      onUpdateState((next) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) win.webContents.send('update:state', next);
+        }
+      });
+    } else {
+      diagnostics.logger.info('auto-update unavailable', { reason: updaterState.unsupportedReason });
+    }
   }).catch((error: unknown) => {
     const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
     try { getDiagnostics()?.logger.error('startup failed', error); } catch { /* diagnostics optional */ }

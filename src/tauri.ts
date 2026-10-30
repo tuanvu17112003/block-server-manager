@@ -1,4 +1,4 @@
-﻿// Backend adapter (Electron | framework-neutral HTTP | explicit dev mocks).
+// Backend adapter (Electron | framework-neutral HTTP | explicit dev mocks).
 // The dormant Tauri runtime is no longer part of the shipped renderer (ADR-0020): Electron is the
 // sole desktop host; browser builds require a configured HTTP backend or the explicit mock flag.
 import { getBackendConfigError, isHttpBackendConfigured } from './backend/config';
@@ -869,6 +869,29 @@ export function onCurseForgeDownload(
   cb: (payload: CurseForgeDownloadUpdate) => void,
 ): Promise<UnlistenFn> {
   return listenOrNoop<CurseForgeDownloadUpdate>('curseforge://download', cb);
+}
+
+/**
+ * Subscribe to auto-update state changes pushed from the main process.
+ *
+ * The main process is the only place that knows about download progress, so the panel listens rather than polling. The
+ * payload shape is defined in electron/services/updater.ts and duplicated here because the renderer cannot import from
+ * electron/ — the two tsconfigs have different roots, so the mirrors are kept in step by a contract test instead.
+ */
+export interface UpdateStatePayload {
+  supported: boolean;
+  unsupportedReason?: string;
+  stage: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'unsupported';
+  currentVersion: string;
+  availableVersion?: string;
+  percent?: number;
+  error?: string;
+  releaseNotes?: string;
+  lastCheckedAt?: string;
+}
+
+export function onUpdateState(cb: (payload: UpdateStatePayload) => void): Promise<UnlistenFn> {
+  return listenOrNoop<UpdateStatePayload>('update:state', cb);
 }
 
 export const tauriInstall = {

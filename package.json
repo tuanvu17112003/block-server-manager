@@ -30,6 +30,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
