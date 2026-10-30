@@ -54,7 +54,16 @@ export function StepInstall(props: StepInstallProps) {
       </p>
       {props.installError && <p role="alert" className="mt-2 text-sm text-red-300">{props.installError}</p>}
       <pre className="mc-console log-scroll mt-2 max-h-48 overflow-y-auto p-2">
-        {props.installLogs.length ? props.installLogs.join('\n') : 'Waiting for installer output…'}
+        {/* The placeholder must reflect the actual state. Previously it said "Waiting for installer output…" even on the
+            Done screen, which reads as though the install were still pending while the card above says Complete — a real
+            source of "why does it look stuck?" confusion. */}
+        {props.installLogs.length
+          ? props.installLogs.join('\n')
+          : props.doneId
+            ? 'Install finished. Open the console to watch the server output.'
+            : props.installing
+              ? 'Waiting for installer output…'
+              : 'No installer output was captured.'}
       </pre>
       {props.report && <ReportCard report={props.report} />}
       <div className="mt-3 flex flex-wrap gap-2">

@@ -16,6 +16,7 @@ import { validateCommandArgs } from './services/validate-ipc';
 import { clearCurseForgeKey, curseForgeKeyStatus, setCurseForgeKey } from './services/secrets';
 import { resetCurseForgeKeyCache } from './services/installer/curseforge';
 import { createSupportBundle, recentDiagnostics } from './services/diagnostics';
+import { describeRemovalFailure, removeDirectory } from './services/fs-remove';
 import { getStorageInfo, setDownloadsPath } from './services/storage';
 import { canInstallNow, checkForUpdates, downloadUpdate, installUpdate, updateState } from './services/updater';
 import {
@@ -58,7 +59,7 @@ const handlers: Record<string, Handler> = {
     const port = await s.allocatePort(input.port);
     return enrich(ctx, s.createServer({ ...input, port }));
   },
-  servers_delete: (a, ctx) => {
+  servers_delete: async (a, ctx) => {
     const id = String(a.id);
     const dto = store(ctx).getServer(id);
     if (!dto) throw appError('not-found', `Server ${id} not found.`);
@@ -66,10 +67,31 @@ const handlers: Record<string, Handler> = {
       throw appError('conflict', 'Stop the server before deleting it.');
     }
     const backups = store(ctx).listBackups(id);
+    const serverDirectory = path.join(ctx.dataRoot, 'servers', id);
+
+    // ORDER MATTERS, and this order is the fix for a real defect.
+    //
+    // The previous implementation deleted the store record FIRST and the folder second. On Windows removing a directory
+    // fails while any process holds a file inside it (a JVM still shutting down, an antivirus scan), so the record was
+    // already gone when the folder removal threw — the server vanished from the list while ~100 MB stayed on disk with
+    // nothing able to reach it. That produced both the reported "ENOTEMPTY" toast and a fresh batch of invisible
+    // `servers/<id>` folders, indistinguishable from the orphans that had to be adopted by hand.
+    //
+    // Removing the folder first inverts the failure: if it cannot be removed, the record is kept, the error is actionable,
+    // and the user can simply press Delete again. Nothing is ever half-deleted.
+    //
+    // Async on purpose: the removal retries while a lock clears, and a blocking wait would freeze the window — the same
+    // mistake that made installs hang. The awaits also let the process that holds the lock finish exiting, which is
+    // exactly what the retry needs.
+    const removal = await removeDirectory(serverDirectory);
+    if (!removal.removed) throw appError('io', describeRemovalFailure(serverDirectory));
+
+    // The folder is gone, so the record can be safely dropped. Everything below is cleanup that cannot fail the delete.
     store(ctx).deleteServer(id);
-    for (const backup of backups) fs.rmSync(backup.path, { force: true });
-    fs.rmSync(path.join(ctx.dataRoot, 'metrics', `${id}.json`), { force: true });
-    fs.rmSync(path.join(ctx.dataRoot, 'servers', id), { recursive: true, force: true });
+    for (const backup of backups) {
+      try { fs.rmSync(backup.path, { force: true }); } catch { /* the backup file may be on a disconnected drive */ }
+    }
+    try { fs.rmSync(path.join(ctx.dataRoot, 'metrics', `${id}.json`), { force: true }); } catch { /* best effort */ }
   },
   servers_set_java_path: (a, ctx) => enrich(ctx, store(ctx).setJavaPath(String(a.id), (a.path as string | null) ?? null)),
 

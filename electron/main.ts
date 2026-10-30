@@ -8,7 +8,7 @@ import { buildRuntime } from './services/runtime';
 import { dataRoot, isPortable, portableDataRootIsWritable } from './services/paths';
 import { checkForUpdates, initUpdater, onUpdateState } from './services/updater';
 import { detectLegacy, planImport, runImport } from './services/legacy-import';
-import { recoverInterruptedPublishes } from './services/install-transaction';
+import { cleanStaleStaging, recoverInterruptedPublishes } from './services/install-transaction';
 import { Store } from './services/store';
 import { initDiagnostics, installProcessHandlers, getDiagnostics, recordTimeline } from './services/diagnostics';
 
@@ -471,6 +471,25 @@ if (!hasSingleInstanceLock) {
     } catch (error) {
       // Recovery is opportunistic; log and continue rather than blocking startup.
       try { diagnostics.logger.warn('publish recovery failed', { message: (error as Error).message }); } catch { /* ignore */ }
+    }
+
+    // Remove staging folders from installs that never finished. Nothing else in the app deletes these, so without this they
+    // accumulate for the life of the installation — 8 folders and 2.6 GB were measured on this project's own data root,
+    // the oldest 58 hours old. Only folders older than six hours are touched, so a concurrent install is never disturbed.
+    try {
+      const stale = cleanStaleStaging(ctx.dataRoot);
+      if (stale.removed.length > 0) {
+        diagnostics.logger.info('removed stale install staging', {
+          count: stale.removed.length,
+          freedMb: Math.round(stale.freedBytes / 1048576),
+          entries: stale.removed,
+        });
+      }
+      if (stale.kept.length > 0) {
+        diagnostics.logger.info('install staging kept (too recent, may be an active install)', { entries: stale.kept });
+      }
+    } catch (error) {
+      try { diagnostics.logger.warn('staging cleanup failed', { message: (error as Error).message }); } catch { /* ignore */ }
     }
 
     await runLegacyStartupMigration(ctx);

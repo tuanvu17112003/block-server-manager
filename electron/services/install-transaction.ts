@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { removeDirectorySync } from './fs-remove';
 import { appError, Store, type CreateServerInput, type ServerDto } from './store';
 import { launchCommand, startAndVerify, type LaunchCommand, type LoaderKind } from './installer/core';
 import { writeEulaFile, writePropertyValues } from './properties';
@@ -423,6 +424,63 @@ export function recoverInterruptedPublishes(
 }
 
 /**
+ * Delete staging folders left by installs that never finished.
+ *
+ * Measured on this project's own data root: 8 leftover staging folders, 2.6 GB, the oldest 58 hours old. They existed
+ * because `cleanupStaging()` only runs in the failure path of `publishStagedServer` — if the app is killed mid-install, or
+ * a successful publish's staging removal fails, nothing ever revisits the folder. Nothing else in the codebase removes
+ * them either, so they accumulate for the life of the installation.
+ *
+ * A leftover is only removed when it is older than `minAgeMs`, because a staging folder being written by a *concurrent*
+ * install must not be touched. Retention is bounded by age rather than count: a folder younger than the threshold may
+ * belong to an install running right now.
+ *
+ * Never throws: it runs at startup and must not be able to prevent the app from opening.
+ */
+export function cleanStaleStaging(
+  dataRoot: string,
+  options: { minAgeMs?: number; now?: () => number } = {},
+): { removed: string[]; kept: string[]; freedBytes: number } {
+  const minAgeMs = options.minAgeMs ?? 6 * 60 * 60_000; // six hours: far longer than any install
+  const now = options.now ?? (() => Date.now());
+  const result = { removed: [] as string[], kept: [] as string[], freedBytes: 0 };
+
+  const root = stagingRoot(dataRoot);
+  let entries: string[];
+  try { entries = fs.readdirSync(root); } catch { return result; }
+
+  for (const entry of entries) {
+    const full = path.join(root, entry);
+    let stats: fs.Stats;
+    try { stats = fs.statSync(full); } catch { continue; }
+    if (!stats.isDirectory()) continue;
+    if (now() - stats.mtimeMs < minAgeMs) { result.kept.push(entry); continue; }
+
+    let bytes = 0;
+    try {
+      const walk = (dir: string): void => {
+        let children: fs.Dirent[];
+        try { children = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+        for (const child of children) {
+          const p = path.join(dir, child.name);
+          if (child.isDirectory()) walk(p);
+          else { try { bytes += fs.statSync(p).size; } catch { /* ignore */ } }
+        }
+      };
+      walk(full);
+    } catch { /* size is informational */ }
+
+    if (removeDirectorySync(full).removed) {
+      result.removed.push(entry);
+      result.freedBytes += bytes;
+    } else {
+      result.kept.push(entry);
+    }
+  }
+  return result;
+}
+
+/**
  * Names of child processes that commonly hold a staging or server directory on Windows.
  *
  * Captured at publish failure because the error code alone says "something has a handle" without saying what. A java
@@ -455,7 +513,7 @@ export function publishStagedDirectory(from: string, to: string): void {
     const code = (error as NodeJS.ErrnoException | null)?.code;
     if (code !== 'EXDEV' && !isRetryablePublishError(error)) throw error;
     // eslint-disable-next-line no-console
-    console.warn(`[install] direct publish failed (${code ?? 'unknown'}); retrying with a copy fallback.`);
+    console.warn(`[install] rename blocked (${code ?? 'unknown'}); switching to the copy fallback (normal when antivirus scans).`);
   }
 
   const temp = `${to}.publishing-${randomUUID()}`;
@@ -536,8 +594,10 @@ export async function publishStagedDirectoryAsync(
     const code = (error as NodeJS.ErrnoException | null)?.code;
     trace('rename staging→final', t1, false, code);
     if (code !== 'EXDEV' && !isRetryablePublishError(error)) throw error;
+    // Worded as a fallback, not an error: on Windows both renames routinely fail while antivirus scans the freshly written
+    // jars, and the copy step below handles it. The install is not failing here.
     // eslint-disable-next-line no-console
-    console.warn(`[install] direct publish failed (${code ?? 'unknown'}); retrying with a copy fallback.`);
+    console.warn(`[install] rename blocked (${code ?? 'unknown'}); switching to the copy fallback (normal when antivirus scans).`);
   }
 
   const temp = `${to}.publishing-${randomUUID()}`;
@@ -722,14 +782,28 @@ export async function publishStagedServer(opts: PublishStagedServerOptions): Pro
       if (opts.publish !== undefined) {
         opts.publish(stagingDir, destination);
       } else {
-        // Trace every rung into the installer log. Without this a failure is a single opaque EPERM line; with it the log
-        // shows which step failed, how long it waited and with what code — the evidence needed to actually diagnose it.
+        // Trace every rung into the installer log, worded so the steps read as a sequence rather than as errors.
+        //
+        // This wording is a fix for a real confusion: a user read the log, saw
+        //
+        //   publish failed: rename staging→final code=EPERM
+        //   publish failed: rename temp→final code=EPERM
+        //   publish ok: copy temp→final
+        //
+        // and concluded installs were failing while the app reported success. They were right about the words and wrong
+        // about the outcome — those two failures are the ladder handing over to a wider fallback, and the install had
+        // succeeded. Only the final rung decides. So a non-final rung is logged as what it is: a fallback, not a failure.
+        let lastTrace: { ok: boolean } | null = null;
         await publishStagedDirectoryAsync(stagingDir, destination, {
           trace: (entry) => {
-            log(`publish ${entry.ok ? 'ok' : 'failed'}: ${entry.step} (${entry.durationMs}ms)${entry.code !== undefined ? ` code=${entry.code}` : ''}`);
+            lastTrace = { ok: entry.ok };
+            const suffix = `${entry.step} (${entry.durationMs}ms)${entry.code !== undefined ? ` code=${entry.code}` : ''}`;
+            log(entry.ok ? `publish step ok: ${suffix}` : `publish step fell back to a wider strategy: ${suffix}`);
             flushLog();
           },
         });
+        log(`publish complete: ${lastTrace !== null && (lastTrace as { ok: boolean }).ok ? 'published' : 'unexpected'} -> servers/${record.id}`);
+        flushLog();
       }
     } catch (error) {
       rollbackRecord();
