@@ -372,6 +372,36 @@ export class Store {
     });
   }
 
+  /**
+   * Insert a record for a server folder that already exists on disk, keeping that folder's id.
+   *
+   * Needed because `createServer` mints a fresh random id, which would orphan `servers/<existing-id>`. Recovery of a lost
+   * record must attach to the directory that holds the data, so the id is supplied by the caller and validated here.
+   *
+   * Rejects a duplicate id or name, and a non-positive port, because those would produce a record the app cannot use.
+   */
+  adoptServer(record: ServerDto): ServerDto {
+    return this.mutate(() => {
+      if (record.id === '' || !/^[0-9a-zA-Z-]+$/.test(record.id)) {
+        throw appError('validation', `Cannot adopt a server with an invalid id: "${record.id}".`);
+      }
+      if (this.data.servers.some((server) => server.id === record.id)) {
+        throw appError('conflict', `A server with id "${record.id}" already exists.`);
+      }
+      if (this.data.servers.some((server) => server.name === record.name)) {
+        throw appError('conflict', `A server named "${record.name}" already exists.`);
+      }
+      if (!Number.isInteger(record.port) || record.port < 1 || record.port > 65535) {
+        throw appError('validation', `Cannot adopt a server with an invalid port: ${record.port}.`);
+      }
+      if (this.data.servers.some((server) => server.port === record.port)) {
+        throw appError('conflict', `Port ${record.port} is already assigned to another server.`);
+      }
+      this.data.servers.push(record);
+      return record;
+    });
+  }
+
   getSetting<T>(key: string): T | null {
     this.reload();
     return (this.data.settings[key] as T | undefined) ?? null;

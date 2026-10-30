@@ -48,6 +48,38 @@ Two of those steps are unusual and worth understanding before you trip over them
   PowerShell `Set-Content` or `Out-File`** — use the editor or a Node script with an explicit `utf8` encoding. This
   is not hypothetical: it corrupted 65 lines across 16 files, including user-facing error messages.
 
+### Editing source files: use a file editor, never a shell one-liner
+
+This is a working rule, not a preference, and it applies to humans and agents alike.
+
+**Use the editor/`edit`/`write` tool for every change to a source file.** Do not modify source through
+`pwsh -Command "node -e \"...\""`, `Set-Content`, `-replace`, heredocs, or any other shell string that has to survive
+PowerShell quoting before Node or TypeScript ever sees it.
+
+The failure mode is specific and expensive. PowerShell processes the command before Node runs, so a nested quote,
+an apostrophe, a `\n`, a backslash, or a `$` inside the payload is translated, stripped, or terminated early. What
+reaches the file is then either a syntax error or — far worse — *silently different code* that still compiles.
+Real examples from this repository's history:
+
+- a JSX edit whose shell quoting collapsed, dropping the element entirely. The build passed, because an unused
+  handler still compiles. The result shipped with a working restore function and **no button to reach it**, and it
+  took a user report to find.
+- an `import` insertion mangled into a stray `\nimport` token, producing `TS2304: Cannot find name 'spawnSync'`.
+- repeated `Expected ',', got '<eof>'` parse failures from an apostrophe inside a nested single-quoted string.
+
+Each of those cost several repair round-trips for a one-line change. The rule:
+
+| Task | Correct tool |
+|---|---|
+| Any edit to a tracked source file | `edit` (preferred) or `write` |
+| Multi-file mechanical change | a committed `.mjs` script using `fs.writeFileSync(path, text, 'utf8')` |
+| Reading a file | `read` / `grep` / `glob`, not `Get-Content` |
+| Running a build, test, or gate | the shell is the correct tool |
+
+If a shell command is genuinely unavoidable for a mechanical edit, write it to a `.mjs` file first and run that — the
+quoting problem disappears because the code is no longer inside a shell string. Delete such scratch scripts rather
+than committing them.
+
 Network-dependent suites (`npm run verify:full`) install real modpacks and need internet plus Java. They are worth
 running before a release but are not required for every pull request.
 
