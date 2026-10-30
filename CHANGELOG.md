@@ -8,10 +8,43 @@ All notable changes to this project are documented here. The format follows
 
 Nothing yet.
 
+## [0.3.1] - 2026-10-30
+
+A correction release. `v0.3.0` was tagged at commit `2e38b0f`, but its release page carried a `Portable.exe` that could
+not have been built from that tag — the portable code (`isPortable()` in `electron/services/paths.ts`, and the
+`portable` target in `electron-builder.yml`) landed one commit later. The published binary did contain the feature; the
+tagged source did not. That is exactly the kind of mismatch this project exists to avoid, so it is corrected by
+publishing a new version rather than by rewriting history.
+
+If you downloaded the portable exe from `v0.3.0`: the binary itself behaves correctly, but its provenance did not match
+its tag. **Download `v0.3.1` instead**, so the source you can read is the source that built the file you are running.
+
+### Fixed
+
+- CI failed on every run, for two independent reasons, both now fixed and pinned by tests:
+  - `.nvmrc` pinned Node 20 while `electron/services/legacy-import.ts` imports `node:sqlite`, which needs 22.13.0 or
+    newer. On Node 20 the import throws `ERR_UNKNOWN_BUILTIN_MODULE` and one test file fails to load. The application
+    itself was unaffected because it runs on Electron's bundled Node (24.x), which is why this stayed invisible locally
+    while the dependency tree had been printing `EBADENGINE required: node >=22.12.0` on every install.
+  - After the version was corrected, the explanatory comment sat above it in `.nvmrc`, and `actions/setup-node` reads
+    only the first line without skipping comments — so CI resolved the version as `#` and failed before running a test.
+    The version now occupies line 1.
+- `electron/test/unit/config-shape.test.ts` pins both failure modes so neither can return silently.
+
+### Added
+
+- **Portable build is now part of a tagged release.** It keeps servers, settings and backups in a `data` folder beside
+  the executable, so the folder can be moved to another machine intact. It detects an unwritable location
+  (write-protected USB stick, read-only share, `Program Files`) at startup and says so, instead of failing later with a
+  permission error.
+
 ## [0.3.0] - 2026-10-30
 
 The release that turned the modpack installer from "works on my pack" into something with measured coverage, and
 made the project honest about what it can prove.
+
+> **Superseded by 0.3.1.** The `v0.3.0` release page carries a `Portable.exe` that the tagged source does not describe.
+> Use 0.3.1.
 
 > Note on versioning: a `v0.2.0` tag already existed at an earlier commit (the first Electron packaging milestone).
 > This release is `0.3.0` rather than a rewritten `0.2.0`, because moving a published tag would silently change what
