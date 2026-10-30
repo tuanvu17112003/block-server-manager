@@ -8,9 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 Nothing yet.
 
-## [0.2.0] - 2026-10-30
+## [0.3.0] - 2026-10-30
 
-The release that turned the modpack installer from "works on my pack" into something with measured coverage.
+The release that turned the modpack installer from "works on my pack" into something with measured coverage, and
+made the project honest about what it can prove.
+
+> Note on versioning: a `v0.2.0` tag already existed at an earlier commit (the first Electron packaging milestone).
+> This release is `0.3.0` rather than a rewritten `0.2.0`, because moving a published tag would silently change what
+> anyone who already fetched `v0.2.0` believes they have.
 
 ### Added
 
@@ -26,6 +31,10 @@ The release that turned the modpack installer from "works on my pack" into somet
   and the reason it cannot be installed, instead of a generic "unrecognized modpack" error.
 - **12-pack live acceptance matrix** (`electron . --matrixtest`) covering both Modrinth and CurseForge end-to-end with
   verified boots.
+- **Open-source publishing essentials**: MIT licence, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue and
+  pull request templates, a Dependabot configuration, and a CI workflow running build, unit tests, spec conformance and
+  the encoding guard on every push.
+- **Real screenshots in the README**, captured by the project's own UI test rather than staged by hand.
 - First-run wizard is now dismissible; App settings is reachable with zero servers.
 
 ### Fixed
