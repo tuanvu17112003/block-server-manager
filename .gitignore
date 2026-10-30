@@ -71,11 +71,18 @@ release/
 # ------------------------------------------------------------------------------------------------
 legacy/
 tester/
-docs/research/
-# ...except the three documents the conformance gate parses at runtime (see the note above).
+# docs/research/ is ignored file-by-file rather than by directory. Git cannot re-include a file whose parent directory
+# is excluded, so a `docs/research/` rule plus `!` exceptions does not work — the exceptions are silently ineffective.
+# Listing the directory's contents explicitly keeps the intent visible and lets the gate inputs stay tracked.
+docs/research/*
+# The three documents the conformance gate parses at runtime. C1 compares every format in
+# 2026-10-29-universal-modpack-install.md §2 against the registered adapters, so removing it breaks the gate.
 !docs/research/2026-10-29-universal-modpack-install.md
 !docs/research/2026-10-29-p1c-format-census.md
 !docs/research/2026-10-29-claim-verification.md
+# ...and documents that are live design input rather than historical record. The test is "would deleting this lose
+# reasoning we still act on?" — not "does it have 'research' in the path".
+!docs/research/2026-10-30-public-server-access.md
 docs/implementation/
 docs/evidence/phase8-ui/
 docs/README.md
