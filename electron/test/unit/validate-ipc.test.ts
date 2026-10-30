@@ -21,8 +21,8 @@ function assertValidation(command: string, args: unknown): void {
   );
 }
 
-test('command list: 87 unique names and a minimal valid payload for every command', () => {
-  assert.equal(COMMAND_NAMES.length, 87);
+test('command list: 88 unique names and a minimal valid payload for every command', () => {
+  assert.equal(COMMAND_NAMES.length, 88);
   assert.equal(new Set(COMMAND_NAMES).size, COMMAND_NAMES.length);
   assert.equal(Object.keys(MINIMAL_VALID_ARGS).length, COMMAND_NAMES.length);
 

@@ -54,6 +54,7 @@ export const COMMANDS = [
   'gdrive_delete_backup',
   'gdrive_disconnect',
   'gdrive_list_backups',
+  'gdrive_orphaned_backups',
   'gdrive_restore_backup',
   'gdrive_status',
   'gdrive_upload_backup',

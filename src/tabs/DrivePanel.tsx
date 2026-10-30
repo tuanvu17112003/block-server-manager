@@ -38,6 +38,9 @@ interface DriveFile {
   name: string;
   sizeBytes: number;
   createdAt: string;
+  /** Server that owns this backup, when recorded. Used to label an orphan with the name it used to have. */
+  serverId?: string;
+  serverName?: string;
 }
 
 function formatBytes(bytes: number): string {
@@ -84,6 +87,23 @@ export default function DrivePanel({ serverId, refreshKey, onDownloaded }: {
   useEffect(() => {
     void loadStatus();
   }, [loadStatus]);
+
+  /**
+   * Backups whose server no longer exists.
+   *
+   * This is the answer to a real problem with the earlier design: a server's id is a fresh UUID when it is recreated, so
+   * a strict per-id list hid every old backup at exactly the moment the user needed them. These are shown separately
+   * because they cannot be restored into a server that is gone — the user must first choose where they should go.
+   */
+  const [orphans, setOrphans] = useState<DriveFile[]>([]);
+  useEffect(() => {
+    if (status?.connected !== true) return;
+    void (async () => {
+      const result = await bridge?.invoke('gdrive_orphaned_backups') as
+        { ok: boolean; files?: DriveFile[] } | undefined;
+      if (result?.ok === true && result.files !== undefined) setOrphans(result.files);
+    })();
+  }, [status?.connected, refreshKey]);
 
   useEffect(() => {
     if (status?.connected === true) void loadFiles();
@@ -247,11 +267,46 @@ export default function DrivePanel({ serverId, refreshKey, onDownloaded }: {
                 Refresh
               </Button>
             </div>
-
             {files.length === 0 && (
               <p className="mt-2 text-xs text-zinc-500">
                 No backups uploaded yet. Backups made from now on upload automatically.
               </p>
+            )}
+
+            {/* Backups whose server no longer exists. Shown here rather than hidden, because a recreated server gets a
+                new id and would otherwise never see them — the practical form of losing a backup. */}
+            {orphans.length > 0 && (
+              <div className="mt-3 rounded border border-amber-800/60 bg-amber-950/30 p-2">
+                <p className="text-xs font-semibold text-amber-200">
+                  Backups from servers that no longer exist ({orphans.length})
+                </p>
+                <p className="mt-1 text-[11px] text-amber-200/80">
+                  These are safe in Drive but their server is gone. Download one to add it back to this computer, then
+                  restore it into whichever server should receive the data.
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {orphans.map((file) => (
+                    <li key={file.id} className="flex items-center gap-2 rounded border border-zinc-800 bg-zinc-900/60 px-2 py-1.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs text-zinc-200">{file.name}</p>
+                        <p className="text-[11px] text-zinc-500">
+                          {formatBytes(file.sizeBytes)} · {formatDate(file.createdAt)}
+                          {file.serverName !== undefined ? ` · was "${file.serverName}"` : ''}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => { void restoreFromDrive(file); }}
+                        title="Download to this computer and add it to the backup list"
+                      >
+                        Download
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
 
             {files.length > 0 && (
@@ -264,6 +319,15 @@ export default function DrivePanel({ serverId, refreshKey, onDownloaded }: {
                         {formatBytes(file.sizeBytes)} · {formatDate(file.createdAt)}
                       </p>
                     </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => { void restoreFromDrive(file); }}
+                      title="Download this backup to this computer, then restore it from the Backups list above"
+                    >
+                      Download
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"

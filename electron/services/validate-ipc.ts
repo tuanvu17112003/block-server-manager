@@ -48,6 +48,7 @@ export const COMMAND_NAMES = [
   'gdrive_delete_backup',
   'gdrive_disconnect',
   'gdrive_list_backups',
+  'gdrive_orphaned_backups',
   'gdrive_restore_backup',
   'gdrive_status',
   'gdrive_upload_backup',
@@ -746,6 +747,7 @@ const VALIDATORS: Record<KnownCommand, CommandValidator> = {
     requireString(command, args, 'fileId', { allowEmpty: false });
     requireString(command, args, 'serverId', { allowEmpty: false });
   },
+  gdrive_orphaned_backups: () => {},
 };
 
 // ------------------------------------------------------------------------------------------------
@@ -847,6 +849,7 @@ export const MINIMAL_VALID_ARGS: Record<KnownCommand, Args> = {
   gdrive_upload_backup: { serverId: 'server-1', backupId: 'backup-1' },
   gdrive_delete_backup: { fileId: '1AbCdEfGhIjKlMnOpQrStUv' },
   gdrive_restore_backup: { fileId: '1AbCdEfGhIjKlMnOpQrStUv', serverId: 'server-1' },
+  gdrive_orphaned_backups: {},
 };
 
 // ------------------------------------------------------------------------------------------------

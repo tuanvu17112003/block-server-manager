@@ -47,6 +47,8 @@ export interface DriveFile {
   createdAt: string;
   /** Server this backup belongs to, read back from the app property. Empty for files uploaded by an older build. */
   serverId?: string;
+  /** Server name as recorded at upload time. Survives the server being deleted and recreated under the same name. */
+  serverName?: string;
   /** Local backup id, when recorded. Lets a restore match a Drive file to the record it came from. */
   backupId?: string;
 }
@@ -125,73 +127,122 @@ export async function getQuota(accessToken: string, fetchImpl?: typeof fetch): P
  *     what a user expects to find — "where are my backups?" should have an answer — and it lets cleanup reason about
  *     one container instead of scanning the whole Drive.
  */
+/**
+ * List backups, either for one server or for the whole account.
+ *
+ * Scope rules, chosen so a backup can never become unreachable:
+ *
+ *  - With a `serverId`, the result is that server's own backups PLUS anything filed under folders it owns. The property
+ *    match is what makes recovery work after a server is deleted and recreated: the new server has a new UUID, so a
+ *    strict id filter would hide every old backup at exactly the moment the user needs them.
+ *
+ *  - With a `serverName`, the same fallback applies by name, which is the identity a user actually recognises.
+ *
+ *  - With neither, everything this app ever uploaded is returned, so nothing can be permanently lost from the UI even if
+ *    its owning server record is gone.
+ */
 export async function listBackups(
   accessToken: string,
-  options: { serverId?: string; fetchImpl?: typeof fetch } = {},
+  options: { serverId?: string; serverName?: string; includeOrphans?: boolean; fetchImpl?: typeof fetch } = {},
 ): Promise<DriveFile[]> {
   const propertyFilter = `appProperties has { key='${APP_PROPERTY.key}' and value='${APP_PROPERTY.value}' }`;
 
-  // Scope by server when asked. This is the fix for the reported defect: without it every server's panel listed every
-  // other server's backups, so "restore this world" could offer a backup of a completely different world.
-  const serverFilter = options.serverId !== undefined && options.serverId !== ''
-    ? ` and appProperties has { key='${SERVER_PROPERTY_KEY}' and value='${options.serverId.replace(/'/g, "\\'")}' }`
-    : '';
-
-  // Narrow to the server's own folder when it is known: fewer files scanned, and the query stays correct even if a
-  // property is missing on an older upload (the property filter is still applied, so nothing foreign can leak in).
-  const folderId = options.serverId !== undefined && options.serverId !== ''
-    ? await ensureServerFolder({
-      accessToken,
-      serverName: 'server',
-      serverId: options.serverId,
-      ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
-    })
-    : await ensureBackupRootFolder(accessToken, options.fetchImpl);
-
-  const query = folderId === null
-    ? `${propertyFilter}${serverFilter} and trashed=false`
-    : `'${folderId}' in parents and ${propertyFilter}${serverFilter} and trashed=false`;
-
+  // Every file this app uploaded, across all folders. Used as the recovery net: a folder mistake, a rename, or a
+  // recreated server must never make a backup disappear from the app entirely.
+  const query = `${propertyFilter} and trashed=false`;
   const url = `${DRIVE_API}/files`
     + `?q=${encodeURIComponent(query)}`
-    + '&fields=files(id,name,size,createdTime,appProperties)&orderBy=createdTime desc&pageSize=200';
+    + '&fields=files(id,name,size,createdTime,appProperties)&orderBy=createdTime desc&pageSize=500';
   const result = await driveJson<{
     files?: { id: string; name: string; size?: string; createdTime?: string; appProperties?: Record<string, string> }[];
   }>({ url, accessToken, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) });
   if (!result.ok || result.body?.files === undefined) return [];
-  return result.body.files.map((file) => ({
+
+  const mapped: DriveFile[] = result.body.files.map((file) => ({
     id: file.id,
     name: file.name,
     sizeBytes: Number(file.size ?? '0'),
     createdAt: file.createdTime ?? '',
     ...(file.appProperties?.[SERVER_PROPERTY_KEY] !== undefined
       ? { serverId: file.appProperties[SERVER_PROPERTY_KEY] } : {}),
+    ...(file.appProperties?.[SERVER_NAME_PROPERTY_KEY] !== undefined
+      ? { serverName: file.appProperties[SERVER_NAME_PROPERTY_KEY] } : {}),
     ...(file.appProperties?.[BACKUP_PROPERTY_KEY] !== undefined
       ? { backupId: file.appProperties[BACKUP_PROPERTY_KEY] } : {}),
   }));
+
+  const wantsServer = (options.serverId !== undefined && options.serverId !== '')
+    || (options.serverName !== undefined && options.serverName !== '');
+  if (!wantsServer) return mapped;
+  if (options.includeOrphans === true) return mapped;
+
+  const normaliseName = (value: string): string => value.trim().toLowerCase();
+  const name = options.serverName !== undefined ? normaliseName(options.serverName) : null;
+
+  return mapped.filter((file) => {
+    // Exact owning-server match.
+    if (options.serverId !== undefined && options.serverId !== '' && file.serverId === options.serverId) return true;
+    // Same server name: covers a recreated server whose UUID changed, and backups uploaded before ids were recorded.
+    if (name !== null && file.serverName !== undefined && normaliseName(file.serverName) === name) return true;
+    // Same folder-name match, for files written by a build that did not record the name property yet.
+    if (name !== null) {
+      const prefix = `${name}__`;
+      if (file.name.toLowerCase().startsWith(prefix)) return true;
+    }
+    return false;
+  });
 }
 
 /**
- * Folder layout.
+ * Backups whose owning server no longer exists — the recovery surface after a server was deleted.
  *
- *   Block Server Manager Backups/        ← one root for the app
- *     <server name>-<id prefix>/         ← one folder per server
+ * Without this the user is left with files in Drive that no screen in the app will show them, which is the practical
+ * form of data loss even though the bytes are safe.
+ */
+export async function listOrphanedBackups(
+  accessToken: string,
+  liveServerIds: readonly string[],
+  fetchImpl?: typeof fetch,
+): Promise<DriveFile[]> {
+  const all = await listBackups(accessToken, { includeOrphans: true, ...(fetchImpl ? { fetchImpl } : {}) });
+  const live = new Set(liveServerIds);
+  return all.filter((file) => {
+    // A file with no recorded server id cannot be attributed, so it is treated as recoverable rather than hidden.
+    if (file.serverId === undefined || file.serverId === '') return true;
+    return !live.has(file.serverId);
+  });
+}
+
+/**
+ * Folder layout, chosen after a reported failure of the first two designs.
+ *
+ *   Block Server Manager Backups/
+ *     <server name>/            ← one folder per server NAME
  *       <server>__<backup>.zip
  *
- * A flat folder containing every server's backups was the first design and it was wrong: with two servers the list is
- * ambiguous, a user cannot tell which backup belongs to which world, and there is no safe way to delete "the backups of
- * the server I just removed". One folder per server makes the answer visible in Drive itself, not just in the app.
+ * Design history, because both earlier attempts were wrong in instructive ways:
  *
- * The server id prefix is part of the name because server names are user-editable and two servers may share a name; the
- * id prefix keeps the folder addressable even after a rename.
+ *  1. A single flat folder: with two servers the Drive itself cannot say which backup belongs to which world.
+ *
+ *  2. A folder per server ID (`Test-62ac86ca`): the ID is a random UUID regenerated when a server is recreated, so
+ *     deleting "Test" and creating "Test" again produced a NEW folder and the old backups became unreachable from the
+ *     app — exactly when the user needs them most. Reported directly: "when everything is deleted I won't find the file
+ *     with the newly created server".
+ *
+ *  Now the folder is keyed by NAME, which is what a person recognises and what survives recreation. Two live servers
+ *  sharing a name will share a folder, which is acceptable: each file still carries its own server id and name as app
+ *  properties, so the app can tell them apart, and the folder exists for the human browsing Drive, not as the source of
+ *  truth for identity.
+ *
+ * The folder is a convenience, never a gate: listing falls back to a property query over the whole app root so a backup
+ * can always be found even if it was moved, or filed under a name the current server no longer uses.
  */
 export const BACKUP_ROOT_FOLDER_NAME = 'Block Server Manager Backups';
 
-/** Deterministic, Drive-safe folder name for one server. */
-export function serverFolderName(serverName: string, serverId: string): string {
-  const safeName = serverName.replace(/[\\/:*?"<>|']/g, '_').trim() || 'server';
-  const idPart = serverId.replace(/[^A-Za-z0-9]/g, '').slice(0, 8) || 'unknown';
-  return `${safeName}-${idPart}`;
+/** Deterministic, Drive-safe folder name for one server, based on the name a user recognises. */
+export function serverFolderName(serverName: string): string {
+  const safe = serverName.replace(/[\\/:*?"<>|']/g, '_').trim();
+  return safe === '' ? 'unnamed-server' : safe;
 }
 
 interface FolderCacheEntry { root?: string | null; servers: Map<string, string | null> }
@@ -254,27 +305,29 @@ export async function ensureBackupRootFolder(
 }
 
 /**
- * Per-server folder. Falls back to the root when a server folder cannot be created, so an upload still succeeds rather
- * than failing because of a folder permission quirk.
+ * Per-server folder, keyed by name so it survives the server being deleted and recreated.
+ *
+ * Falls back to the root when a folder cannot be created, so an upload still succeeds rather than failing because of a
+ * folder permission quirk. The cache is keyed by server name, not id, for the same reason the folder is.
  */
 export async function ensureServerFolder(options: {
   accessToken: string;
   serverName: string;
-  serverId: string;
   fetchImpl?: typeof fetch;
 }): Promise<string | null> {
-  const cached = folderCache.servers.get(options.serverId);
+  const key = serverFolderName(options.serverName);
+  const cached = folderCache.servers.get(key);
   if (cached !== undefined) return cached;
 
   const root = await ensureBackupRootFolder(options.accessToken, options.fetchImpl);
   const folder = await findOrCreateFolder({
     accessToken: options.accessToken,
-    name: serverFolderName(options.serverName, options.serverId),
+    name: key,
     parentId: root,
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
   });
   const resolved = folder ?? root;
-  folderCache.servers.set(options.serverId, resolved);
+  folderCache.servers.set(key, resolved);
   return resolved;
 }
 
@@ -493,11 +546,11 @@ export async function uploadBackup(options: UploadBackupOptions): Promise<Upload
     };
   }
 
-  // Per-server folder, so the Drive itself shows which world a backup belongs to.
+  // Per-server folder, so the Drive itself shows which world a backup belongs to. Keyed by name, not id, because a
+  // recreated server gets a new UUID and its old backups must stay in the folder the user recognises.
   const folderId = await ensureServerFolder({
     accessToken,
     serverName: options.serverName,
-    serverId: options.serverId,
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
   });
 

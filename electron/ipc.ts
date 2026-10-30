@@ -144,7 +144,31 @@ const handlers: Record<string, Handler> = {
     return driveStatus(ctx.dataRoot);
   },
   gdrive_disconnect: (_a, ctx) => { gdriveDisconnect(ctx.dataRoot); return driveStatus(ctx.dataRoot); },
-  gdrive_list_backups: (a, ctx) => driveListBackups(ctx.dataRoot, String(a.serverId ?? '')),
+  gdrive_list_backups: (a, ctx) => {
+    const serverId = String(a.serverId ?? '');
+    const server = serverId === '' ? null : store(ctx).getServer(serverId);
+    // Both id and name are passed: the id separates two live servers, the name is what keeps a recreated server's old
+    // backups reachable (its new record has a different UUID but the same name).
+    return driveListBackups(ctx.dataRoot, serverId, server?.name ?? '');
+  },
+  /**
+   * Backups whose owning server no longer exists.
+   *
+   * Shown separately in the UI rather than mixed into a server's list, because they cannot be restored into a server
+   * that is gone — the user has to pick a destination. Without this surface the files sit in Drive and no screen will
+   * ever show them, which is data loss in practice even though the bytes are safe.
+   */
+  gdrive_orphaned_backups: async (_a, ctx) => {
+    const live = store(ctx).listServers().map((server) => server.id);
+    const auth = await driveListBackups(ctx.dataRoot, '', '');
+    if (!auth.ok) throw appError('validation', auth.error ?? 'Google Drive is not available.');
+    const liveSet = new Set(live);
+    // Anything not attributed to a live server is recoverable. A file with no recorded server id cannot be attributed,
+    // so it is included rather than hidden.
+    const orphans = (auth.files ?? []).filter((file) =>
+      file.serverId === undefined || file.serverId === '' || !liveSet.has(file.serverId));
+    return { ok: true, files: orphans };
+  },
   gdrive_upload_backup: async (a, ctx) => {
     // The backup id alone is not enough to find it: listBackups is per-server, so the caller supplies the server and
     // the lookup stays exact rather than scanning every server's backups.

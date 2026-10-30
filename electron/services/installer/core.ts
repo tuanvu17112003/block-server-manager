@@ -1009,7 +1009,15 @@ export async function startAndVerify(dir: string, cmd: LaunchCommand, opts: { ti
       if (exitInfo) return resolveNow();
       const killAt = setTimeout(() => { try { proc.kill('SIGKILL'); } catch { /* gone */ } }, 30_000);
       proc.once('exit', () => { clearTimeout(killAt); resolveNow(); });
-      setTimeout(resolveNow, 45_000);
+      // The published directory cannot be renamed while a JVM still holds it as its working directory. Resolving on this
+      // timer without the child having exited is what produced the reported EPERM during install: the verification boot
+      // "finished", publish ran immediately, and Windows refused to rename a folder that was still a process's cwd.
+      // So the timeout kills first and WAITS for the exit event; only a process that survives SIGKILL lets us continue,
+      // and the reason records that it happened so a later publish failure can be traced to it.
+      setTimeout(() => {
+        try { proc.kill('SIGKILL'); } catch { /* gone */ }
+        setTimeout(() => resolveNow(), 10_000);
+      }, 45_000);
     };
     proc.once('exit', code => { exitInfo = { code }; if (!done) finish(false, `process exited (code ${code}) before Done(`); });
     const timer = setTimeout(() => finish(false, `timeout after ${timeoutMs / 1000}s without "Done ("`), timeoutMs);

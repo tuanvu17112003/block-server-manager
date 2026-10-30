@@ -206,12 +206,13 @@ export async function driveStatus(dataRoot: string): Promise<DriveStatus> {
 export async function driveListBackups(
   dataRoot: string,
   serverId: string,
+  serverName = '',
 ): Promise<{ ok: boolean; files?: DriveFile[]; error?: string }> {
   const auth = await validAccessToken(dataRoot);
   if (!auth.ok) return { ok: false, error: auth.error };
-  // Scoped to the server: without this every server's panel listed every other server's backups, which is not merely
-  // untidy — it offers "restore this world" against a backup of a different world.
-  return { ok: true, files: await listBackups(auth.tokens.accessToken, { serverId }) };
+  // Scoped by id AND name. The id keeps two live servers apart; the name is what makes a backup recoverable after a
+  // server is deleted and recreated, because the new record has a different UUID but the same name.
+  return { ok: true, files: await listBackups(auth.tokens.accessToken, { serverId, serverName }) };
 }
 
 export async function driveUploadBackup(options: {
