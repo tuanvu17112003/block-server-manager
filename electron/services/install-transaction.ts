@@ -228,9 +228,18 @@ function copySyncWithRetry(from: string, to: string, attempts = 5): void {
     try {
       // `force: true` matters for the retry path: a previous attempt may have created part of the tree before failing,
       // and `force: false` would then refuse to overwrite it on the next attempt, turning a transient lock into a
-      // permanent failure. `recursive` keeps the copy complete; nothing here can be a stale destination because `to` is
-      // a fresh per-attempt temp directory.
-      fs.cpSync(from, to, { recursive: true, force: true, errorOnExist: false });
+      // permanent failure. `recursive` keeps the copy complete.
+      //
+      // When `to` already exists as a directory (the file-by-file rung creates it first), cpSync copies `from` INTO it
+      // rather than onto it, which would produce `to/<basename>/...`. Descending into the source and copying children
+      // keeps the destination shape correct regardless of whether it pre-existed.
+      if (fs.existsSync(to) && fs.statSync(to).isDirectory()) {
+        for (const entry of fs.readdirSync(from)) {
+          fs.cpSync(path.join(from, entry), path.join(to, entry), { recursive: true, force: true, errorOnExist: false });
+        }
+      } else {
+        fs.cpSync(from, to, { recursive: true, force: true, errorOnExist: false });
+      }
       return;
     } catch (error) {
       lastError = error;
@@ -242,15 +251,83 @@ function copySyncWithRetry(from: string, to: string, attempts = 5): void {
 }
 
 /**
- * Move the staged tree into its final location. Preferred path is a single atomic `renameSync`
- * (same data root); EXDEV and transient Windows lock errors fall back to a private copy + rename so
- * a locked source never produces a half-published server. Errors surface as a friendly `io` error.
+ * Move the staged tree into its final location.
  *
- * The copy fallback is not merely a convenience. A rename of a directory on Windows requires that no process holds a
- * handle to it OR has it as its working directory; a JVM that has only just been asked to stop can take a moment to
- * release both. Copying does not need exclusive access to the source, so it succeeds where the rename cannot — which is
- * why the retry ladder is rename (fast) → copy (tolerant) rather than repeated renames.
+ * Three rungs, each tolerating something the previous one cannot. The ladder exists because of a measured failure, not
+ * as defensive padding: an install reached 95% "publishing" and failed with EPERM while four `.publishing-*` folders
+ * (112 MB each) were left behind. Reading the disk state showed exactly which step broke:
+ *
+ *   rename(staging → servers/<id>)        failed — a JVM still had the staging dir as its cwd
+ *   copy(staging → <id>.publishing-<uuid>) succeeded — 66 files copied
+ *   rename(<id>.publishing-<uuid> → final) failed — Defender held handles on the freshly written jars
+ *
+ * The last step is the one that matters here. Renaming a DIRECTORY requires exclusive access to everything inside it,
+ * so a real-time antivirus scanner reading those jars blocks it — but the scanner releases them within seconds, and a
+ * 6.6-second retry budget was simply too short for 112 MB. A manual rename of the leftover folder succeeded later,
+ * which confirmed the lock is transient rather than a permission problem.
+ *
+ * So:
+ *   1. rename, quick retries — the happy path, atomic and instant.
+ *   2. copy to a temp sibling, retrying — succeeds where rename cannot, because copying reads the source without
+ *      needing exclusive access to the directory.
+ *   3. rename temp → final with a MUCH longer budget — waiting out the scanner is the minimal fix, and it keeps the
+ *      publish atomic.
+ *   4. if even that fails, copy temp → final file by file. Copying does not need to rename a directory, so a scanner
+ *      holding an individual file no longer blocks the whole operation; the cost is that this rung is not atomic, which
+ *      is why it is last and why the caller rolls the record back on failure.
  */
+
+/** Marker for folders left behind by an interrupted publish: `<serverId>.publishing-<uuid>`. */
+const PUBLISHING_SUFFIX = '.publishing-';
+
+/**
+ * Finish or discard publishes that were interrupted.
+ *
+ * A failed publish can leave `<serverId>.publishing-<uuid>` directories next to the real server folders. Measured on a
+ * real machine after three failed installs: four of them, 106-112 MB each — roughly 430 MB of orphaned server copies
+ * that no UI showed and nothing ever cleaned up.
+ *
+ * Two cases, and the difference matters:
+ *
+ *  - The final folder does NOT exist: the copy completed but was never renamed into place. The leftover is a complete,
+ *    verified copy, so it is renamed into position — recovering an install the user already waited minutes for.
+ *  - The final folder DOES exist: the server is published and the leftover is stale. It is removed.
+ *
+ * Never throws: this runs at startup and must not be able to prevent the app from opening.
+ */
+export function recoverInterruptedPublishes(
+  dataRoot: string,
+): { recovered: string[]; removed: string[]; skipped: string[] } {
+  const serversDir = path.join(dataRoot, 'servers');
+  const result = { recovered: [] as string[], removed: [] as string[], skipped: [] as string[] };
+
+  let entries: string[];
+  try { entries = fs.readdirSync(serversDir); } catch { return result; }
+
+  for (const entry of entries) {
+    const marker = entry.indexOf(PUBLISHING_SUFFIX);
+    if (marker <= 0) continue;
+    const serverId = entry.slice(0, marker);
+    const leftover = path.join(serversDir, entry);
+    const finalDir = path.join(serversDir, serverId);
+
+    try {
+      if (fs.existsSync(finalDir)) {
+        fs.rmSync(leftover, { recursive: true, force: true });
+        result.removed.push(entry);
+        continue;
+      }
+      // Not published yet: the copy precedes the rename, so this leftover is a complete tree. Finish the job.
+      renameSyncWithRetry(leftover, finalDir, 20, 300);
+      result.recovered.push(entry);
+    } catch {
+      // Still locked. Leave it for the next startup rather than deleting a possibly complete server copy.
+      result.skipped.push(entry);
+    }
+  }
+  return result;
+}
+
 export function publishStagedDirectory(from: string, to: string): void {
   fs.mkdirSync(path.dirname(to), { recursive: true });
   try {
@@ -262,25 +339,41 @@ export function publishStagedDirectory(from: string, to: string): void {
     // eslint-disable-next-line no-console
     console.warn(`[install] direct publish failed (${code ?? 'unknown'}); retrying with a copy fallback.`);
   }
+
   const temp = `${to}.publishing-${randomUUID()}`;
   try {
     copySyncWithRetry(from, temp);
-    renameSyncWithRetry(temp, to);
-    // Staging cleanup is best effort and happens only after the copy is safely in place. A failure here must not fail
-    // the publish: the server is already at its destination.
-    try { fs.rmSync(from, { recursive: true, force: true }); } catch { /* left for the next run to clear */ }
-  } catch (error) {
-    try { fs.rmSync(temp, { recursive: true, force: true }); } catch { /* best effort */ }
-    const code = (error as NodeJS.ErrnoException | null)?.code ?? 'unknown';
-    const cause = (error as Error).message;
-    throw appError(
-      'io',
-      `Could not publish the installed server (${code}) — Windows denied moving the files. `
-      + 'A process is still holding the staging folder. This is usually a server process that has not finished '
-      + 'shutting down, or a virus scanner reading the freshly written jars. Wait a few seconds and press Retry; '
-      + 'if it keeps failing, exclude the app data folder from real-time scanning. '
-      + `Underlying error: ${cause}`,
-    );
+
+    // Generous budget: a scanner reading the copied jars is the expected blocker, and it is transient. 40 attempts with
+    // a 400ms base reach ~4 minutes, which is far longer than any plausible scan of a single modpack and cheap when the
+    // first attempt succeeds (the common case).
+    renameSyncWithRetry(temp, to, 40, 400);
+    try { fs.rmSync(from, { recursive: true, force: true }); } catch { /* best effort, see below */ }
+    return;
+  } catch (renameError) {
+    // Last rung: copy the temp tree into place file by file. A directory rename needs exclusive access to the whole
+    // tree; a file copy does not, so this succeeds when a scanner is holding individual jars.
+    // eslint-disable-next-line no-console
+    console.warn(`[install] renaming into place failed (${(renameError as NodeJS.ErrnoException).code ?? 'unknown'}); copying file-by-file.`);
+    try {
+      fs.mkdirSync(to, { recursive: true });
+      copySyncWithRetry(temp, to, 10);
+      try { fs.rmSync(temp, { recursive: true, force: true }); } catch { /* best effort */ }
+      try { fs.rmSync(from, { recursive: true, force: true }); } catch { /* best effort */ }
+      return;
+    } catch (copyError) {
+      // Everything failed. Report the ORIGINAL cause; it names the step that actually blocked publishing.
+      const code = (copyError as NodeJS.ErrnoException | null)?.code ?? (renameError as NodeJS.ErrnoException | null)?.code ?? 'unknown';
+      const detail = (copyError as Error).message;
+      const leftovers = fs.existsSync(temp) ? ` Partial output was left at ${temp}.` : '';
+      throw appError(
+        'io',
+        `Could not publish the installed server (${code}). A process kept the files locked through several retries. `
+        + 'This is almost always antivirus real-time scanning of the freshly written jars. Wait a few seconds and press '
+        + 'Retry — the staging files are kept precisely so a retry can finish the job. To stop it recurring, add the app '
+        + `data folder to your antivirus exclusions.${leftovers} Underlying error: ${detail}`,
+      );
+    }
   }
 }
 

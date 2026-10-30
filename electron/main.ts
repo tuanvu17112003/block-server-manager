@@ -8,6 +8,7 @@ import { buildRuntime } from './services/runtime';
 import { dataRoot, isPortable, portableDataRootIsWritable } from './services/paths';
 import { checkForUpdates, initUpdater, onUpdateState } from './services/updater';
 import { detectLegacy, planImport, runImport } from './services/legacy-import';
+import { recoverInterruptedPublishes } from './services/install-transaction';
 import { initDiagnostics, installProcessHandlers, getDiagnostics, recordTimeline } from './services/diagnostics';
 
 let mainWindow: BrowserWindow | null = null;
@@ -442,6 +443,25 @@ if (!hasSingleInstanceLock) {
     });
     recordTimeline({ kind: 'app', action: 'start', detail: { version: app.getVersion() } });
     await runtime.processes.reapOrphans();
+
+    // Finish or clear publishes that a previous run left half-done. Runs before the UI opens so the server list the user
+    // sees is already correct, and never throws — a recovery problem must not stop the app from starting.
+    try {
+      const recovery = recoverInterruptedPublishes(ctx.dataRoot);
+      if (recovery.recovered.length > 0) {
+        diagnostics.logger.info('recovered interrupted installs', { count: recovery.recovered.length, entries: recovery.recovered });
+      }
+      if (recovery.removed.length > 0) {
+        diagnostics.logger.info('removed stale publish leftovers', { count: recovery.removed.length, entries: recovery.removed });
+      }
+      if (recovery.skipped.length > 0) {
+        diagnostics.logger.warn('publish leftovers still locked, will retry next start', { entries: recovery.skipped });
+      }
+    } catch (error) {
+      // Recovery is opportunistic; log and continue rather than blocking startup.
+      try { diagnostics.logger.warn('publish recovery failed', { message: (error as Error).message }); } catch { /* ignore */ }
+    }
+
     await runLegacyStartupMigration(ctx);
     recordTimeline({ kind: 'app', action: 'legacy-import-check' });
     // Quit must be synchronous-safe: Electron continues quitting immediately after this event, so
