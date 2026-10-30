@@ -9,6 +9,7 @@ import { dataRoot, isPortable, portableDataRootIsWritable } from './services/pat
 import { checkForUpdates, initUpdater, onUpdateState } from './services/updater';
 import { detectLegacy, planImport, runImport } from './services/legacy-import';
 import { recoverInterruptedPublishes } from './services/install-transaction';
+import { Store } from './services/store';
 import { initDiagnostics, installProcessHandlers, getDiagnostics, recordTimeline } from './services/diagnostics';
 
 let mainWindow: BrowserWindow | null = null;
@@ -447,7 +448,9 @@ if (!hasSingleInstanceLock) {
     // Finish or clear publishes that a previous run left half-done. Runs before the UI opens so the server list the user
     // sees is already correct, and never throws — a recovery problem must not stop the app from starting.
     try {
-      const recovery = recoverInterruptedPublishes(ctx.dataRoot);
+      const recovery = recoverInterruptedPublishes(ctx.dataRoot, (serverId) => {
+        try { return new Store(ctx.dataRoot).getServer(serverId) !== null; } catch { return false; }
+      });
       if (recovery.recovered.length > 0) {
         diagnostics.logger.info('recovered interrupted installs', { count: recovery.recovered.length, entries: recovery.recovered });
       }
@@ -456,6 +459,14 @@ if (!hasSingleInstanceLock) {
       }
       if (recovery.skipped.length > 0) {
         diagnostics.logger.warn('publish leftovers still locked, will retry next start', { entries: recovery.skipped });
+      }
+      if (recovery.unclaimed.length > 0) {
+        // Deliberately not deleted: the owning record is gone, so this may be the only surviving copy of a world.
+        diagnostics.logger.warn('publish leftovers with no server record were kept, not deleted', {
+          count: recovery.unclaimed.length,
+          entries: recovery.unclaimed,
+          hint: 'These folders are complete server trees whose record disappeared. Inspect them under <dataRoot>/servers and re-import manually if the data is wanted.',
+        });
       }
     } catch (error) {
       // Recovery is opportunistic; log and continue rather than blocking startup.

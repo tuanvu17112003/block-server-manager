@@ -41,12 +41,31 @@ test('a complete leftover with no final folder is RECOVERED, not deleted', () =>
   const serverId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
   const leftover = makeLeftover(serversDir, serverId);
   try {
-    const result = recoverInterruptedPublishes(base);
+    // A record exists, so the recovered folder will be visible in the UI.
+    const result = recoverInterruptedPublishes(base, (id) => id === serverId);
     assert.equal(result.recovered.length, 1, 'the leftover must be recovered');
     assert.equal(result.removed.length, 0, 'it must not be deleted');
     assert.equal(fs.existsSync(leftover), false, 'the leftover directory is consumed by the rename');
     assert.equal(fs.existsSync(path.join(serversDir, serverId, 'server.jar')), true, 'the files must now be in place');
     assert.equal(fs.readFileSync(path.join(serversDir, serverId, 'server.properties'), 'utf8'), 'motd=test');
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('a leftover whose record is gone is KEPT, never renamed into an invisible folder', () => {
+  // The bug a real run of this function exposed: leftovers were renamed into servers/<id> while the store had no record
+  // for them, producing folders no screen could show. Three were created that way before it was noticed. Renaming without
+  // a record manufactures the exact orphan state this function exists to fix, so it must not happen.
+  const { base, serversDir } = makeServersRoot();
+  const serverId = '99999999-8888-7777-6666-555555555555';
+  const leftover = makeLeftover(serversDir, serverId);
+  try {
+    const result = recoverInterruptedPublishes(base, () => false);
+    assert.equal(result.recovered.length, 0, 'must not rename without a record');
+    assert.equal(result.unclaimed.length, 1, 'the leftover is reported as unclaimed');
+    assert.equal(fs.existsSync(leftover), true, 'the leftover stays where it is');
+    assert.equal(fs.existsSync(path.join(serversDir, serverId)), false, 'no invisible folder is created');
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }
@@ -61,7 +80,7 @@ test('a leftover whose server was already published is REMOVED', () => {
   fs.writeFileSync(path.join(finalDir, 'server.jar'), 'published');
   const leftover = makeLeftover(serversDir, serverId);
   try {
-    const result = recoverInterruptedPublishes(base);
+    const result = recoverInterruptedPublishes(base, () => true);
     assert.equal(result.removed.length, 1, 'stale leftover must be removed');
     assert.equal(result.recovered.length, 0, 'nothing to recover');
     assert.equal(fs.existsSync(leftover), false);
@@ -80,7 +99,7 @@ test('ordinary server folders are never touched', () => {
   fs.writeFileSync(path.join(realDir, 'server.jar'), 'real');
   try {
     const result = recoverInterruptedPublishes(base);
-    assert.deepEqual(result, { recovered: [], removed: [], skipped: [] });
+    assert.deepEqual(result, { recovered: [], removed: [], skipped: [], unclaimed: [] });
     assert.equal(fs.readFileSync(path.join(realDir, 'server.jar'), 'utf8'), 'real');
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
@@ -109,7 +128,7 @@ test('a missing servers directory is not an error', () => {
   // Runs at startup, before anything else has necessarily created the data root. It must not throw.
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'publish-recover-empty-'));
   try {
-    assert.deepEqual(recoverInterruptedPublishes(base), { recovered: [], removed: [], skipped: [] });
+    assert.deepEqual(recoverInterruptedPublishes(base, () => true), { recovered: [], removed: [], skipped: [], unclaimed: [] });
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }

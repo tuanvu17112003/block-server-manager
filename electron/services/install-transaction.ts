@@ -373,13 +373,20 @@ const PUBLISHING_SUFFIX = '.publishing-';
  *    verified copy, so it is renamed into position — recovering an install the user already waited minutes for.
  *  - The final folder DOES exist: the server is published and the leftover is stale. It is removed.
  *
+ * IMPORTANT — a recovered tree is only usable if a store record exists for it. Renaming into `servers/<id>` without a
+ * record produces a folder that no screen can show, which is exactly the orphan state this function is meant to avoid.
+ * A real run of this function demonstrated the mistake: three leftovers were renamed into place and the store still had
+ * no records for them, so the folders became invisible. The record is therefore checked first, and a leftover whose
+ * record is gone is left untouched and reported, so the data is never silently buried or deleted.
+ *
  * Never throws: this runs at startup and must not be able to prevent the app from opening.
  */
 export function recoverInterruptedPublishes(
   dataRoot: string,
-): { recovered: string[]; removed: string[]; skipped: string[] } {
+  hasRecord?: (serverId: string) => boolean,
+): { recovered: string[]; removed: string[]; skipped: string[]; unclaimed: string[] } {
   const serversDir = path.join(dataRoot, 'servers');
-  const result = { recovered: [] as string[], removed: [] as string[], skipped: [] as string[] };
+  const result = { recovered: [] as string[], removed: [] as string[], skipped: [] as string[], unclaimed: [] as string[] };
 
   let entries: string[];
   try { entries = fs.readdirSync(serversDir); } catch { return result; }
@@ -397,7 +404,14 @@ export function recoverInterruptedPublishes(
         result.removed.push(entry);
         continue;
       }
-      // Not published yet: the copy precedes the rename, so this leftover is a complete tree. Finish the job.
+      // No record means the owning server is gone: renaming would create an invisible folder. Rollback normally deletes
+      // this leftover, so reaching here means the process died before rollback ran — the tree may hold a world the user
+      // wants, so it is reported rather than removed.
+      if (hasRecord !== undefined && !hasRecord(serverId)) {
+        result.unclaimed.push(entry);
+        continue;
+      }
+      // Record exists and the copy precedes the rename, so this leftover is a complete tree. Finish the job.
       renameSyncWithRetry(leftover, finalDir, 20, 300);
       result.recovered.push(entry);
     } catch {
@@ -616,6 +630,18 @@ export async function publishStagedServer(opts: PublishStagedServerOptions): Pro
     record = null;
     try { store.deleteServer(id); } catch { /* best effort */ }
     try { fs.rmSync(path.join(dataRoot, 'servers', id), { recursive: true, force: true }); } catch { /* best effort */ }
+    // Also remove any `.publishing-<uuid>` copy this attempt left behind.
+    //
+    // This is the origin of the orphaned folders found on a real machine: a publish that failed at the final rename left
+    // `<id>.publishing-<uuid>` next to the server folders, then rollback deleted the record and tried to remove
+    // `servers/<id>` — which had never been created. The leftover survived with no record, so no screen could show it and
+    // nothing ever deleted it. Four of them (106-112 MB each) had accumulated, and in three cases the copy was complete.
+    try {
+      for (const entry of fs.readdirSync(path.join(dataRoot, 'servers'))) {
+        if (!entry.startsWith(`${id}${PUBLISHING_SUFFIX}`)) continue;
+        try { fs.rmSync(path.join(dataRoot, 'servers', entry), { recursive: true, force: true }); } catch { /* best effort */ }
+      }
+    } catch { /* servers dir missing is fine */ }
   };
   const throwIfCancelled = (): void => {
     if (opts.isCancelled?.()) {
