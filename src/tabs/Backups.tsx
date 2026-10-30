@@ -53,6 +53,8 @@ export default function Backups() {
   const [del, setDel] = useState<Backup | null>(null);
   // Which backup is currently being uploaded, so the row can show progress instead of letting the user click twice.
   const [uploading, setUploading] = useState<string | null>(null);
+  // Bumped after a successful upload so the Drive panel reloads its list.
+  const [driveRefresh, setDriveRefresh] = useState(0);
 
   const live = active.status === 'running' || active.status === 'starting' || active.status === 'stopping';
 
@@ -208,6 +210,7 @@ export default function Backups() {
         backupId: b.id,
       }) as { name?: string } | null;
       pushToast(file?.name !== undefined ? `Uploaded "${file.name}" to Google Drive.` : 'Uploaded to Google Drive.', 'ok');
+      setDriveRefresh((n) => n + 1);
     } catch (error) {
       pushToast(errorText(error, 'Could not upload to Google Drive.'), 'err');
     } finally {
@@ -319,7 +322,7 @@ export default function Backups() {
 
       {/* Google Drive upload for this server's backups. Placed next to the backup list because that is where the
           user thinks about where backups go; a settings-tab-only connection would hide the state from here. */}
-      <DrivePanel serverId={active.id} />
+      <DrivePanel serverId={active.id} refreshKey={driveRefresh} />
 
       <Modal open={!!restore} title={`Restore "${restore?.name}"`} onClose={() => setRestore(null)}>
         <p className="text-xs text-zinc-400">

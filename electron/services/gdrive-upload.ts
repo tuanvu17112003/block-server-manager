@@ -93,9 +93,27 @@ export async function getQuota(accessToken: string, fetchImpl?: typeof fetch): P
   };
 }
 
-/** List only backups this app created. `drive.file` scope already restricts visibility, and the property narrows it. */
+/** List only backups this app created, from the app's own folder.
+ *
+ * Two corrections in one place, both found by a real upload that never appeared in the list:
+ *
+ *  1. The query term is `appProperties`, not `trAppProperties`. The latter is not a Drive search term at all, so the
+ *     query matched nothing and the panel reported "0 backups" while the file was demonstrably in the Drive. Drive's
+ *     reference lists exactly two property terms: `properties` (visible to all apps) and `appProperties` (private to
+ *     the requesting app).
+ *
+ *  2. Results are scoped to the app's own folder rather than scattered across the Drive root. A dedicated folder is
+ *     what a user expects to find — "where are my backups?" should have an answer — and it lets cleanup reason about
+ *     one container instead of scanning the whole Drive.
+ */
 export async function listBackups(accessToken: string, fetchImpl?: typeof fetch): Promise<DriveFile[]> {
-  const query = `trAppProperties has { key='${APP_PROPERTY.key}' and value='${APP_PROPERTY.value}' } and trashed=false`;
+  const folderId = await ensureBackupFolder(accessToken, fetchImpl);
+  // When the folder cannot be resolved the property filter alone still finds every backup this app made, so the list
+  // degrades to correct-but-unfiled rather than empty.
+  const propertyFilter = `appProperties has { key='${APP_PROPERTY.key}' and value='${APP_PROPERTY.value}' }`;
+  const query = folderId === null
+    ? `${propertyFilter} and trashed=false`
+    : `'${folderId}' in parents and ${propertyFilter} and trashed=false`;
   const url = `${DRIVE_API}/files`
     + `?q=${encodeURIComponent(query)}`
     + '&fields=files(id,name,size,createdTime)&orderBy=createdTime desc&pageSize=100';
@@ -112,6 +130,65 @@ export async function listBackups(accessToken: string, fetchImpl?: typeof fetch)
 }
 
 /**
+ * Find or create the folder that holds this app's backups.
+ *
+ * Cached per process because every upload and every list call needs it, and creating a duplicate folder would be worse
+ * than a small inconsistency: the user would see two "Block Server Manager" folders in their Drive.
+ */
+let cachedFolderId: string | null | undefined;
+
+export const BACKUP_FOLDER_NAME = 'Block Server Manager Backups';
+
+export async function ensureBackupFolder(
+  accessToken: string,
+  fetchImpl?: typeof fetch,
+): Promise<string | null> {
+  if (cachedFolderId !== undefined) return cachedFolderId;
+
+  const doFetch = fetchImpl ?? fetch;
+  const query = `mimeType='application/vnd.google-apps.folder' and name='${BACKUP_FOLDER_NAME}' and trashed=false`;
+
+  // 1. Look for an existing folder first, so a restart reuses it instead of piling up duplicates.
+  const found = await driveJson<{ files?: { id: string }[] }>({
+    url: `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id)&pageSize=1`,
+    accessToken,
+    fetchImpl,
+  });
+  if (found.ok && (found.body?.files?.length ?? 0) > 0) {
+    cachedFolderId = found.body!.files![0].id;
+    return cachedFolderId;
+  }
+
+  // 2. Create it.
+  try {
+    const response = await doFetch(`${DRIVE_API}/files?fields=id`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json; charset=UTF-8',
+      },
+      body: JSON.stringify({
+        name: BACKUP_FOLDER_NAME,
+        mimeType: 'application/vnd.google-apps.folder',
+      }),
+    });
+    if (!response.ok) { cachedFolderId = null; return null; }
+    const json = await response.json() as { id?: string };
+    cachedFolderId = json.id ?? null;
+    return cachedFolderId;
+  } catch {
+    // Not fatal: backups still upload to the Drive root and remain findable by their app property.
+    cachedFolderId = null;
+    return null;
+  }
+}
+
+/** Test hook: forget the memoised folder id. */
+export function resetBackupFolderCacheForTest(): void {
+  cachedFolderId = undefined;
+}
+
+/**
  * Start a resumable upload session.
  *
  * Metadata (including the app property) is sent with the session creation so the resulting file is tagged atomically —
@@ -121,6 +198,8 @@ export async function createResumableSession(options: {
   accessToken: string;
   name: string;
   totalBytes: number;
+  /** Folder to file into. Omitted when the folder could not be resolved, in which case the file lands in My Drive. */
+  parentId?: string;
   fetchImpl?: typeof fetch;
 }): Promise<{ ok: boolean; sessionUri?: string; error?: string; needsReauth?: boolean }> {
   const doFetch = options.fetchImpl ?? fetch;
@@ -136,6 +215,7 @@ export async function createResumableSession(options: {
       body: JSON.stringify({
         name: options.name,
         appProperties: { [APP_PROPERTY.key]: APP_PROPERTY.value },
+        ...(options.parentId !== undefined ? { parents: [options.parentId] } : {}),
       }),
     });
     if (!response.ok) {
@@ -300,10 +380,15 @@ export async function uploadBackup(options: UploadBackupOptions): Promise<Upload
     };
   }
 
+  const folderId = await ensureBackupFolder(accessToken, options.fetchImpl);
+
   const session = await createResumableSession({
     accessToken,
     name: options.name,
     totalBytes: sizeBytes,
+    // File into the app's own folder so the user can find their backups in Drive. A null folder falls back to My
+    // Drive root, which still works and is still discoverable by the app property.
+    ...(folderId !== null ? { parentId: folderId } : {}),
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
   });
   if (!session.ok || session.sessionUri === undefined) {

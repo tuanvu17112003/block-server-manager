@@ -56,7 +56,7 @@ function formatDate(iso: string): string {
   return date.toLocaleString();
 }
 
-export default function DrivePanel({ serverId }: { serverId: string }) {
+export default function DrivePanel({ serverId, refreshKey }: { serverId: string; refreshKey?: number }) {
   const [status, setStatus] = useState<DriveStatus | null>(null);
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [busy, setBusy] = useState(false);
@@ -80,6 +80,13 @@ export default function DrivePanel({ serverId }: { serverId: string }) {
   useEffect(() => {
     if (status?.connected === true) void loadFiles();
   }, [status?.connected, loadFiles]);
+
+  // Reload when the parent reports a new upload. Without this the panel kept showing a stale list: a file uploaded from
+  // the backup row appeared in Google Drive but the panel still said "0 backups", which reads as a failed upload.
+  useEffect(() => {
+    if (refreshKey === undefined || status?.connected !== true) return;
+    void loadFiles();
+  }, [refreshKey, status?.connected, loadFiles]);
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(true);
