@@ -166,6 +166,9 @@ export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Op
       clearPipelineReview();
       setCfProjectId(meta.projectId);
       setCfProjectMeta(meta);
+      // A version chosen for the PREVIOUS project must not survive a switch to a different project: its fileId belongs to
+      // the old project and would be sent as a pin for the new one.
+      setCfSelectedVersion(null);
       setCurseforgeBrowserMessage(
         `${meta.name}: Minecraft ${meta.minecraftVersion ?? '?'} · ${meta.loader ?? '?'} · ${meta.hasServerPack ? 'server pack available (one-click)' : 'no server pack; client manifest install'}`,
       );
@@ -320,7 +323,9 @@ export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Op
     inspectCurseforgeZip,
     cancelDownload,
     clearCfProjectError: () => setCfProjectError(''),
-    resetForSourceChange: () => { setCfProjectId(null); setCfProjectMeta(null); setCfProjectError(''); },
+    // Clearing the chosen version matters as much as clearing the project: leaving it behind lets a previous project's
+    // version leak into a new create session, where it would be sent as a fileId belonging to a different project.
+    resetForSourceChange: () => { setCfProjectId(null); setCfProjectMeta(null); setCfProjectError(''); setCfSelectedVersion(null); },
     cfInstallable,
   };
 }

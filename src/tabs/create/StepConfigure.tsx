@@ -2,6 +2,7 @@
 import { Badge, Button, Card, CardTitle, Field, inputCls } from '../../components/ui';
 import type {
   CurseForgeArchiveInspection,
+  CurseForgeProjectVersionDto,
   LoaderChoiceDto,
   ModrinthInstallLoader,
   ModrinthModpackDto,
@@ -47,6 +48,15 @@ export interface StepConfigureProps {
   kind: Kind;
   title: string;
   cfInspection: CurseForgeArchiveInspection | null;
+  /**
+   * The CurseForge version the user chose, when the one-click path is in use.
+   *
+   * Separate from `cfInspection` because they describe different things: the inspection describes a locally staged ZIP,
+   * while this describes a published file selected from the API. In one-click mode there is no ZIP at all, so the panel
+   * must read its loader/MC from here — otherwise it shows the previous browse's ZIP, which is how a user who picked v2.9
+   * saw v2.9.3 on screen.
+   */
+  cfChosenVersion: CurseForgeProjectVersionDto | null;
   modrinth: ModrinthConfigureState | null;
   mockPack: Modpack | null;
   packVer: number;
@@ -75,14 +85,42 @@ export interface StepConfigureProps {
   onInstall: () => void;
 }
 
-function CurseforgeTarget({ inspection }: { inspection: CurseForgeArchiveInspection }) {
+/**
+ * What the install will actually use.
+ *
+ * Two different sources, and they must not be confused: a chosen API version (one-click project mode) or a staged ZIP
+ * (local import). Reading only the ZIP is what made a chosen v2.9 display as v2.9.3 — the stale ZIP from an earlier browse
+ * won over the user's actual choice.
+ */
+function CurseforgeTarget(props: { inspection: CurseForgeArchiveInspection | null; chosen: CurseForgeProjectVersionDto | null }) {
+  if (props.chosen !== null) {
+    return (
+      <div className="mb-3 rounded border border-zinc-800 bg-zinc-950 p-3">
+        <p className="text-sm font-medium">
+          {props.chosen.hasServerPack ? 'Selected server pack' : 'Selected client pack (manifest)'}
+        </p>
+        <p className="mt-1 text-xs text-zinc-300">
+          {props.chosen.displayName}
+          {props.chosen.minecraftVersion !== null ? ` · Minecraft ${props.chosen.minecraftVersion}` : ''}
+          {props.chosen.loader !== null ? ` · ${props.chosen.loader}` : ''}
+        </p>
+        {!props.chosen.hasServerPack && (
+          <p className="mt-1 text-xs text-amber-300">
+            This version has no server pack. Its mods are resolved from the client manifest, and client-only mods are
+            skipped — pick a version marked "server pack" if the result misbehaves.
+          </p>
+        )}
+      </div>
+    );
+  }
+  if (props.inspection === null) return null;
   return (
     <div className="mb-3 rounded border border-zinc-800 bg-zinc-950 p-3">
       <p className="text-sm font-medium">
-        {inspection.classification === 'clientExport' ? 'Detected client pack (manifest)' : 'Detected server pack'}
+        {props.inspection.classification === 'clientExport' ? 'Detected client pack (manifest)' : 'Detected server pack'}
       </p>
       <p className="mt-1 text-xs text-zinc-300">
-        Minecraft {inspection.minecraftVersion} · {inspection.loader} {inspection.loaderVersion}
+        Minecraft {props.inspection.minecraftVersion} · {props.inspection.loader} {props.inspection.loaderVersion}
       </p>
       <p className="mt-1 text-xs text-zinc-500">
         A new server folder will be created. The importer will not run scripts from the archive.
@@ -152,8 +190,8 @@ export function StepConfigure(props: StepConfigureProps) {
   return (
     <Card>
       <CardTitle>{props.title}</CardTitle>
-      {props.hasBackend && props.kind === 'curseforge' && props.cfInspection && cfInstallable(props.cfInspection) && (
-        <CurseforgeTarget inspection={props.cfInspection} />
+      {props.hasBackend && props.kind === 'curseforge' && (props.cfChosenVersion !== null || (props.cfInspection !== null && cfInstallable(props.cfInspection))) && (
+        <CurseforgeTarget inspection={props.cfInspection} chosen={props.cfChosenVersion} />
       )}
       {props.hasBackend && props.kind === 'modrinth' && mr && mr.pack && <ModrinthTarget state={mr} />}
       {props.mockPack && (
@@ -184,7 +222,21 @@ export function StepConfigure(props: StepConfigureProps) {
         <Field label="Server name (unique)">
           <input aria-label="Server name" value={props.name} onChange={(event) => props.onNameChange(event.target.value)} className={inputCls} />
         </Field>
-        {props.hasBackend && props.kind === 'curseforge' && props.cfInspection && cfInstallable(props.cfInspection) && (
+        {props.hasBackend && props.kind === 'curseforge' && props.cfChosenVersion !== null && (
+          <Field label={props.cfChosenVersion.hasServerPack ? 'Selected version (server pack)' : 'Selected version (client pack)'}>
+            <input
+              readOnly
+              // Reflects the CHOSEN version, not a stale ZIP inspection. This field is what the user reads to confirm the
+              // install will match their selection, so showing the previous browse's values here is actively misleading.
+              value={[
+                props.cfChosenVersion.minecraftVersion !== null ? `Minecraft ${props.cfChosenVersion.minecraftVersion}` : null,
+                props.cfChosenVersion.loader,
+              ].filter((part) => part !== null).join(' · ')}
+              className={`${inputCls} opacity-80`}
+            />
+          </Field>
+        )}
+        {props.hasBackend && props.kind === 'curseforge' && props.cfChosenVersion === null && props.cfInspection && cfInstallable(props.cfInspection) && (
           <Field label="Imported Minecraft version and loader">
             <input
               readOnly
