@@ -508,7 +508,13 @@ export type PipelineSourceRequest =
     }
   | { kind: 'localMrpack'; sourceId: string }
   | { kind: 'curseForgeServerZip'; zipName: string }
-  | { kind: 'curseforgeProject'; projectId: number };
+  /**
+   * A CurseForge project, optionally pinned to one published file.
+   *
+   * `fileId` carries the user's version choice from the picker. Without it the engine resolves "newest", which is wrong
+   * whenever the newest file has no server pack but an older one does.
+   */
+  | { kind: 'curseforgeProject'; projectId: number; fileId?: number };
 
 export interface CurseForgeProjectMetaDto {
   projectId: number;

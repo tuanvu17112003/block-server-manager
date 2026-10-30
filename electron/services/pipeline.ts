@@ -1,4 +1,4 @@
-﻿// Modpack pipeline — preview/install/cancel mapped to the Rust DTO contract (src/tauri.ts).
+// Modpack pipeline — preview/install/cancel mapped to the Rust DTO contract (src/tauri.ts).
 // Preview = resolve + plan (no install); install = staged engine run (atomic publish, complete-or-
 // nothing) with the durable report + sidecar. Phase 4 (WP-4.2/4.5/4.6/4.8):
 //  - L1/L4 file decisions: optional files are included by default (`optionalDefaultKeep`); only
@@ -38,7 +38,16 @@ export type PipelineSourceRequest =
   | { kind: 'modrinthRemote'; projectId: string; versionId: string; loader?: PipelineLoaderPin; javaPath?: string }
   | { kind: 'localMrpack'; sourceId: string }
   | { kind: 'curseForgeServerZip'; zipName: string }
-  | { kind: 'curseforgeProject'; projectId: number }
+  /**
+   * A CurseForge project, optionally pinned to one published file.
+   *
+   * `fileId` exists because the version is a real choice, not a detail. Authors publish an optional server pack beside a
+   * client pack and the project's newest file frequently has none, so "latest" can install a client manifest — pulling
+   * client-only mods onto a server — when a perfectly good server pack exists on an older version. Omitting `fileId`
+   * keeps the previous behaviour (newest file, with serverPackFileId when present) for callers that have no choice to
+   * express.
+   */
+  | { kind: 'curseforgeProject'; projectId: number; fileId?: number }
   // ---- P1b: format-agnostic inputs, resolved by the pack adapter layer ----
   /** An FTB pack resolved from the public API (no key). `versionId` omitted ⇒ latest. */
   | { kind: 'ftbProject'; packId: number; versionId?: number }
@@ -956,8 +965,12 @@ export class Pipeline {
               ? path.join(this.ctx.dataRoot, 'curseforge-import', held.source.zipName)
               : undefined);
             const projectId = held.source.kind === 'curseforgeProject' ? Number(held.source.projectId) : undefined;
+            const fileId = held.source.kind === 'curseforgeProject' ? held.source.fileId : undefined;
             const res = await installCurseforge({
               zipPath, projectId, dir: stagingDir, dataRoot: this.ctx.dataRoot, cacheDir: this.cacheDir(), onProgress, signal,
+              // The user's chosen version, when the flow offered one. Passed through so the engine downloads THAT file
+              // rather than re-deriving "newest", which is what made the version control cosmetic.
+              ...(fileId !== undefined ? { fileId } : {}),
               // The preview already resolved exact metadata (API key mode / archive inference); hand it
               // to the engine so a bare ServerPackCreator archive is not rejected for lacking its own.
               knownLoader: (held.loader.kind || null) as never,

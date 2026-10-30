@@ -469,6 +469,14 @@ export function packShipsRunnableServer(dir: string): boolean {
 
 export interface InstallCfOpts extends Cancelable {
   projectId?: number; zipPath?: string; dir: string; dataRoot: string; cacheDir: string;
+  /**
+   * A specific published file to install, from the version picker.
+   *
+   * When present the engine downloads exactly this file instead of resolving "newest". It must still prefer that file's
+   * server pack: a version chosen for its server pack is useless if the engine than fetches the client pack of the same
+   * version and resolves its manifest.
+   */
+  fileId?: number;
   onProgress?: (p: { stage: string; pct?: number }) => void;
   /** Metadata already resolved from the official API (the archive itself may carry none). */
   knownLoader?: LoaderKind | null;
@@ -508,14 +516,28 @@ export async function installCurseforge(o: InstallCfOpts): Promise<InstallCfResu
   const result: InstallCfResult = { route: 'A', installed: 0, skippedClientOnly: 0, skippedOptional: 0, manuallyRequired: [], warnings: [], loader: null, loaderVersion: null, mc: null };
   let clientZip = o.zipPath ?? null;
 
-  // key mode one-click: latest file → serverPackFileId → CDN zip (route A)
+  // Key-mode download. When the caller supplied a fileId, THAT file is resolved; otherwise the newest file is used.
+  //
+  // This is the difference between a version control that works and one that is cosmetic. Choosing a version in the UI and
+  // then having the engine re-derive "newest" would install a different pack than the one on screen — and the whole reason
+  // the picker exists is that the newest file often has no server pack while an older one does.
   if (!clientZip && o.projectId && cfKey(o.dataRoot)) {
     try {
-      const list = await official(o.dataRoot, `/mods/${o.projectId}/files?pageSize=1&index=0`, { signal }) as { data?: CfFileMeta[] } | null;
-      const latest = list?.data?.[0];
-      if (latest) {
-        const f = await official(o.dataRoot, `/mods/${o.projectId}/files/${latest.id}`, { signal }) as { data?: CfFileMeta } | null;
-        const sp = f?.data?.serverPackFileId;
+      const chosen = o.fileId !== undefined
+        ? await official(o.dataRoot, `/mods/${o.projectId}/files/${o.fileId}`, { signal }) as { data?: CfFileMeta } | null
+        : null;
+      let file: CfFileMeta | undefined = chosen?.data;
+      if (file === undefined) {
+        if (o.fileId !== undefined) {
+          throw new Error(`the chosen version (file ${o.fileId}) could not be read from CurseForge`);
+        }
+        const list = await official(o.dataRoot, `/mods/${o.projectId}/files?pageSize=1&index=0`, { signal }) as { data?: CfFileMeta[] } | null;
+        file = list?.data?.[0];
+      }
+      if (file) {
+        // Prefer the server pack for the SAME version. A user who picked a version for its server pack must not receive the
+        // client pack of that version instead.
+        const sp = file.serverPackFileId;
         if (sp) {
           const du = await official(o.dataRoot, `/mods/${o.projectId}/files/${sp}/download-url`, { signal }) as { data?: unknown } | null;
           const url = typeof du?.data === 'string' ? du.data : (du?.data as { downloadUrl?: string } | undefined)?.downloadUrl;
@@ -528,7 +550,20 @@ export async function installCurseforge(o: InstallCfOpts): Promise<InstallCfResu
             clientZip = dest;
             log(`[curseforge] key mode: server pack "${meta?.data?.displayName}" via serverPackFileId`);
           }
-        } else log('[curseforge] key mode: no serverPackFileId — falling back to client pack');
+        } else {
+          log(
+            o.fileId !== undefined
+              ? `[curseforge] key mode: chosen file ${o.fileId} has no server pack — downloading it directly`
+              : '[curseforge] key mode: no serverPackFileId — falling back to client pack',
+          );
+          // A chosen file with no server pack is still a legitimate install (the user saw "client pack only"). Download the
+          // chosen file itself rather than silently switching to another version's server pack.
+          if (o.fileId !== undefined) {
+            const dest = path.join(o.cacheDir, 'cfpack', `${o.projectId}-${o.fileId}.zip`);
+            await downloadFile(o.projectId, o.fileId, dest, { size: file.fileLength, fileName: file.fileName, signal });
+            clientZip = dest;
+          }
+        }
       }
     } catch (e) {
       if (signal?.aborted) throw e;
@@ -537,12 +572,18 @@ export async function installCurseforge(o: InstallCfOpts): Promise<InstallCfResu
   }
 
   if (!clientZip && o.projectId) {
-    const r = await fetchTrusted(`${BASE}/mods/${o.projectId}/files?pageSize=1&index=0`, CURSEFORGE_ALLOWED_HOSTS, {
+    // Keyless fallback. It honours fileId too: the keyless CDN route can fetch a specific file id, and ignoring the
+    // user's choice here would make the picker behave differently depending on whether an API key happens to be saved.
+    const targetId = o.fileId;
+    const fileUrl = targetId !== undefined
+      ? `${BASE}/mods/${o.projectId}/files/${targetId}`
+      : `${BASE}/mods/${o.projectId}/files?pageSize=1&index=0`;
+    const r = await fetchTrusted(fileUrl, CURSEFORGE_ALLOWED_HOSTS, {
       signal, headers: { 'User-Agent': UA, Accept: 'application/json' },
     });
     if (!r.ok) throw new Error(`cf files HTTP ${r.status}`);
-    const j = await r.json() as { data: CfFileMeta[] };
-    const latest = j.data[0];
+    const j = await r.json() as { data: CfFileMeta | CfFileMeta[] };
+    const latest = Array.isArray(j.data) ? j.data[0] : j.data;
     if (!latest) throw new Error('no files');
     clientZip = path.join(o.cacheDir, 'cfpack', `${o.projectId}-${latest.id}.zip`);
     await downloadFile(o.projectId, latest.id, clientZip, { size: latest.fileLength, fileName: latest.fileName, signal });

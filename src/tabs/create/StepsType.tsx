@@ -80,7 +80,15 @@ export function StepsType(props: StepsTypeContainerProps) {
       cfSearchResult={curseforge.cfSearchResult}
       cfResolvingId={curseforge.cfResolvingId}
       onSearchPacks={(loadMore) => { void curseforge.searchCurseforgeModpacks(loadMore); }}
-      onPickSearchedPack={(projectId) => { void curseforge.pickSearchedCurseforgeModpack(projectId).then((ok) => { if (ok) setStep(3); }); }}
+      onPickSearchedPack={(projectId) => {
+        // Land on Browse, not Configure.
+        //
+        // "Use pack" used to jump straight to step 3, which skipped version selection entirely — the user was configured
+        // with whatever the installer happened to pick, had to press Back to change it, and Back only returned to Browse
+        // because the picker lives there. Browsing is also where the version list is meaningful, so resolving the project
+        // and then moving to Browse puts the choice in front of the user instead of behind them.
+        void curseforge.pickSearchedCurseforgeModpack(projectId).then((ok) => { if (ok) setStep(2); });
+      }}
       onContinueToConfigure={() => { if (curseforge.cfProjectId !== null) setStep(3); }}
       onPickMockKind={(picked) => {
         pipeline.clearPipelineReview();

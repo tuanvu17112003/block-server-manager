@@ -19,7 +19,15 @@ export interface CurseForgeVersionPickerProps {
   /** Currently chosen file id, so the picker survives a re-render. */
   selectedFileId: number | null;
   onChoose: (version: CurseForgeProjectVersionDto) => void;
-  /** Callback for the surfaces that can only proceed once a version is chosen. */
+  /**
+   * Advance to the next step once a version is chosen.
+   *
+   * The picker owned no way forward before, so choosing a version did nothing visible: the selection highlighted and the
+   * wizard stayed put with no Next button anywhere on the panel. Continuing from the same panel the choice was made on is
+   * the obvious behaviour, so the button belongs here rather than only on the ZIP list below.
+   */
+  onContinue?: () => void;
+  /** Called when the user backs out of version selection. */
   onCancel?: () => void;
 }
 
@@ -128,11 +136,25 @@ export function CurseForgeVersionPicker(props: CurseForgeVersionPickerProps) {
           );
         })}
       </ul>
-      {props.onCancel !== undefined && (
-        <div className="mt-2">
-          <Button size="sm" variant="ghost" onClick={props.onCancel}>Cancel</Button>
+      {props.onCancel !== undefined || props.onContinue !== undefined ? (
+        <div className="mt-2 flex items-center gap-2">
+          {props.onCancel !== undefined && (
+            <Button size="sm" variant="ghost" onClick={props.onCancel}>Cancel</Button>
+          )}
+          {props.onContinue !== undefined && (
+            <Button
+              size="sm"
+              className="ml-auto"
+              // Disabled until a version is chosen: proceeding without one would silently fall back to "newest", which is
+              // the exact behaviour this picker exists to replace.
+              disabled={props.selectedFileId === null}
+              onClick={props.onContinue}
+            >
+              Continue to Configure →
+            </Button>
+          )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

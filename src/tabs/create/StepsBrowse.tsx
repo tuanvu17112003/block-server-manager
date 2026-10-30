@@ -52,6 +52,10 @@ export function StepsBrowse(props: StepsBrowseProps) {
                 project={curseforge.cfProjectId}
                 selectedFileId={curseforge.cfSelectedVersion?.fileId ?? null}
                 onChoose={(version) => { curseforge.setCfSelectedVersion(version); }}
+                onContinue={() => {
+                  // Only meaningful once a version is chosen; the picker disables the button until then.
+                  if (curseforge.cfSelectedVersion !== null) setStep(3);
+                }}
               />
             </div>
           )}
