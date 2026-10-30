@@ -20,6 +20,8 @@ import {
 } from './gdrive-auth';
 import {
   deleteFile,
+  downloadBackup,
+  getFileMetadata,
   driveNameFor,
   getQuota,
   listBackups,
@@ -201,16 +203,24 @@ export async function driveStatus(dataRoot: string): Promise<DriveStatus> {
   };
 }
 
-export async function driveListBackups(dataRoot: string): Promise<{ ok: boolean; files?: DriveFile[]; error?: string }> {
+export async function driveListBackups(
+  dataRoot: string,
+  serverId: string,
+): Promise<{ ok: boolean; files?: DriveFile[]; error?: string }> {
   const auth = await validAccessToken(dataRoot);
   if (!auth.ok) return { ok: false, error: auth.error };
-  return { ok: true, files: await listBackups(auth.tokens.accessToken) };
+  // Scoped to the server: without this every server's panel listed every other server's backups, which is not merely
+  // untidy — it offers "restore this world" against a backup of a different world.
+  return { ok: true, files: await listBackups(auth.tokens.accessToken, { serverId }) };
 }
 
 export async function driveUploadBackup(options: {
   dataRoot: string;
+  serverId: string;
   serverName: string;
   backupName: string;
+  /** Local backup record id, recorded on the file so a restore can match it back. */
+  backupId?: string;
   filePath: string;
   onProgress?: (percent: number) => void;
 }): Promise<{ ok: boolean; file?: DriveFile; error?: string; needsReauth?: boolean }> {
@@ -225,6 +235,9 @@ export async function driveUploadBackup(options: {
     client: auth.client,
     filePath: options.filePath,
     name: driveNameFor(options.serverName, options.backupName),
+    serverId: options.serverId,
+    serverName: options.serverName,
+    ...(options.backupId !== undefined ? { backupId: options.backupId } : {}),
     ...(options.onProgress ? { onProgress: options.onProgress } : {}),
   });
 }
@@ -233,6 +246,46 @@ export async function driveDeleteBackup(dataRoot: string, fileId: string): Promi
   const auth = await validAccessToken(dataRoot);
   if (!auth.ok) return { ok: false, error: auth.error };
   return deleteFile(auth.tokens.accessToken, fileId);
+}
+
+/**
+ * Restore a backup that exists only in Drive.
+ *
+ * The path this unlocks: the local ZIP is gone — deleted by retention, lost with the machine, or the whole app data
+ * folder was rebuilt — and the only surviving copy is remote. Without this the Drive copies were write-only, which makes
+ * the backup feature decorative rather than protective.
+ *
+ * Downloads into the app's own backup staging directory, verifies the byte count, then hands the file to the SAME
+ * restore routine a local backup uses. Reusing `restore` matters: it takes a pre-restore safety snapshot, refuses to run
+ * against a live server, and handles the in-place/reset distinction — none of which should be reimplemented for the
+ * remote path, and all of which the user already trusts.
+ */
+export async function driveRestoreBackup(options: {
+  dataRoot: string;
+  fileId: string;
+  /** Directory to download into. Caller supplies the app's backup folder so the result is a normal local backup. */
+  downloadDir: string;
+  /** Local filename to use once downloaded. */
+  fileName: string;
+  onProgress?: (percent: number) => void;
+}): Promise<{ ok: boolean; path?: string; error?: string; needsReauth?: boolean }> {
+  const auth = await validAccessToken(options.dataRoot);
+  if (!auth.ok) return { ok: false, error: auth.error, ...(auth.needsReauth ? { needsReauth: true } : {}) };
+
+  const meta = await getFileMetadata({ accessToken: auth.tokens.accessToken, fileId: options.fileId });
+  if (!meta.ok) return { ok: false, error: meta.error ?? 'Could not read the remote backup.' };
+
+  const destination = path.join(options.downloadDir, options.fileName);
+  const result = await downloadBackup({
+    accessToken: auth.tokens.accessToken,
+    fileId: options.fileId,
+    destinationPath: destination,
+    ...(meta.sizeBytes !== undefined ? { expectedBytes: meta.sizeBytes } : {}),
+    ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+  });
+  if (!result.ok) return result;
+  log(`[gdrive] downloaded remote backup ${options.fileId} to ${destination}`);
+  return result;
 }
 
 /**
@@ -249,7 +302,7 @@ export async function driveDeleteBackup(dataRoot: string, fileId: string): Promi
  */
 export async function mirrorBackupToDrive(
   dataRoot: string,
-  record: { serverId: string; name: string; path: string },
+  record: { id: string; serverId: string; name: string; path: string },
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string; fileId?: string }> {
   if (!driveConfigured(dataRoot)) return { ok: false, skipped: true, error: 'Google Drive is not configured.' };
   if (loadTokens(dataRoot) === null) return { ok: false, skipped: true, error: 'Google Drive is not connected.' };
@@ -266,8 +319,10 @@ export async function mirrorBackupToDrive(
   try {
     const result = await driveUploadBackup({
       dataRoot,
+      serverId: record.serverId,
       serverName,
       backupName: record.name,
+      backupId: record.id,
       filePath: record.path,
     });
     if (!result.ok) return { ok: false, error: result.error ?? 'Upload failed.' };

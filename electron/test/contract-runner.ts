@@ -39,6 +39,13 @@ export const RENDERER_COMMANDS = [
   'curseforge_search_modpacks',
   'diagnostics_bundle',
   'diagnostics_recent',
+  'gdrive_connect',
+  'gdrive_delete_backup',
+  'gdrive_disconnect',
+  'gdrive_list_backups',
+  'gdrive_restore_backup',
+  'gdrive_status',
+  'gdrive_upload_backup',
   'java_detect',
   'java_ensure',
   'java_validate',
@@ -79,6 +86,10 @@ export const RENDERER_COMMANDS = [
   'storage_pick_folder',
   'storage_set',
   'system_disk',
+  'update_check',
+  'update_download',
+  'update_install',
+  'update_state',
   'versions_paper',
   'versions_vanilla',
   'world_activate',
@@ -88,16 +99,6 @@ export const RENDERER_COMMANDS = [
   'world_export',
   'world_import',
   'worlds_list',
-  'gdrive_connect',
-  'gdrive_delete_backup',
-  'gdrive_disconnect',
-  'gdrive_list_backups',
-  'gdrive_status',
-  'gdrive_upload_backup',
-  'update_check',
-  'update_download',
-  'update_install',
-  'update_state',
 ] as const;
 
 export interface SuiteResult {
@@ -162,7 +163,7 @@ export async function runContractTests(ctx: IpcContext, filter?: string): Promis
         const shared = readSharedCommands();
         const missing = RENDERER_COMMANDS.filter((name) => typeof merged[name] !== 'function');
         assert.deepEqual(missing, []);
-        assert.equal(RENDERER_COMMANDS.length, 86);
+        assert.equal(RENDERER_COMMANDS.length, 87);
         assert.equal(RENDERER_COMMANDS.length, shared.length);
       });
       await run.must('unknown command is not registered', async () => {
@@ -170,7 +171,7 @@ export async function runContractTests(ctx: IpcContext, filter?: string): Promis
       });
       await run.must('shared/contracts.ts COMMANDS equals the renderer command list (WP-7.1)', async () => {
         const shared = readSharedCommands();
-        assert.equal(shared.length, 86);
+        assert.equal(shared.length, 87);
         assert.equal(new Set(shared).size, shared.length, 'COMMANDS must not repeat a name');
         assert.deepEqual([...shared].sort(), [...RENDERER_COMMANDS].sort());
       });

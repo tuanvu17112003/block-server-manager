@@ -56,7 +56,12 @@ function formatDate(iso: string): string {
   return date.toLocaleString();
 }
 
-export default function DrivePanel({ serverId, refreshKey }: { serverId: string; refreshKey?: number }) {
+export default function DrivePanel({ serverId, refreshKey, onDownloaded }: {
+  serverId: string;
+  refreshKey?: number;
+  /** Called after a Drive backup is downloaded locally, so the parent can reload its backup list. */
+  onDownloaded?: () => void;
+}) {
   const [status, setStatus] = useState<DriveStatus | null>(null);
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [busy, setBusy] = useState(false);
@@ -69,9 +74,12 @@ export default function DrivePanel({ serverId, refreshKey }: { serverId: string;
   }, []);
 
   const loadFiles = useCallback(async () => {
-    const result = await bridge?.invoke('gdrive_list_backups') as { ok: boolean; files?: DriveFile[]; error?: string } | undefined;
+    // Scoped to this server: an unscoped list showed every server's backups in every panel, which offered "restore this
+    // world" against a backup of a completely different world.
+    const result = await bridge?.invoke('gdrive_list_backups', { serverId }) as
+      { ok: boolean; files?: DriveFile[]; error?: string } | undefined;
     if (result?.ok === true && result.files !== undefined) setFiles(result.files);
-  }, []);
+  }, [serverId]);
 
   useEffect(() => {
     void loadStatus();
@@ -120,6 +128,20 @@ export default function DrivePanel({ serverId, refreshKey }: { serverId: string;
     await bridge?.invoke('gdrive_delete_backup', { fileId: file.id });
     setNotice(`Deleted "${file.name}" from Google Drive.`);
     await loadFiles();
+  });
+
+  /**
+   * Pull a Drive backup back down and register it as a local backup.
+   *
+   * This is the recovery path: the local ZIP is gone (deleted by retention, lost with the machine), and the only
+   * surviving copy is in Drive. The command downloads and records it, then the user restores from the normal list — so
+   * there is one restore implementation, not a second, subtly different one for the remote case.
+   */
+  const restoreFromDrive = (file: DriveFile) => run('restore', async () => {
+    const record = await bridge?.invoke('gdrive_restore_backup', { fileId: file.id, serverId }) as { id?: string } | undefined;
+    if (record?.id === undefined) throw new Error('The backup was downloaded but not registered.');
+    setNotice(`Downloaded "${file.name}". It is now in the Backups list above — use Restore there.`);
+    onDownloaded?.();
   });
 
   if (status === null) {

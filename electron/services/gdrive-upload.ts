@@ -25,11 +25,30 @@ const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
 /** App-specific marker so a future cleanup can never touch a file it did not create. */
 export const APP_PROPERTY = { key: 'bsmKind', value: 'server-backup' } as const;
 
+/**
+ * Property carrying the owning server on every uploaded file.
+ *
+ * This exists because the first version filtered only by "is this a backup", so every server's panel listed every other
+ * server's backups — a real report from a two-server account. The server identity has to travel with the file, not be
+ * inferred from where it lives, because a file can be moved or re-filed in Drive and its folder is then a lie.
+ */
+export const SERVER_PROPERTY_KEY = 'bsmServerId';
+
+/** Property carrying the local backup id, so a restore can match a Drive file to the record it came from. */
+export const BACKUP_PROPERTY_KEY = 'bsmBackupId';
+
+/** Property carrying the server name as it was when uploaded, for display without a second lookup. */
+export const SERVER_NAME_PROPERTY_KEY = 'bsmServerName';
+
 export interface DriveFile {
   id: string;
   name: string;
   sizeBytes: number;
   createdAt: string;
+  /** Server this backup belongs to, read back from the app property. Empty for files uploaded by an older build. */
+  serverId?: string;
+  /** Local backup id, when recorded. Lets a restore match a Drive file to the record it came from. */
+  backupId?: string;
 }
 
 export interface QuotaInfo {
@@ -106,86 +125,163 @@ export async function getQuota(accessToken: string, fetchImpl?: typeof fetch): P
  *     what a user expects to find — "where are my backups?" should have an answer — and it lets cleanup reason about
  *     one container instead of scanning the whole Drive.
  */
-export async function listBackups(accessToken: string, fetchImpl?: typeof fetch): Promise<DriveFile[]> {
-  const folderId = await ensureBackupFolder(accessToken, fetchImpl);
-  // When the folder cannot be resolved the property filter alone still finds every backup this app made, so the list
-  // degrades to correct-but-unfiled rather than empty.
+export async function listBackups(
+  accessToken: string,
+  options: { serverId?: string; fetchImpl?: typeof fetch } = {},
+): Promise<DriveFile[]> {
   const propertyFilter = `appProperties has { key='${APP_PROPERTY.key}' and value='${APP_PROPERTY.value}' }`;
+
+  // Scope by server when asked. This is the fix for the reported defect: without it every server's panel listed every
+  // other server's backups, so "restore this world" could offer a backup of a completely different world.
+  const serverFilter = options.serverId !== undefined && options.serverId !== ''
+    ? ` and appProperties has { key='${SERVER_PROPERTY_KEY}' and value='${options.serverId.replace(/'/g, "\\'")}' }`
+    : '';
+
+  // Narrow to the server's own folder when it is known: fewer files scanned, and the query stays correct even if a
+  // property is missing on an older upload (the property filter is still applied, so nothing foreign can leak in).
+  const folderId = options.serverId !== undefined && options.serverId !== ''
+    ? await ensureServerFolder({
+      accessToken,
+      serverName: 'server',
+      serverId: options.serverId,
+      ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+    })
+    : await ensureBackupRootFolder(accessToken, options.fetchImpl);
+
   const query = folderId === null
-    ? `${propertyFilter} and trashed=false`
-    : `'${folderId}' in parents and ${propertyFilter} and trashed=false`;
+    ? `${propertyFilter}${serverFilter} and trashed=false`
+    : `'${folderId}' in parents and ${propertyFilter}${serverFilter} and trashed=false`;
+
   const url = `${DRIVE_API}/files`
     + `?q=${encodeURIComponent(query)}`
-    + '&fields=files(id,name,size,createdTime)&orderBy=createdTime desc&pageSize=100';
-  const result = await driveJson<{ files?: { id: string; name: string; size?: string; createdTime?: string }[] }>({
-    url, accessToken, fetchImpl,
-  });
+    + '&fields=files(id,name,size,createdTime,appProperties)&orderBy=createdTime desc&pageSize=200';
+  const result = await driveJson<{
+    files?: { id: string; name: string; size?: string; createdTime?: string; appProperties?: Record<string, string> }[];
+  }>({ url, accessToken, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) });
   if (!result.ok || result.body?.files === undefined) return [];
   return result.body.files.map((file) => ({
     id: file.id,
     name: file.name,
     sizeBytes: Number(file.size ?? '0'),
     createdAt: file.createdTime ?? '',
+    ...(file.appProperties?.[SERVER_PROPERTY_KEY] !== undefined
+      ? { serverId: file.appProperties[SERVER_PROPERTY_KEY] } : {}),
+    ...(file.appProperties?.[BACKUP_PROPERTY_KEY] !== undefined
+      ? { backupId: file.appProperties[BACKUP_PROPERTY_KEY] } : {}),
   }));
 }
 
 /**
- * Find or create the folder that holds this app's backups.
+ * Folder layout.
  *
- * Cached per process because every upload and every list call needs it, and creating a duplicate folder would be worse
- * than a small inconsistency: the user would see two "Block Server Manager" folders in their Drive.
+ *   Block Server Manager Backups/        ← one root for the app
+ *     <server name>-<id prefix>/         ← one folder per server
+ *       <server>__<backup>.zip
+ *
+ * A flat folder containing every server's backups was the first design and it was wrong: with two servers the list is
+ * ambiguous, a user cannot tell which backup belongs to which world, and there is no safe way to delete "the backups of
+ * the server I just removed". One folder per server makes the answer visible in Drive itself, not just in the app.
+ *
+ * The server id prefix is part of the name because server names are user-editable and two servers may share a name; the
+ * id prefix keeps the folder addressable even after a rename.
  */
-let cachedFolderId: string | null | undefined;
+export const BACKUP_ROOT_FOLDER_NAME = 'Block Server Manager Backups';
 
-export const BACKUP_FOLDER_NAME = 'Block Server Manager Backups';
+/** Deterministic, Drive-safe folder name for one server. */
+export function serverFolderName(serverName: string, serverId: string): string {
+  const safeName = serverName.replace(/[\\/:*?"<>|']/g, '_').trim() || 'server';
+  const idPart = serverId.replace(/[^A-Za-z0-9]/g, '').slice(0, 8) || 'unknown';
+  return `${safeName}-${idPart}`;
+}
 
-export async function ensureBackupFolder(
-  accessToken: string,
-  fetchImpl?: typeof fetch,
-): Promise<string | null> {
-  if (cachedFolderId !== undefined) return cachedFolderId;
+interface FolderCacheEntry { root?: string | null; servers: Map<string, string | null> }
 
-  const doFetch = fetchImpl ?? fetch;
-  const query = `mimeType='application/vnd.google-apps.folder' and name='${BACKUP_FOLDER_NAME}' and trashed=false`;
+const folderCache: FolderCacheEntry = { servers: new Map() };
 
-  // 1. Look for an existing folder first, so a restart reuses it instead of piling up duplicates.
+/** Find or create one folder by name under an optional parent. Returns null when it cannot be resolved. */
+async function findOrCreateFolder(options: {
+  accessToken: string;
+  name: string;
+  parentId?: string | null;
+  fetchImpl?: typeof fetch;
+}): Promise<string | null> {
+  const doFetch = options.fetchImpl ?? fetch;
+  const parentClause = options.parentId !== undefined && options.parentId !== null
+    ? ` and '${options.parentId}' in parents`
+    : '';
+  const query = `mimeType='application/vnd.google-apps.folder' and name='${options.name}'${parentClause} and trashed=false`;
+
   const found = await driveJson<{ files?: { id: string }[] }>({
     url: `${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id)&pageSize=1`,
-    accessToken,
-    fetchImpl,
+    accessToken: options.accessToken,
+    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
   });
-  if (found.ok && (found.body?.files?.length ?? 0) > 0) {
-    cachedFolderId = found.body!.files![0].id;
-    return cachedFolderId;
-  }
+  if (found.ok && (found.body?.files?.length ?? 0) > 0) return found.body!.files![0].id;
 
-  // 2. Create it.
   try {
     const response = await doFetch(`${DRIVE_API}/files?fields=id`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${options.accessToken}`,
         'Content-Type': 'application/json; charset=UTF-8',
       },
       body: JSON.stringify({
-        name: BACKUP_FOLDER_NAME,
+        name: options.name,
         mimeType: 'application/vnd.google-apps.folder',
+        ...(options.parentId !== undefined && options.parentId !== null ? { parents: [options.parentId] } : {}),
       }),
     });
-    if (!response.ok) { cachedFolderId = null; return null; }
+    if (!response.ok) return null;
     const json = await response.json() as { id?: string };
-    cachedFolderId = json.id ?? null;
-    return cachedFolderId;
+    return json.id ?? null;
   } catch {
-    // Not fatal: backups still upload to the Drive root and remain findable by their app property.
-    cachedFolderId = null;
     return null;
   }
 }
 
-/** Test hook: forget the memoised folder id. */
+/** Root folder holding every server folder. Cached per process. */
+export async function ensureBackupRootFolder(
+  accessToken: string,
+  fetchImpl?: typeof fetch,
+): Promise<string | null> {
+  if (folderCache.root !== undefined) return folderCache.root;
+  folderCache.root = await findOrCreateFolder({
+    accessToken,
+    name: BACKUP_ROOT_FOLDER_NAME,
+    ...(fetchImpl ? { fetchImpl } : {}),
+  });
+  return folderCache.root;
+}
+
+/**
+ * Per-server folder. Falls back to the root when a server folder cannot be created, so an upload still succeeds rather
+ * than failing because of a folder permission quirk.
+ */
+export async function ensureServerFolder(options: {
+  accessToken: string;
+  serverName: string;
+  serverId: string;
+  fetchImpl?: typeof fetch;
+}): Promise<string | null> {
+  const cached = folderCache.servers.get(options.serverId);
+  if (cached !== undefined) return cached;
+
+  const root = await ensureBackupRootFolder(options.accessToken, options.fetchImpl);
+  const folder = await findOrCreateFolder({
+    accessToken: options.accessToken,
+    name: serverFolderName(options.serverName, options.serverId),
+    parentId: root,
+    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+  });
+  const resolved = folder ?? root;
+  folderCache.servers.set(options.serverId, resolved);
+  return resolved;
+}
+
+/** Test hook: forget memoised folder ids. */
 export function resetBackupFolderCacheForTest(): void {
-  cachedFolderId = undefined;
+  folderCache.root = undefined;
+  folderCache.servers.clear();
 }
 
 /**
@@ -200,6 +296,11 @@ export async function createResumableSession(options: {
   totalBytes: number;
   /** Folder to file into. Omitted when the folder could not be resolved, in which case the file lands in My Drive. */
   parentId?: string;
+  /** Owning server, recorded on the file so a list can be scoped to it regardless of folder. */
+  serverId?: string;
+  serverName?: string;
+  /** Local backup id, recorded so a Drive file can be matched to the record it came from. */
+  backupId?: string;
   fetchImpl?: typeof fetch;
 }): Promise<{ ok: boolean; sessionUri?: string; error?: string; needsReauth?: boolean }> {
   const doFetch = options.fetchImpl ?? fetch;
@@ -214,7 +315,14 @@ export async function createResumableSession(options: {
       },
       body: JSON.stringify({
         name: options.name,
-        appProperties: { [APP_PROPERTY.key]: APP_PROPERTY.value },
+        appProperties: {
+          [APP_PROPERTY.key]: APP_PROPERTY.value,
+          // The owning server travels with the file. This is what makes a per-server list correct even if the file is
+          // moved between folders in Drive by the user.
+          ...(options.serverId !== undefined ? { [SERVER_PROPERTY_KEY]: options.serverId } : {}),
+          ...(options.serverName !== undefined ? { [SERVER_NAME_PROPERTY_KEY]: options.serverName } : {}),
+          ...(options.backupId !== undefined ? { [BACKUP_PROPERTY_KEY]: options.backupId } : {}),
+        },
         ...(options.parentId !== undefined ? { parents: [options.parentId] } : {}),
       }),
     });
@@ -344,6 +452,11 @@ export interface UploadBackupOptions {
   client: OAuthClient;
   filePath: string;
   name: string;
+  /** Server that owns this backup. Required for a correct per-server list. */
+  serverId: string;
+  serverName: string;
+  /** Local backup record id, recorded on the file so it can be matched back. */
+  backupId?: string;
   onProgress?: (percent: number) => void;
   fetchImpl?: typeof fetch;
 }
@@ -380,14 +493,21 @@ export async function uploadBackup(options: UploadBackupOptions): Promise<Upload
     };
   }
 
-  const folderId = await ensureBackupFolder(accessToken, options.fetchImpl);
+  // Per-server folder, so the Drive itself shows which world a backup belongs to.
+  const folderId = await ensureServerFolder({
+    accessToken,
+    serverName: options.serverName,
+    serverId: options.serverId,
+    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+  });
 
   const session = await createResumableSession({
     accessToken,
     name: options.name,
     totalBytes: sizeBytes,
-    // File into the app's own folder so the user can find their backups in Drive. A null folder falls back to My
-    // Drive root, which still works and is still discoverable by the app property.
+    serverId: options.serverId,
+    serverName: options.serverName,
+    ...(options.backupId !== undefined ? { backupId: options.backupId } : {}),
     ...(folderId !== null ? { parentId: folderId } : {}),
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
   });
@@ -441,4 +561,99 @@ export function fileSha256(filePath: string): string {
     fs.closeSync(handle);
   }
   return hash.digest('hex');
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Download (the half that makes a backup worth having)
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * Download a backup from Drive to a local path.
+ *
+ * This is what makes the feature a backup rather than an upload. Until now, losing the local ZIP meant losing the backup
+ * entirely — the copy in Drive could be seen but not used, which defeats the point. A backup you cannot restore from is
+ * a screenshot of a backup.
+ *
+ * Written to a `.part` file and renamed only on success, so an interrupted download can never be mistaken for a complete
+ * archive by the restore path. Drive reports the size; a mismatch is treated as a failure rather than truncated data,
+ * because a corrupt archive that looks valid is more dangerous than a missing one.
+ */
+export async function downloadBackup(options: {
+  accessToken: string;
+  fileId: string;
+  destinationPath: string;
+  expectedBytes?: number;
+  onProgress?: (percent: number) => void;
+  fetchImpl?: typeof fetch;
+}): Promise<{ ok: boolean; path?: string; error?: string; needsReauth?: boolean }> {
+  const doFetch = options.fetchImpl ?? fetch;
+  const partial = `${options.destinationPath}.part`;
+
+  try {
+    const response = await doFetch(
+      `${DRIVE_API}/files/${encodeURIComponent(options.fileId)}?alt=media`,
+      { headers: { Authorization: `Bearer ${options.accessToken}` } },
+    );
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: `Could not download the backup (${response.status})`,
+        needsReauth: response.status === 401 || response.status === 403,
+      };
+    }
+    if (response.body === null) return { ok: false, error: 'Google returned an empty response body.' };
+
+    fs.mkdirSync(path.dirname(options.destinationPath), { recursive: true });
+    const out = fs.createWriteStream(partial);
+    const reader = response.body.getReader();
+    let written = 0;
+    const expected = options.expectedBytes ?? 0;
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value === undefined) continue;
+      written += value.byteLength;
+      if (!out.write(Buffer.from(value))) {
+        await new Promise<void>((resolve) => out.once('drain', resolve));
+      }
+      if (expected > 0) options.onProgress?.(Math.min(99, Math.round((written / expected) * 100)));
+    }
+    await new Promise<void>((resolve, reject) => {
+      out.end(() => resolve());
+      out.on('error', reject);
+    });
+
+    // A truncated download renamed into place would be a corrupt archive that only fails at restore time.
+    if (expected > 0 && written !== expected) {
+      try { fs.rmSync(partial, { force: true }); } catch { /* ignore */ }
+      return { ok: false, error: `Download incomplete: received ${formatBytes(written)} of ${formatBytes(expected)}.` };
+    }
+
+    fs.renameSync(partial, options.destinationPath);
+    options.onProgress?.(100);
+    return { ok: true, path: options.destinationPath };
+  } catch (error) {
+    try { fs.rmSync(partial, { force: true }); } catch { /* ignore */ }
+    return { ok: false, error: (error as Error).message };
+  }
+}
+
+/** Fetch a Drive file's metadata, used to size a download before starting it. */
+export async function getFileMetadata(options: {
+  accessToken: string;
+  fileId: string;
+  fetchImpl?: typeof fetch;
+}): Promise<{ ok: boolean; name?: string; sizeBytes?: number; error?: string }> {
+  const result = await driveJson<{ name?: string; size?: string }>({
+    url: `${DRIVE_API}/files/${encodeURIComponent(options.fileId)}?fields=name,size`,
+    accessToken: options.accessToken,
+    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+  });
+  if (!result.ok || result.body === undefined) return { ok: false, error: result.error ?? 'Could not read file metadata.' };
+  return {
+    ok: true,
+    ...(result.body.name !== undefined ? { name: result.body.name } : {}),
+    ...(result.body.size !== undefined ? { sizeBytes: Number(result.body.size) } : {}),
+  };
 }

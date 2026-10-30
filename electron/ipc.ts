@@ -22,6 +22,7 @@ import {
   connect as gdriveConnect,
   disconnect as gdriveDisconnect,
   driveDeleteBackup,
+  driveRestoreBackup,
   driveListBackups,
   driveStatus,
   driveUploadBackup,
@@ -143,7 +144,7 @@ const handlers: Record<string, Handler> = {
     return driveStatus(ctx.dataRoot);
   },
   gdrive_disconnect: (_a, ctx) => { gdriveDisconnect(ctx.dataRoot); return driveStatus(ctx.dataRoot); },
-  gdrive_list_backups: (_a, ctx) => driveListBackups(ctx.dataRoot),
+  gdrive_list_backups: (a, ctx) => driveListBackups(ctx.dataRoot, String(a.serverId ?? '')),
   gdrive_upload_backup: async (a, ctx) => {
     // The backup id alone is not enough to find it: listBackups is per-server, so the caller supplies the server and
     // the lookup stays exact rather than scanning every server's backups.
@@ -153,8 +154,10 @@ const handlers: Record<string, Handler> = {
     const server = store(ctx).getServer(backup.serverId);
     const result = await driveUploadBackup({
       dataRoot: ctx.dataRoot,
+      serverId: backup.serverId,
       serverName: server?.name ?? 'server',
       backupName: backup.name,
+      backupId: backup.id,
       filePath: backup.path,
     });
     if (!result.ok) throw appError(result.needsReauth ? 'validation' : 'io', result.error ?? 'Upload failed.');
@@ -164,6 +167,62 @@ const handlers: Record<string, Handler> = {
     const result = await driveDeleteBackup(ctx.dataRoot, String(a.fileId));
     if (!result.ok) throw appError('io', result.error ?? 'Delete failed.');
     return true;
+  },
+  /**
+   * Restore from a Drive copy, for when the local ZIP is gone.
+   *
+   * The download is written into the same directory local backups live in, registered as a normal backup record, and
+   * then handed to the existing restore routine. That reuse is deliberate: it keeps the pre-restore safety snapshot, the
+   * live-server refusal and the in-place/reset handling identical for both sources, so a remote restore cannot behave
+   * subtly differently from a local one.
+   */
+  gdrive_restore_backup: async (a, ctx) => {
+    const fileId = String(a.fileId ?? '');
+    const serverId = String(a.serverId ?? '');
+    if (fileId === '') throw appError('validation', 'A Drive file id is required.');
+    if (serverId === '') throw appError('validation', 'A server id is required.');
+
+    // Verify the file belongs to this server before downloading anything: a stale or crafted id must not be able to pull
+    // a different world's archive over this one.
+    const listing = await driveListBackups(ctx.dataRoot, serverId);
+    if (!listing.ok) throw appError('validation', listing.error ?? 'Google Drive is not available.');
+    const remote = (listing.files ?? []).find((file) => file.id === fileId);
+    if (remote === undefined) {
+      throw appError('not-found', 'That backup is not in this server\'s Drive folder.');
+    }
+
+    const backupDir = path.join(ctx.dataRoot, 'backups');
+    fs.mkdirSync(backupDir, { recursive: true });
+    // Derive a local name from the remote one, stripping the "server__" prefix so the result looks like a normal local
+    // backup. A timestamp keeps two same-named Drive copies from overwriting each other on disk.
+    const base = (remote.name.replace(/^.*__/, '') || 'backup').replace(/[\\/:*?"<>|]/g, '_');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `${base.replace(/\.zip$/, '')}-from-drive-${stamp}.zip`;
+
+    const downloaded = await driveRestoreBackup({
+      dataRoot: ctx.dataRoot,
+      fileId,
+      downloadDir: backupDir,
+      fileName,
+    });
+    if (!downloaded.ok || downloaded.path === undefined) {
+      throw appError(downloaded.needsReauth ? 'validation' : 'io', downloaded.error ?? 'Download failed.');
+    }
+
+    // Register it as a normal backup so the user sees it locally afterwards and retention can clean it up later.
+    // The handler stops here rather than restoring: the restore lives in the backups service (backup_restore), and
+    // chaining into it from here would need that service instance inside this module. Returning the record id lets the
+    // renderer call the ordinary restore path, so there is exactly one implementation of "restore".
+    return store(ctx).addBackup({
+      id: `b-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      serverId,
+      name: fileName.replace(/\.zip$/, ''),
+      path: downloaded.path,
+      bytes: fs.statSync(downloaded.path).size,
+      kind: 'Manual',
+      note: 'Downloaded from Google Drive',
+      createdAt: new Date().toISOString(),
+    });
   },
 };
 

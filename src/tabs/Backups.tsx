@@ -322,7 +322,11 @@ export default function Backups() {
 
       {/* Google Drive upload for this server's backups. Placed next to the backup list because that is where the
           user thinks about where backups go; a settings-tab-only connection would hide the state from here. */}
-      <DrivePanel serverId={active.id} refreshKey={driveRefresh} />
+      <DrivePanel
+        serverId={active.id}
+        refreshKey={driveRefresh}
+        onDownloaded={() => { void load(); }}
+      />
 
       <Modal open={!!restore} title={`Restore "${restore?.name}"`} onClose={() => setRestore(null)}>
         <p className="text-xs text-zinc-400">
