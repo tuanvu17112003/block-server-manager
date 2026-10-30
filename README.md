@@ -1,11 +1,37 @@
 # Block Server Manager
 
-Desktop Minecraft server manager — **Electron + TypeScript + React** (the former Tauri + Rust tree is
-dormant reference code archived under `legacy/src-tauri/`; see [ADR-0020](docs/architecture/adr/0020-electron-sole-runtime.md)).
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/tuanvu17112003/block-server-manager/actions/workflows/verify.yml/badge.svg)](https://github.com/tuanvu17112003/block-server-manager/actions/workflows/verify.yml)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-blue.svg)](#requirements)
+[![Electron](https://img.shields.io/badge/Electron-45-47848F.svg)](https://www.electronjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6.svg)](https://www.typescriptlang.org/)
 
-Create and manage Minecraft servers (Vanilla, Paper, Fabric, Forge, NeoForge), install Modrinth and
-CurseForge modpacks with a client-mod defense, and operate them: console, players, worlds, backups,
-metrics and content management.
+Desktop Minecraft server manager — **Electron + TypeScript + React**.
+
+Create and manage Minecraft servers (Vanilla, Paper, Fabric, Forge, NeoForge), install Modrinth, CurseForge,
+FTB and packwiz modpacks, and operate them: console, players, worlds, backups, metrics and content management.
+
+![Overview tab showing server status, players, CPU/RAM and log tail](docs/screenshots/overview.png)
+
+## Why this exists
+
+Most server managers either hand you a folder and a batch file, or hide everything behind a menu. This one treats a
+Minecraft server as something you *operate*: it installs the pack, works out the correct Java runtime, diagnoses why a
+server failed to boot, and keeps the console, players, worlds and backups in one place.
+
+It also does something less common — it is explicit about how much it can prove. Every modpack format carries an
+**evidence grade**, and only a format that has installed and booted a real pack end-to-end is described as supported.
+A grade you can trust is more useful than a longer list of logos.
+
+## Screenshots
+
+| Console | Content management |
+|---|---|
+| ![Console tab with live server output](docs/screenshots/console.png) | ![Content tab managing installed mods](docs/screenshots/content.png) |
+
+| App settings |
+|---|
+| ![App settings: CurseForge API key, download folder, diagnostics](docs/screenshots/app-settings.png) |
 
 ## Supported modpack formats
 
@@ -137,5 +163,31 @@ legacy/src-tauri/  ARCHIVED Tauri/Rust reference (not built; parity reference)
   unmanaged servers are never modified automatically (see console/crash-report hints instead).
 - **SmartScreen warns about the installer**: packaged builds are unsigned; choose "More info → Run anyway"
   or provide a code-signing certificate before public distribution ([docs/packaging.md](docs/packaging.md)).
+
+## Contributing
+
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) — it is short, and it explains the one rule
+that shapes everything here: **claims must be backed by evidence**. A passing test suite is not proof that a feature
+works; this project has the scar tissue to show it.
+
+Before opening a pull request, run the gate:
+
+```powershell
+npm run verify
+```
+
+Found a security problem? Please report it privately through the [Security tab](https://github.com/tuanvu17112003/block-server-manager/security)
+rather than as a public issue — see [SECURITY.md](SECURITY.md).
+
+Participation is covered by the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+[MIT](LICENSE) © 2026 tuanvu17112003
+
+You are free to use, modify, and distribute this software, including commercially, provided the copyright notice and
+permission notice are retained.
+
+---
 
 NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
