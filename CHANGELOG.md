@@ -8,6 +8,50 @@ All notable changes to this project are documented here. The format follows
 
 Nothing yet.
 
+## [0.4.0] - 2026-10-31
+
+The release that made installing packs reliable and added off-machine backup. Most of it came from using the app on real
+packs and finding where the code disagreed with what the screen said.
+
+### Added
+
+- **Google Drive backup.** Connect an account, and every new backup is mirrored automatically. Existing backups can be
+  pushed with "To Drive", downloaded back, or deleted. Tokens use `safeStorage`; the OAuth flow is desktop-native (PKCE,
+  loopback redirect, no embedded webview). Restores go through the same code path as a local restore, so the pre-restore
+  safety snapshot and the live-server refusal are identical for both sources.
+- **CurseForge version selection.** The wizard lists a project's published versions and states, per version, whether a
+  server pack exists. Authors publish a server pack optionally, and the newest file often has none — installing "latest"
+  then resolved a client manifest and pulled client-only mods onto the server. The newest version that *has* a server pack
+  is marked recommended.
+- **Recovery of interrupted installs.** `<id>.publishing-<uuid>` folders left by a killed install are finished or cleared at
+  startup, and orphaned server folders can be adopted with their detected loader, version and port.
+- **Startup cleanup of stale install staging.** Staging folders from installs that never finished are removed once they are
+  six hours old, so a killed install no longer leaks a few hundred megabytes permanently.
+
+### Fixed
+
+- **Forge installs failed on 1.20.4+.** Those versions write a `run.bat` that checks the JVM with a shim before the real
+  launch; the argument parser collected both `java` lines, so the JVM ran the shim, exited 0, and boot verification reported
+  "process exited (code 0) before Done (".
+- **Deleting a server could delete the record and keep the folder.** Folder removal ran second, so a file lock left an
+  invisible 100+ MB folder with no record. It now removes the folder first and keeps the record if that fails.
+- **The first "To Drive" created two identical backups.** The automatic mirror and the manual button could both upload;
+  the guarantee now lives in the one function every upload passes through, with an in-flight lock plus a backup-id check.
+- **App settings were unreachable with no servers.** The first-run wizard opens automatically and disabled the settings
+  button, so a new user could not reach the CurseForge API key that the first install needs.
+- **The install publish froze the window for minutes.** The retry ladder waited with a blocking sleep; the worst case was
+  332 seconds of blocked main thread. Publish is now async, the budget is 28 seconds, and the ladder hands over to a
+  file-by-file copy instead of waiting longer at a rename.
+- **CurseForge version selection had four separate defects:** the chosen version did not reach the installer at all, the
+  preview resolved "latest" instead of the choice, the Configure screen described a stale staged ZIP, and a version chosen
+  through "Use pack" leaked into a later local-ZIP install. The two install branches are now separated by one derived
+  `curseforgeMode`, so state cannot cross between them.
+- **The Back button disappeared from step 2.** It lived inside the panel that the project branch hides; navigation now
+  belongs to the step, not to a conditional panel. The version picker also lost its Continue button while loading or on
+  error, which made that step a dead end in both directions.
+- **An "unclaimed backups" panel appeared on every server** and could not be acted on from any of them. Removed rather than
+  re-scoped a third time.
+
 ## [0.3.1] - 2026-10-30
 
 A correction release. `v0.3.0` was tagged at commit `2e38b0f`, but its release page carried a `Portable.exe` that could
