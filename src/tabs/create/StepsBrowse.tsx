@@ -1,5 +1,6 @@
 // Create step 2 wiring container (CurseForge ZIP / Modrinth catalogue / browser mock), WP-6.5.
 import { isDesktop } from '../../tauri';
+import { Button } from '../../components/ui';
 import type { LocalMrpackSelection, ModrinthModpackDto } from '../../tauri';
 import type { Modpack } from '../../types';
 import { cfInstallable, type Kind } from './helpers';
@@ -83,9 +84,17 @@ export function StepsBrowse(props: StepsBrowseProps) {
           onContinue={() => {
             if (curseforge.curseforgeInspection?.name === curseforge.curseforgeSelectedName && cfInstallable(curseforge.curseforgeInspection)) setStep(3);
           }}
-          onBack={() => setStep(1)}
         />
           )}
+          {/*
+            Back lives HERE, outside both branches, so it cannot disappear with the branch it used to belong to.
+
+            It previously sat inside BrowseCurseforge, so hiding that component on the project branch removed the only way
+            out of step 2 — reported as "now the Back button is gone too". The top-right "← Back" in the header is a
+            different action (it exits the whole wizard); this one goes back one step and must exist in every CurseForge
+            state, including a project with no ZIP list on screen.
+          */}
+          <Button variant="ghost" onClick={() => setStep(1)}>← Back</Button>
         </>
       )}
       {props.hasBackend && props.kind === 'modrinth' && (

@@ -15,7 +15,6 @@ interface BrowseCurseforgeProps {
   onSelect: (name: string) => void;
   onInspect: () => void;
   onContinue: () => void;
-  onBack: () => void;
 }
 
 export function BrowseCurseforge(props: BrowseCurseforgeProps) {
@@ -104,7 +103,6 @@ export function BrowseCurseforge(props: BrowseCurseforgeProps) {
           )}
         </Card>
       )}
-      <Button variant="ghost" onClick={props.onBack}>← Back</Button>
     </div>
   );
 }

@@ -76,24 +76,66 @@ export function CurseForgeVersionPicker(props: CurseForgeVersionPickerProps) {
     return withServerPack?.fileId ?? versions[0]?.fileId ?? null;
   }, [versions]);
 
+  /**
+   * The action row, rendered in EVERY state.
+   *
+   * Returning early without it left the step a dead end: while loading there was no way forward, and in the error/empty
+   * states the user could never continue at all. Keeping the row present means the step always has both a Back (owned by the
+   * parent) and a Continue, with Continue disabled while proceeding would be meaningless.
+   */
+  const renderActions = () => (
+    props.onCancel !== undefined || props.onContinue !== undefined ? (
+      <div className="mt-2 flex items-center gap-2">
+        {props.onCancel !== undefined && (
+          <Button size="sm" variant="ghost" onClick={props.onCancel}>Cancel</Button>
+        )}
+        {props.onContinue !== undefined && (
+          <Button
+            size="sm"
+            className="ml-auto"
+            // Disabled until a version is chosen: proceeding without one would silently fall back to "newest", which is
+            // the exact behaviour this picker exists to replace.
+            disabled={props.selectedFileId === null}
+            onClick={props.onContinue}
+          >
+            Continue to Configure →
+          </Button>
+        )}
+      </div>
+    ) : null
+  );
+
   if (loading) {
-    return <p className="text-xs text-zinc-400">Loading versions from CurseForge…</p>;
+    return (
+      <div className="space-y-1">
+        <p className="text-xs text-zinc-400">Loading versions from CurseForge…</p>
+        {renderActions()}
+      </div>
+    );
   }
 
   if (error !== null) {
     return (
-      <div className="rounded border border-amber-800/60 bg-amber-950/30 p-2">
-        <p className="text-xs text-amber-200">Could not list versions: {error}</p>
-        <p className="mt-1 text-[11px] text-amber-200/70">
-          Listing versions needs a CurseForge API key (Settings → CurseForge API key). You can still install from a
-          server-pack ZIP you downloaded manually.
-        </p>
+      <div className="space-y-1">
+        <div className="rounded border border-amber-800/60 bg-amber-950/30 p-2">
+          <p className="text-xs text-amber-200">Could not list versions: {error}</p>
+          <p className="mt-1 text-[11px] text-amber-200/70">
+            Listing versions needs a CurseForge API key (Settings → CurseForge API key). You can still install from a
+            server-pack ZIP you downloaded manually.
+          </p>
+        </div>
+        {renderActions()}
       </div>
     );
   }
 
   if (versions.length === 0) {
-    return <p className="text-xs text-zinc-400">This project has no published versions.</p>;
+    return (
+      <div className="space-y-1">
+        <p className="text-xs text-zinc-400">This project has no published versions.</p>
+        {renderActions()}
+      </div>
+    );
   }
 
   return (
@@ -136,25 +178,7 @@ export function CurseForgeVersionPicker(props: CurseForgeVersionPickerProps) {
           );
         })}
       </ul>
-      {props.onCancel !== undefined || props.onContinue !== undefined ? (
-        <div className="mt-2 flex items-center gap-2">
-          {props.onCancel !== undefined && (
-            <Button size="sm" variant="ghost" onClick={props.onCancel}>Cancel</Button>
-          )}
-          {props.onContinue !== undefined && (
-            <Button
-              size="sm"
-              className="ml-auto"
-              // Disabled until a version is chosen: proceeding without one would silently fall back to "newest", which is
-              // the exact behaviour this picker exists to replace.
-              disabled={props.selectedFileId === null}
-              onClick={props.onContinue}
-            >
-              Continue to Configure →
-            </Button>
-          )}
-        </div>
-      ) : null}
+      {renderActions()}
     </div>
   );
 }
