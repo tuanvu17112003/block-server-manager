@@ -27,7 +27,7 @@ test('L1 renderer request type accepts fileId', () => {
 
 // ---- link 2: the UI sends it, and the preview key distinguishes it ----
 test('L2 activePipelineSource sends fileId and keys the preview by it', () => {
-  assert.match(create, /cfSelectedVersion\?\.fileId/);
+  assert.match(create, /curseforge\.activeCfVersion\?\.fileId/);
   assert.match(create, /fileId !== undefined \? \{ fileId \}/);
   assert.match(create, /:\$\{fileId\}/, 'previews are cached by key; a new version must not reuse the old plan');
 });
@@ -46,7 +46,7 @@ test('L4 the picker renders a Continue that is disabled without a selection', ()
   // has a second onContinue for the ZIP list.
   assert.match(
     stepsBrowse,
-    /onContinue=\{\(\) => \{[\s\S]{0,200}curseforge\.cfSelectedVersion !== null[\s\S]{0,40}setStep\(3\)/,
+    /onContinue=\{\(\) => \{[\s\S]{0,200}curseforge\.activeCfVersion !== null[\s\S]{0,40}setStep\(3\)/,
   );
 });
 
@@ -76,8 +76,10 @@ test('L6b the keyless route also honours fileId', () => {
 
 // ---- link 7: what the user reads matches what will happen ----
 test('L7 Configure reads the chosen version before any staged ZIP', () => {
-  assert.match(stepsConfigure, /const chosen = curseforge\.cfSelectedVersion;/);
-  assert.match(stepsConfigure, /cfChosenVersion=\{props\.kind === 'curseforge' \? curseforge\.cfSelectedVersion : null\}/);
+  // `activeCfVersion` is the branch-derived value: non-null only when the project branch is live, so a stale API version
+  // cannot be displayed beside a freshly chosen ZIP.
+  assert.match(stepsConfigure, /const chosen = curseforge\.activeCfVersion;/);
+  assert.match(stepsConfigure, /cfChosenVersion=\{props\.kind === 'curseforge' \? curseforge\.activeCfVersion : null\}/);
   // Both the title and the target field must be driven by the choice, not by the inspection.
   assert.match(stepConfigure, /cfChosenVersion: CurseForgeProjectVersionDto \| null/);
   assert.match(stepConfigure, /props\.cfChosenVersion\.minecraftVersion/);

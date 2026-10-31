@@ -88,10 +88,18 @@ export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Op
   };
 
   const selectCurseforgeZip = (name: string): void => {
-    if (cfProjectId !== null) {
+    if (cfProjectId !== null || cfSelectedVersion !== null) {
+      // Switching to the ZIP branch must drop EVERY project-branch value, not just the ids.
+      //
+      // `cfSelectedVersion` was left behind here, so a version picked through "Use pack" survived the switch to a local ZIP:
+      // the Configure title and its target panel kept naming the old API version while the review panel correctly showed
+      // the chosen ZIP. Reported as "after using Use pack, going back and picking a different ZIP still shows the version I
+      // had picked, but the review shows the right one". Clearing it here fixes the cause; the display also no longer trusts
+      // it without checking the branch, which is the second half of the fix.
       setCfProjectId(null);
       setCfProjectMeta(null);
       setCfProjectError('');
+      setCfSelectedVersion(null);
     }
     if (curseforgeSelectedNameRef.current !== name) {
       clearPipelineReview();
@@ -282,6 +290,18 @@ export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Op
   const curseforgeInspectionMatchesSelection = Boolean(
     cfProjectId !== null ? cfProjectMeta !== null : curseforgeInspection && curseforgeInspection.name === curseforgeSelectedName,
   );
+  /**
+   * The active CurseForge branch, derived from one place.
+   *
+   * Two branches share this hook: one-click via the API (projectId/meta/version) and a locally staged ZIP (name/inspection).
+   * They used to be distinguished ad hoc at each read site, and getting it wrong is exactly how a stale project version was
+   * rendered next to a freshly chosen ZIP. Anything that needs to know which branch is live reads this.
+   */
+  const curseforgeMode: 'project' | 'zip' | 'none' = cfProjectId !== null
+    ? 'project'
+    : (curseforgeSelectedName !== '' ? 'zip' : 'none');
+  /** The chosen API version, but ONLY while the project branch is live. */
+  const activeCfVersion: CurseForgeProjectVersionDto | null = curseforgeMode === 'project' ? cfSelectedVersion : null;
   const selectedCurseforgeInspection = cfProjectId !== null
     ? cfProjectInspection
     : (curseforgeInspectionMatchesSelection ? curseforgeInspection : null);
@@ -310,6 +330,13 @@ export function useCurseForgeImport({ kind, clearPipelineReview, pushToast }: Op
     cfProjectError,
     cfSelectedVersion,
     setCfSelectedVersion,
+    /**
+     * Which CurseForge branch is live. Renderers must use this rather than inferring from whichever field happens to be
+     * non-null: that inference is what let a stale API version be displayed beside a freshly chosen ZIP.
+     */
+    curseforgeMode,
+    /** The chosen API version, or null when the ZIP (or no) branch is live. */
+    activeCfVersion,
     cfKeyStatus,
     refreshCurseforgeKeyStatus,
     cfSearchQuery,

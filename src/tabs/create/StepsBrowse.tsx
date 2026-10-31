@@ -35,30 +35,37 @@ export function StepsBrowse(props: StepsBrowseProps) {
       {props.hasBackend && props.kind === 'curseforge' && (
         <>
           {/* One-click install: pick the project version explicitly. The newest file is not automatically the right one for
-              a server, because the server pack is published per version and may not exist for it. */}
-          {curseforge.cfProjectId !== null && (
+              a server, because the server pack is published per version and may not exist for it.
+              Gated on `curseforgeMode === 'project'` rather than on cfProjectId being non-null, so the two branches cannot
+              both render their controls at once. */}
+          {curseforge.curseforgeMode === 'project' && curseforge.cfProjectId !== null && (
             <div className="mb-3 rounded border border-zinc-800 bg-zinc-900/40 p-3">
               <div className="mb-2 flex items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   {curseforge.cfProjectMeta?.name ?? `Project ${curseforge.cfProjectId}`}
                 </span>
-                {curseforge.cfSelectedVersion !== null && (
+                {curseforge.activeCfVersion !== null && (
                   <span className="ml-auto text-[11px] text-emerald-300">
-                    {curseforge.cfSelectedVersion.hasServerPack ? 'server pack' : 'client pack only'}
+                    {curseforge.activeCfVersion.hasServerPack ? 'server pack' : 'client pack only'}
                   </span>
                 )}
               </div>
               <CurseForgeVersionPicker
                 project={curseforge.cfProjectId}
-                selectedFileId={curseforge.cfSelectedVersion?.fileId ?? null}
+                selectedFileId={curseforge.activeCfVersion?.fileId ?? null}
                 onChoose={(version) => { curseforge.setCfSelectedVersion(version); }}
                 onContinue={() => {
                   // Only meaningful once a version is chosen; the picker disables the button until then.
-                  if (curseforge.cfSelectedVersion !== null) setStep(3);
+                  if (curseforge.activeCfVersion !== null) setStep(3);
                 }}
               />
             </div>
           )}
+          {/* Hidden while the project branch is live.
+              Both controls were rendered together before, so a user looking at the version picker also saw a ZIP list below
+              it with its own "Continue" button — two competing ways to install, with no indication which one would be
+              used. The request priority says the project wins, so the ZIP list is only shown when it actually applies. */}
+          {curseforge.curseforgeMode !== 'project' && (
           <BrowseCurseforge
           zips={curseforge.curseforgeZips}
           selectedName={curseforge.curseforgeSelectedName}
@@ -78,6 +85,7 @@ export function StepsBrowse(props: StepsBrowseProps) {
           }}
           onBack={() => setStep(1)}
         />
+          )}
         </>
       )}
       {props.hasBackend && props.kind === 'modrinth' && (

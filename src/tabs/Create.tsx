@@ -126,11 +126,14 @@ export default function Create({ onExit }: { onExit: (next: TabId) => void }) {
 
   const activePipelineSource = (): { request: PipelineSourceRequest; key: string } | null => {
     if (kind === 'curseforge') {
-      if (curseforge.cfProjectId !== null && curseforge.cfProjectMeta) {
+      // Branch selected in ONE place. Previously this read `cfProjectId !== null` here while the display read
+      // `cfSelectedVersion`, so after switching from the API branch to a ZIP the two could disagree — the request said ZIP
+      // while the title said the old API version.
+      if (curseforge.curseforgeMode === 'project' && curseforge.cfProjectId !== null && curseforge.cfProjectMeta) {
         // The chosen version travels with the request and is part of the preview KEY. Including it in the key matters: the
         // preview is cached by key, so choosing a different version must produce a different key or the wizard would keep
         // showing the previous version's plan.
-        const fileId = curseforge.cfSelectedVersion?.fileId;
+        const fileId = curseforge.activeCfVersion?.fileId;
         return {
           request: {
             kind: 'curseforgeProject',

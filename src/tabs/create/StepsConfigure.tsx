@@ -56,13 +56,12 @@ export function StepsConfigure(props: StepsConfigureProps) {
       hasBackend={props.hasBackend}
       kind={props.kind}
       title={(() => {
-        // A chosen CurseForge version wins over a staged ZIP.
+        // A chosen CurseForge version wins over a staged ZIP — but only while the PROJECT branch is live.
         //
-        // The title used to read only `selectedCurseforgeInspection`, which describes a ZIP already staged by the local-import
-        // path. In one-click project mode no such ZIP is involved, so the stale inspection from an earlier browse won and the
-        // screen displayed "RLCraft ... v2.9.3.zip" while the user had picked v2.9 — reported as "I chose 2.9 but it still
-        // shows 2.9.3". The version the user chose is the truth, so it is checked first.
-        const chosen = curseforge.cfSelectedVersion;
+        // Reading `cfSelectedVersion` directly was wrong: choosing a ZIP clears the project but used to leave the version
+        // behind, so a stale API version kept naming the screen while the review panel showed the right ZIP. `activeCfVersion`
+        // is derived from the branch, so it cannot disagree with the rest of the panel.
+        const chosen = curseforge.activeCfVersion;
         if (props.hasBackend && props.kind === 'curseforge' && chosen !== null) {
           return `Configure — ${chosen.displayName}`;
         }
@@ -73,7 +72,7 @@ export function StepsConfigure(props: StepsConfigureProps) {
         return `Configure ${props.kind === 'vanilla' ? '— Vanilla (2-click)' : `— ${props.pack?.name ?? 'modpack'}`}`;
       })()}
       cfInspection={curseforge.selectedCurseforgeInspection}
-      cfChosenVersion={props.kind === 'curseforge' ? curseforge.cfSelectedVersion : null}
+      cfChosenVersion={props.kind === 'curseforge' ? curseforge.activeCfVersion : null}
       modrinth={props.hasBackend && props.kind === 'modrinth' && modrinth.selectedModrinthPack ? {
         pack: modrinth.selectedModrinthPack,
         versions: modrinth.modrinthVersions,

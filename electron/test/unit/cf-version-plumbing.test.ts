@@ -22,7 +22,9 @@ test('the renderer request type carries an optional fileId', () => {
 
 test('the UI includes the chosen version in the request AND in the preview key', () => {
   // The key matters separately: previews are cached by key, so a different version must not reuse the previous plan.
-  assert.match(ui, /cfSelectedVersion\?\.fileId/, 'the UI must read the chosen version');
+  // Reads `activeCfVersion` rather than the raw state: that value is null unless the project branch is live, which is what
+  // stops a version chosen via "Use pack" from surviving a switch to a local ZIP.
+  assert.match(ui, /curseforge\.activeCfVersion\?\.fileId/, 'the UI must read the active chosen version');
   assert.match(ui, /\.\.\.\(fileId !== undefined \? \{ fileId \} : \{\}\)/, 'the fileId must be spread into the request');
   assert.match(ui, /:\$\{fileId\}/, 'the preview key must distinguish versions');
 });
