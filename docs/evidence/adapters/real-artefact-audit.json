@@ -3,6 +3,218 @@
   "premise": "real artefacts only; no fixture authored by the harness is used as evidence",
   "archives": [
     {
+      "label": "cf:1011903-9364755.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\1011903-9364755.zip",
+      "sizeBytes": 338352861,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 254,
+        "effectiveEntryCount": 254
+      },
+      "candidates": [
+        "curseforge.client"
+      ],
+      "recipe": {
+        "formatId": "curseforge.client",
+        "name": "Cobblemon.gg",
+        "mc": "1.21.1",
+        "loader": "fabric",
+        "loaderVersion": "0.19.3",
+        "javaMajor": null,
+        "fileCount": 107,
+        "overrideLayers": [
+          "overrides/"
+        ],
+        "launchShape": "launch-jar",
+        "sideCounts": {
+          "required": 107
+        },
+        "warningRules": [
+          "curseforge.no-side-data",
+          "curseforge.placeholder-destination"
+        ],
+        "resolution": [
+          {
+            "field": "mc",
+            "source": "manifest.json minecraft.version"
+          },
+          {
+            "field": "loader",
+            "source": "manifest.json minecraft.modLoaders[].id (\"fabric-0.19.3\")"
+          },
+          {
+            "field": "files",
+            "source": "manifest.json files[] projectID/fileID → provider coordinates (a CF manifest carries no URLs)"
+          },
+          {
+            "field": "side",
+            "source": "manifest.json required flag only; CF has no side data"
+          },
+          {
+            "field": "payload",
+            "source": "overrides/ layer"
+          }
+        ],
+        "sampleFiles": [
+          "mods/539382-6423860.jar",
+          "mods/393442-7117956.jar",
+          "mods/263420-9067178.jar"
+        ]
+      },
+      "validation": "passed",
+      "error": null,
+      "ok": true,
+      "entryCount": 254
+    },
+    {
+      "label": "cf:1478248-9340459.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\1478248-9340459.zip",
+      "sizeBytes": 186066307,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 2741,
+        "effectiveEntryCount": 2741
+      },
+      "candidates": [
+        "curseforge.client"
+      ],
+      "recipe": {
+        "formatId": "curseforge.client",
+        "name": "Tensura Neo Otherworld",
+        "mc": "1.21.1",
+        "loader": "neoforge",
+        "loaderVersion": "21.1.248",
+        "javaMajor": null,
+        "fileCount": 263,
+        "overrideLayers": [
+          "overrides/"
+        ],
+        "launchShape": "generated-args",
+        "sideCounts": {
+          "required": 263
+        },
+        "warningRules": [
+          "curseforge.no-side-data",
+          "curseforge.placeholder-destination"
+        ],
+        "resolution": [
+          {
+            "field": "mc",
+            "source": "manifest.json minecraft.version"
+          },
+          {
+            "field": "loader",
+            "source": "manifest.json minecraft.modLoaders[].id (\"neoforge-21.1.248\")"
+          },
+          {
+            "field": "files",
+            "source": "manifest.json files[] projectID/fileID → provider coordinates (a CF manifest carries no URLs)"
+          },
+          {
+            "field": "side",
+            "source": "manifest.json required flag only; CF has no side data"
+          },
+          {
+            "field": "payload",
+            "source": "overrides/ layer"
+          }
+        ],
+        "sampleFiles": [
+          "mods/1021685-6886575.jar",
+          "mods/1489224-8414486.jar",
+          "mods/873563-5430841.jar"
+        ]
+      },
+      "validation": "passed",
+      "error": null,
+      "ok": true,
+      "entryCount": 2741
+    },
+    {
+      "label": "cf:285109-server-2935323.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\285109-server-2935323.zip",
+      "sizeBytes": 191589583,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 2032,
+        "effectiveEntryCount": 2032
+      },
+      "candidates": [
+        "plain.serverzip"
+      ],
+      "recipe": null,
+      "validation": null,
+      "error": "This archive has no pack manifest and does not state its Minecraft version, so it cannot be installed safely. Add a manifest (Modrinth, CurseForge, packwiz, Prism or ATLauncher) or an exact Minecraft version. Evidence checked: version.json, libraries/ maven path, loader installer jar name.",
+      "ok": false,
+      "entryCount": 2032
+    },
+    {
+      "label": "cf:285109-server-3575916.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\285109-server-3575916.zip",
+      "sizeBytes": 305033057,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 2973,
+        "effectiveEntryCount": 2973
+      },
+      "candidates": [
+        "plain.serverzip"
+      ],
+      "recipe": null,
+      "validation": null,
+      "error": "This archive has no pack manifest and does not state its Minecraft version, so it cannot be installed safely. Add a manifest (Modrinth, CurseForge, packwiz, Prism or ATLauncher) or an exact Minecraft version. Evidence checked: version.json, libraries/ maven path, loader installer jar name.",
+      "ok": false,
+      "entryCount": 2973
+    },
+    {
+      "label": "cf:285109-server-4487650.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\285109-server-4487650.zip",
+      "sizeBytes": 334852959,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 3570,
+        "effectiveEntryCount": 3570
+      },
+      "candidates": [
+        "plain.serverzip"
+      ],
+      "recipe": null,
+      "validation": null,
+      "error": "This archive has no pack manifest and does not state its Minecraft version, so it cannot be installed safely. Add a manifest (Modrinth, CurseForge, packwiz, Prism or ATLauncher) or an exact Minecraft version. Evidence checked: version.json, libraries/ maven path, loader installer jar name.",
+      "ok": false,
+      "entryCount": 3570
+    },
+    {
+      "label": "cf:285109-server-4612990.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\285109-server-4612990.zip",
+      "sizeBytes": 334397653,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 3766,
+        "effectiveEntryCount": 3766
+      },
+      "candidates": [
+        "plain.serverzip"
+      ],
+      "recipe": null,
+      "validation": null,
+      "error": "This archive has no pack manifest and does not state its Minecraft version, so it cannot be installed safely. Add a manifest (Modrinth, CurseForge, packwiz, Prism or ATLauncher) or an exact Minecraft version. Evidence checked: version.json, libraries/ maven path, loader installer jar name.",
+      "ok": false,
+      "entryCount": 3766
+    },
+    {
       "label": "cf:392141-server-6290699.zip",
       "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\392141-server-6290699.zip",
       "sizeBytes": 295045888,
@@ -55,9 +267,9 @@
       "entryCount": 9503
     },
     {
-      "label": "cf:466901-server-9296268.zip",
-      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\466901-server-9296268.zip",
-      "sizeBytes": 1098804554,
+      "label": "cf:466901-server-9288138.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\466901-server-9288138.zip",
+      "sizeBytes": 1097988613,
       "normalization": {
         "unwrapped": true,
         "nestedZip": "Prominence™_II_Hasturian_Era_4.1.5_server_pack.zip",
@@ -111,15 +323,71 @@
       "entryCount": 3553
     },
     {
-      "label": "cf:829758-server-7243901.zip",
-      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\829758-server-7243901.zip",
-      "sizeBytes": 754300266,
+      "label": "cf:466901-server-9363580.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\466901-server-9363580.zip",
+      "sizeBytes": 1111915178,
       "normalization": {
         "unwrapped": false,
         "nestedZip": null,
         "strippedPrefix": null,
-        "outerEntryCount": 4951,
-        "effectiveEntryCount": 4951
+        "outerEntryCount": 5571,
+        "effectiveEntryCount": 5571
+      },
+      "candidates": [
+        "serverpackcreator",
+        "plain.serverzip"
+      ],
+      "recipe": {
+        "formatId": "serverpackcreator",
+        "name": "ServerPackCreator pack",
+        "mc": "1.20.1",
+        "loader": "fabric",
+        "loaderVersion": "0.19.3",
+        "javaMajor": null,
+        "fileCount": 0,
+        "overrideLayers": [
+          "(root)"
+        ],
+        "launchShape": "launch-jar",
+        "sideCounts": {},
+        "warningRules": [
+          "spc.manifest-derived"
+        ],
+        "resolution": [
+          {
+            "field": "mc",
+            "source": "manifest.json minecraftVersion"
+          },
+          {
+            "field": "loader",
+            "source": "manifest.json modloader=\"fabric\""
+          },
+          {
+            "field": "loaderVersion",
+            "source": "manifest.json modloaderVersion"
+          },
+          {
+            "field": "payload",
+            "source": "archive tree applied as one root override layer (SPC builds server packs)"
+          }
+        ],
+        "sampleFiles": []
+      },
+      "validation": "passed",
+      "error": null,
+      "ok": true,
+      "entryCount": 5571
+    },
+    {
+      "label": "cf:490660-server-8448984.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\490660-server-8448984.zip",
+      "sizeBytes": 604626328,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 6664,
+        "effectiveEntryCount": 6664
       },
       "candidates": [
         "curseforge.serverpack",
@@ -127,10 +395,10 @@
       ],
       "recipe": {
         "formatId": "curseforge.serverpack",
-        "name": "829758-server-7243901",
-        "mc": "1.18.2",
+        "name": "490660-server-8448984",
+        "mc": "1.20.1",
         "loader": "forge",
-        "loaderVersion": "40.2.17",
+        "loaderVersion": "47.4.0",
         "javaMajor": null,
         "fileCount": 0,
         "overrideLayers": [
@@ -139,17 +407,16 @@
         "launchShape": "vendor-script",
         "sideCounts": {},
         "warningRules": [
-          "curseforge.manifest-less-serverpack",
-          "curseforge.metadata-from-variables-txt"
+          "curseforge.manifest-less-serverpack"
         ],
         "resolution": [
           {
             "field": "mc",
-            "source": "variables.txt MINECRAFT_VERSION (declared inside the pack)"
+            "source": "CurseForge inspector + archive artifact inference"
           },
           {
             "field": "loader",
-            "source": "variables.txt MODLOADER (declared inside the pack)"
+            "source": "CurseForge inspector (\"Forge\")"
           },
           {
             "field": "payload",
@@ -161,7 +428,195 @@
       "validation": "passed",
       "error": null,
       "ok": true,
-      "entryCount": 4951
+      "entryCount": 6664
+    },
+    {
+      "label": "cf:515345-server-9351701.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\515345-server-9351701.zip",
+      "sizeBytes": 3800141,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 1247,
+        "effectiveEntryCount": 1247
+      },
+      "candidates": [
+        "curseforge.client"
+      ],
+      "recipe": {
+        "formatId": "curseforge.client",
+        "name": "DarkRPG Fabric Server Pack",
+        "mc": "1.20.1",
+        "loader": "fabric",
+        "loaderVersion": "0.20.1",
+        "javaMajor": null,
+        "fileCount": 469,
+        "overrideLayers": [
+          "overrides/"
+        ],
+        "launchShape": "launch-jar",
+        "sideCounts": {
+          "required": 469
+        },
+        "warningRules": [
+          "curseforge.no-side-data",
+          "curseforge.placeholder-destination"
+        ],
+        "resolution": [
+          {
+            "field": "mc",
+            "source": "manifest.json minecraft.version"
+          },
+          {
+            "field": "loader",
+            "source": "manifest.json minecraft.modLoaders[].id (\"fabric-0.20.1\")"
+          },
+          {
+            "field": "files",
+            "source": "manifest.json files[] projectID/fileID → provider coordinates (a CF manifest carries no URLs)"
+          },
+          {
+            "field": "side",
+            "source": "manifest.json required flag only; CF has no side data"
+          },
+          {
+            "field": "payload",
+            "source": "overrides/ layer"
+          }
+        ],
+        "sampleFiles": [
+          "mods/442282-4599484.jar",
+          "mods/1014057-7069511.jar",
+          "mods/615351-6560418.jar"
+        ]
+      },
+      "validation": "passed",
+      "error": null,
+      "ok": true,
+      "entryCount": 1247
+    },
+    {
+      "label": "cf:671029-server-9046877.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\671029-server-9046877.zip",
+      "sizeBytes": 429759536,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 1168,
+        "effectiveEntryCount": 1168
+      },
+      "candidates": [
+        "serverpackcreator",
+        "plain.serverzip"
+      ],
+      "recipe": {
+        "formatId": "serverpackcreator",
+        "name": "ServerPackCreator pack",
+        "mc": "1.21.1",
+        "loader": "fabric",
+        "loaderVersion": "0.19.5",
+        "javaMajor": null,
+        "fileCount": 0,
+        "overrideLayers": [
+          "(root)"
+        ],
+        "launchShape": "launch-jar",
+        "sideCounts": {},
+        "warningRules": [
+          "spc.manifest-derived"
+        ],
+        "resolution": [
+          {
+            "field": "mc",
+            "source": "manifest.json minecraftVersion"
+          },
+          {
+            "field": "loader",
+            "source": "manifest.json modloader=\"fabric\""
+          },
+          {
+            "field": "loaderVersion",
+            "source": "manifest.json modloaderVersion"
+          },
+          {
+            "field": "payload",
+            "source": "archive tree applied as one root override layer (SPC builds server packs)"
+          }
+        ],
+        "sampleFiles": []
+      },
+      "validation": "passed",
+      "error": null,
+      "ok": true,
+      "entryCount": 1168
+    },
+    {
+      "label": "cf:913090-8509973.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\913090-8509973.zip",
+      "sizeBytes": 1520292,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 217,
+        "effectiveEntryCount": 217
+      },
+      "candidates": [
+        "curseforge.client"
+      ],
+      "recipe": {
+        "formatId": "curseforge.client",
+        "name": "ZJJK",
+        "mc": "1.20.1",
+        "loader": "forge",
+        "loaderVersion": "47.4.3",
+        "javaMajor": null,
+        "fileCount": 126,
+        "overrideLayers": [
+          "overrides/"
+        ],
+        "launchShape": "generated-args",
+        "sideCounts": {
+          "required": 126
+        },
+        "warningRules": [
+          "curseforge.no-side-data",
+          "curseforge.placeholder-destination"
+        ],
+        "resolution": [
+          {
+            "field": "mc",
+            "source": "manifest.json minecraft.version"
+          },
+          {
+            "field": "loader",
+            "source": "manifest.json minecraft.modLoaders[].id (\"forge-47.4.3\")"
+          },
+          {
+            "field": "files",
+            "source": "manifest.json files[] projectID/fileID → provider coordinates (a CF manifest carries no URLs)"
+          },
+          {
+            "field": "side",
+            "source": "manifest.json required flag only; CF has no side data"
+          },
+          {
+            "field": "payload",
+            "source": "overrides/ layer"
+          }
+        ],
+        "sampleFiles": [
+          "mods/225738-7963208.jar",
+          "mods/243190-8444973.jar",
+          "mods/361276-7263076.jar"
+        ]
+      },
+      "validation": "passed",
+      "error": null,
+      "ok": true,
+      "entryCount": 217
     },
     {
       "label": "cf:936875-server-8853081.zip",
@@ -214,6 +669,66 @@
       "error": null,
       "ok": true,
       "entryCount": 10223
+    },
+    {
+      "label": "mrpack:BattleArmory TACZ 26.0.5.mrpack",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\mrpack\\BattleArmory TACZ 26.0.5.mrpack",
+      "sizeBytes": 355708364,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 2296,
+        "effectiveEntryCount": 2296
+      },
+      "candidates": [
+        "modrinth.mrpack"
+      ],
+      "recipe": {
+        "formatId": "modrinth.mrpack",
+        "name": "BattleArmory TACZ",
+        "mc": "1.20.1",
+        "loader": "forge",
+        "loaderVersion": "47.4.22",
+        "javaMajor": null,
+        "fileCount": 90,
+        "overrideLayers": [
+          "overrides/",
+          "server-overrides/"
+        ],
+        "launchShape": "generated-args",
+        "sideCounts": {
+          "unknown": 90
+        },
+        "warningRules": [],
+        "resolution": [
+          {
+            "field": "mc",
+            "source": "modrinth.index.json dependencies.minecraft"
+          },
+          {
+            "field": "loader",
+            "source": "modrinth.index.json dependencies (forge)"
+          },
+          {
+            "field": "files",
+            "source": "modrinth.index.json files[] (downloads + hashes)"
+          },
+          {
+            "field": "side",
+            "source": "files[].env.server, absent ⇒ unknown"
+          }
+        ],
+        "sampleFiles": [
+          "mods/0Pack2Reload-Forge-1.20.1-1.0.1.jar",
+          "mods/appleskin-forge-mc1.20.1-2.5.1.jar",
+          "mods/architectury-9.2.14-forge.jar"
+        ]
+      },
+      "validation": "passed",
+      "error": null,
+      "ok": true,
+      "entryCount": 2296
     },
     {
       "label": "mrpack:COBBLEVERSE 1.7.42.mrpack",
@@ -276,15 +791,15 @@
       "entryCount": 1648
     },
     {
-      "label": "mrpack:Prominence™ II Hasturian Era v4.1.5hf.mrpack",
-      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\mrpack\\Prominence™ II Hasturian Era v4.1.5hf.mrpack",
-      "sizeBytes": 427703135,
+      "label": "mrpack:Prominence™ II Hasturian Era v4.1.6.mrpack",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\mrpack\\Prominence™ II Hasturian Era v4.1.6.mrpack",
+      "sizeBytes": 440382992,
       "normalization": {
         "unwrapped": false,
         "nestedZip": null,
         "strippedPrefix": null,
-        "outerEntryCount": 2578,
-        "effectiveEntryCount": 2578
+        "outerEntryCount": 5239,
+        "effectiveEntryCount": 5239
       },
       "candidates": [
         "modrinth.mrpack"
@@ -296,14 +811,14 @@
         "loader": "fabric",
         "loaderVersion": "0.19.3",
         "javaMajor": null,
-        "fileCount": 565,
+        "fileCount": 562,
         "overrideLayers": [
           "overrides/",
           "server-overrides/"
         ],
         "launchShape": "launch-jar",
         "sideCounts": {
-          "unsupported": 213,
+          "unsupported": 210,
           "required": 352
         },
         "warningRules": [],
@@ -334,22 +849,83 @@
       "validation": "passed",
       "error": null,
       "ok": true,
-      "entryCount": 2578
+      "entryCount": 5239
+    },
+    {
+      "label": "mrpack:The Pixelmon Modpack 9.4.2.mrpack",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\mrpack\\The Pixelmon Modpack 9.4.2.mrpack",
+      "sizeBytes": 46071667,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 560,
+        "effectiveEntryCount": 560
+      },
+      "candidates": [
+        "modrinth.mrpack"
+      ],
+      "recipe": {
+        "formatId": "modrinth.mrpack",
+        "name": "The Pixelmon Modpack",
+        "mc": "1.21.1",
+        "loader": "neoforge",
+        "loaderVersion": "21.1.248",
+        "javaMajor": null,
+        "fileCount": 14,
+        "overrideLayers": [
+          "overrides/",
+          "server-overrides/"
+        ],
+        "launchShape": "generated-args",
+        "sideCounts": {
+          "required": 14
+        },
+        "warningRules": [],
+        "resolution": [
+          {
+            "field": "mc",
+            "source": "modrinth.index.json dependencies.minecraft"
+          },
+          {
+            "field": "loader",
+            "source": "modrinth.index.json dependencies (neoforge)"
+          },
+          {
+            "field": "files",
+            "source": "modrinth.index.json files[] (downloads + hashes)"
+          },
+          {
+            "field": "side",
+            "source": "files[].env.server, absent ⇒ unknown"
+          }
+        ],
+        "sampleFiles": [
+          "resourcepacks/ThePixelmonOST.zip",
+          "mods/Terralith_1.21.1_v2.6.2_Neoforge.jar",
+          "mods/tectonic-3.0.26-neoforge-21.1.jar"
+        ]
+      },
+      "validation": "passed",
+      "error": null,
+      "ok": true,
+      "entryCount": 560
     }
   ],
   "packwiz": [],
   "defects": [],
-  "verdict": "PASS",
+  "verdict": "DEFECTS_FOUND",
   "summary": {
     "realArchives": {
-      "total": 6,
-      "resolved": 6
+      "total": 18,
+      "resolved": 14
     },
     "realPackwiz": {
       "total": 0,
       "resolved": 0
     },
     "formatsObserved": [
+      "curseforge.client",
       "curseforge.serverpack",
       "serverpackcreator",
       "modrinth.mrpack"
