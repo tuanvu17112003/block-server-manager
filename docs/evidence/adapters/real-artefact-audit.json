@@ -619,6 +619,58 @@
       "entryCount": 217
     },
     {
+      "label": "cf:936875-server-8838466.zip",
+      "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\936875-server-8838466.zip",
+      "sizeBytes": 731741752,
+      "normalization": {
+        "unwrapped": false,
+        "nestedZip": null,
+        "strippedPrefix": null,
+        "outerEntryCount": 10194,
+        "effectiveEntryCount": 10194
+      },
+      "candidates": [
+        "curseforge.serverpack",
+        "plain.serverzip"
+      ],
+      "recipe": {
+        "formatId": "curseforge.serverpack",
+        "name": "936875-server-8838466",
+        "mc": "1.20.1",
+        "loader": "forge",
+        "loaderVersion": "47.4.23",
+        "javaMajor": null,
+        "fileCount": 0,
+        "overrideLayers": [
+          "(root)"
+        ],
+        "launchShape": "generated-args",
+        "sideCounts": {},
+        "warningRules": [
+          "curseforge.manifest-less-serverpack"
+        ],
+        "resolution": [
+          {
+            "field": "mc",
+            "source": "CurseForge inspector + archive artifact inference"
+          },
+          {
+            "field": "loader",
+            "source": "CurseForge inspector (\"Forge\")"
+          },
+          {
+            "field": "payload",
+            "source": "whole archive tree applied as the root override layer (no manifest, no download list)"
+          }
+        ],
+        "sampleFiles": []
+      },
+      "validation": "passed",
+      "error": null,
+      "ok": true,
+      "entryCount": 10194
+    },
+    {
       "label": "cf:936875-server-8853081.zip",
       "path": "H:\\TESTMultiAI\\20\\.app-data\\cache\\cfpack\\936875-server-8853081.zip",
       "sizeBytes": 736512644,
@@ -917,8 +969,8 @@
   "verdict": "DEFECTS_FOUND",
   "summary": {
     "realArchives": {
-      "total": 18,
-      "resolved": 14
+      "total": 19,
+      "resolved": 15
     },
     "realPackwiz": {
       "total": 0,
